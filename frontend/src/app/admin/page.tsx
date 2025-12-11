@@ -1,3 +1,5 @@
+'use client'
+
 import { AdminLayout, PageHeader, ContentCard } from '@/components/admin/admin-layout'
 import { StatCard, StatCardGrid } from '@/components/ui/stat-card'
 import { DataTable, TableBadge } from '@/components/ui/data-table'

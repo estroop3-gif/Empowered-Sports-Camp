@@ -252,7 +252,7 @@ export default async function CampDetailPage({ params }: PageProps) {
 
                   {/* CTA Button */}
                   <Button
-                    variant={isFull ? 'outline' : 'primary'}
+                    variant={isFull ? 'outline-neon' : 'neon'}
                     size="xl"
                     className="w-full"
                   >
@@ -299,7 +299,7 @@ export default async function CampDetailPage({ params }: PageProps) {
               <h2 className="text-2xl font-bold text-gray-900">Sports You&apos;ll Play</h2>
               <div className="mt-4 flex flex-wrap gap-2">
                 {camp.sports.map((sport) => (
-                  <Badge key={sport} variant="secondary" className="text-sm">
+                  <Badge key={sport} variant="purple" className="text-sm">
                     {sport}
                   </Badge>
                 ))}
@@ -389,7 +389,7 @@ export default async function CampDetailPage({ params }: PageProps) {
                   <br />
                   {camp.location.city}, {camp.location.state} {camp.location.zipCode}
                 </p>
-                <Button variant="outline" className="mt-4 w-full">
+                <Button variant="outline-neon" className="mt-4 w-full">
                   Get Directions
                 </Button>
               </CardContent>
