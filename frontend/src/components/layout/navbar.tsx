@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { Menu, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { NAV_LINKS, SITE_NAME } from '@/lib/constants'
@@ -45,12 +46,16 @@ export function Navbar() {
         {/* Logo */}
         <Link href="/" className="flex items-center gap-3 group">
           <div className={cn(
-            "flex h-12 w-12 items-center justify-center transition-all duration-300",
-            scrolled
-              ? "bg-neon shadow-[0_0_15px_rgba(147,205,1,0.5)]"
-              : "bg-neon/90"
+            "relative h-12 w-12 transition-all duration-300",
+            scrolled && "drop-shadow-[0_0_10px_rgba(204,255,0,0.5)]"
           )}>
-            <span className="text-2xl font-black text-black">E</span>
+            <Image
+              src="/images/logo.png"
+              alt="Empowered Athletes"
+              fill
+              className="object-contain"
+              priority
+            />
           </div>
           <div className="hidden sm:block">
             <span className="text-xl font-black uppercase tracking-wider text-white">

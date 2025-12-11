@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import Image from 'next/image'
 import { Facebook, Instagram, Twitter, Youtube, Mail, Phone, MapPin, Zap } from 'lucide-react'
 import { SITE_NAME } from '@/lib/constants'
 
@@ -51,8 +52,13 @@ export function Footer() {
           {/* Brand Column */}
           <div className="lg:col-span-1">
             <Link href="/" className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center bg-neon">
-                <span className="text-2xl font-black text-black">E</span>
+              <div className="relative h-12 w-12">
+                <Image
+                  src="/images/logo.png"
+                  alt="Empowered Athletes"
+                  fill
+                  className="object-contain"
+                />
               </div>
               <div>
                 <span className="text-xl font-black uppercase tracking-wider text-white">Empowered</span>
