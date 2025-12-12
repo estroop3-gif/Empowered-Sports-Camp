@@ -157,6 +157,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.error('Error code:', roleError.code, 'Message:', roleError.message)
       // Default to parent if role fetch fails (likely RLS issue)
       setActualRole('parent')
+      // Clear any "view as" role since we can't verify permissions
+      setViewingAsRoleState(null)
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem(VIEWING_AS_ROLE_KEY)
+      }
       return
     }
 
@@ -164,6 +169,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (userRole) {
       setActualRole(userRole.role as UserRole)
+
+      // If user is NOT hq_admin but has a viewingAsRole stored, clear it
+      if (userRole.role !== 'hq_admin') {
+        setViewingAsRoleState(null)
+        if (typeof window !== 'undefined') {
+          sessionStorage.removeItem(VIEWING_AS_ROLE_KEY)
+        }
+      }
 
       // Get tenant info if applicable
       if (userRole.tenant_id) {
