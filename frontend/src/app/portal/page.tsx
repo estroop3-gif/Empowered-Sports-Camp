@@ -155,6 +155,7 @@ export default function LicenseePortal() {
       userName="Mike Thompson"
       tenantName="Chicago North"
     >
+      {/* Note: In production, userRole and userName should come from useAuth() hook */}
       <PageHeader
         title="Dashboard"
         description="Chicago North territory overview"

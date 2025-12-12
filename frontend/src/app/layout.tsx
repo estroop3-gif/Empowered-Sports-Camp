@@ -3,6 +3,9 @@ import { Poppins } from "next/font/google"
 import "./globals.css"
 import { Navbar } from "@/components/layout/navbar"
 import { Footer } from "@/components/layout/footer"
+import { AuthProvider } from "@/lib/auth/context"
+import { ViewingAsBanner } from "@/components/admin/view-as-control"
+import { RoleDashboardRouter } from "@/components/role-dashboard-router"
 
 const poppins = Poppins({
   subsets: ["latin"],
@@ -52,11 +55,16 @@ export default function RootLayout({
   return (
     <html lang="en" className={poppins.variable}>
       <body className="min-h-screen bg-black text-white font-sans antialiased">
-        <Navbar />
-        <main className="flex flex-col min-h-screen">
-          {children}
-        </main>
-        <Footer />
+        <AuthProvider>
+          <ViewingAsBanner />
+          <RoleDashboardRouter>
+            <Navbar />
+            <main className="flex flex-col min-h-screen">
+              {children}
+            </main>
+            <Footer />
+          </RoleDashboardRouter>
+        </AuthProvider>
       </body>
     </html>
   )

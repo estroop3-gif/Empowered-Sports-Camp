@@ -7,7 +7,25 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Zap, Mail, Lock, User, Phone, ArrowRight, Crown } from 'lucide-react'
+import { Zap, Mail, Lock, User, Phone, ArrowRight, Crown, MapPin } from 'lucide-react'
+
+const HOW_HEARD_OPTIONS = [
+  'Friend or family referral',
+  'Social media (Instagram, Facebook)',
+  'Google search',
+  'School or community flyer',
+  'Local sports league',
+  'News or press coverage',
+  'Other',
+]
+
+const US_STATES = [
+  'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA',
+  'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD',
+  'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ',
+  'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC',
+  'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY'
+]
 
 export default function SignUpPage() {
   const router = useRouter()
@@ -20,12 +38,15 @@ export default function SignUpPage() {
     firstName: '',
     lastName: '',
     phone: '',
+    city: '',
+    state: '',
+    zipCode: '',
+    howHeard: '',
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState(false)
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setFormData(prev => ({
       ...prev,
       [e.target.name]: e.target.value
@@ -62,7 +83,7 @@ export default function SignUpPage() {
             last_name: formData.lastName,
             phone: formData.phone,
           },
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
+          emailRedirectTo: `${window.location.origin}/auth/callback?next=/onboarding`,
         },
       })
 
@@ -72,7 +93,7 @@ export default function SignUpPage() {
       }
 
       if (data.user) {
-        // Create profile in profiles table
+        // Create profile in profiles table with all parent info
         const { error: profileError } = await supabase
           .from('profiles')
           .insert({
@@ -81,13 +102,36 @@ export default function SignUpPage() {
             first_name: formData.firstName,
             last_name: formData.lastName,
             phone: formData.phone,
+            city: formData.city,
+            state: formData.state,
+            zip_code: formData.zipCode,
           })
 
         if (profileError && profileError.code !== '23505') {
           console.error('Profile creation error:', profileError)
         }
 
-        setSuccess(true)
+        // Create default parent role for new users
+        const { error: roleError } = await supabase
+          .from('user_roles')
+          .insert({
+            user_id: data.user.id,
+            role: 'parent',
+            is_active: true,
+          })
+
+        if (roleError && roleError.code !== '23505') {
+          console.error('Role creation error:', roleError)
+        }
+
+        // Check if email confirmation is required
+        if (data.session) {
+          // User is signed in immediately (email confirmation disabled)
+          router.push('/onboarding')
+        } else {
+          // Email confirmation required - show success message
+          router.push('/signup/confirm?email=' + encodeURIComponent(formData.email))
+        }
       }
     } catch (err) {
       setError('An unexpected error occurred. Please try again.')
@@ -95,30 +139,6 @@ export default function SignUpPage() {
     } finally {
       setLoading(false)
     }
-  }
-
-  if (success) {
-    return (
-      <div className="min-h-screen bg-black flex items-center justify-center px-4">
-        <div className="max-w-md w-full text-center">
-          <div className="inline-flex h-20 w-20 items-center justify-center bg-neon mb-8">
-            <Mail className="h-10 w-10 text-black" />
-          </div>
-          <h1 className="text-3xl font-black uppercase tracking-wider text-white mb-4">
-            Check Your Email
-          </h1>
-          <p className="text-white/60 mb-8">
-            We&apos;ve sent a confirmation link to <span className="text-neon font-bold">{formData.email}</span>.
-            Click the link to verify your account and get started.
-          </p>
-          <Link href="/login">
-            <Button variant="outline-neon">
-              Back to Login
-            </Button>
-          </Link>
-        </div>
-      </div>
-    )
   }
 
   return (
@@ -155,7 +175,7 @@ export default function SignUpPage() {
             </h2>
 
             <p className="text-xl text-white/60 leading-relaxed mb-8">
-              Create your account to register for camps, track your athlete&apos;s progress, and become part of our community of fierce competitors.
+              Create your parent account to register your athletes for camps, track their progress, and become part of our community of fierce competitors.
             </p>
 
             <div className="flex items-center gap-4 text-white/40">
@@ -166,7 +186,7 @@ export default function SignUpPage() {
         </div>
 
         {/* Right side - Form */}
-        <div className="w-full lg:w-1/2 flex items-center justify-center p-8">
+        <div className="w-full lg:w-1/2 flex items-center justify-center p-8 overflow-y-auto">
           <div className="w-full max-w-md">
             {/* Mobile logo */}
             <div className="lg:hidden text-center mb-8">
@@ -187,12 +207,16 @@ export default function SignUpPage() {
             </div>
 
             <div className="bg-dark-100 border border-white/10 p-8">
-              <div className="flex items-center gap-3 mb-8">
+              <div className="flex items-center gap-3 mb-6">
                 <Zap className="h-6 w-6 text-neon" />
                 <h1 className="text-2xl font-black uppercase tracking-wider text-white">
-                  Create Account
+                  Create Parent Account
                 </h1>
               </div>
+
+              <p className="text-sm text-white/50 mb-6">
+                Start by creating your parent account. You can add your athletes after signing up.
+              </p>
 
               {error && (
                 <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
@@ -201,10 +225,11 @@ export default function SignUpPage() {
               )}
 
               <form onSubmit={handleSubmit} className="space-y-5">
+                {/* Name Fields */}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-wider text-white/50 mb-2">
-                      First Name
+                      First Name *
                     </label>
                     <div className="relative">
                       <User className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-white/30" />
@@ -221,7 +246,7 @@ export default function SignUpPage() {
                   </div>
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-wider text-white/50 mb-2">
-                      Last Name
+                      Last Name *
                     </label>
                     <Input
                       type="text"
@@ -234,9 +259,10 @@ export default function SignUpPage() {
                   </div>
                 </div>
 
+                {/* Email */}
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-white/50 mb-2">
-                    Email Address
+                    Email Address *
                   </label>
                   <div className="relative">
                     <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-white/30" />
@@ -252,9 +278,10 @@ export default function SignUpPage() {
                   </div>
                 </div>
 
+                {/* Phone */}
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-white/50 mb-2">
-                    Phone Number
+                    Mobile Phone *
                   </label>
                   <div className="relative">
                     <Phone className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-white/30" />
@@ -263,15 +290,73 @@ export default function SignUpPage() {
                       name="phone"
                       value={formData.phone}
                       onChange={handleChange}
+                      required
                       className="pl-12"
                       placeholder="(555) 123-4567"
                     />
                   </div>
                 </div>
 
+                {/* Location */}
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-white/50 mb-2">
-                    Password
+                    <MapPin className="h-4 w-4 inline mr-1" />
+                    Location
+                  </label>
+                  <div className="grid grid-cols-5 gap-2">
+                    <Input
+                      type="text"
+                      name="city"
+                      value={formData.city}
+                      onChange={handleChange}
+                      placeholder="City"
+                      className="col-span-2"
+                    />
+                    <select
+                      name="state"
+                      value={formData.state}
+                      onChange={handleChange}
+                      className="bg-black border border-white/20 text-white px-3 py-2 focus:border-neon focus:outline-none"
+                    >
+                      <option value="">State</option>
+                      {US_STATES.map(state => (
+                        <option key={state} value={state}>{state}</option>
+                      ))}
+                    </select>
+                    <Input
+                      type="text"
+                      name="zipCode"
+                      value={formData.zipCode}
+                      onChange={handleChange}
+                      placeholder="ZIP"
+                      className="col-span-2"
+                      maxLength={10}
+                    />
+                  </div>
+                </div>
+
+                {/* How did you hear about us */}
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-white/50 mb-2">
+                    How did you hear about us?
+                  </label>
+                  <select
+                    name="howHeard"
+                    value={formData.howHeard}
+                    onChange={handleChange}
+                    className="w-full bg-black border border-white/20 text-white px-4 py-3 focus:border-neon focus:outline-none"
+                  >
+                    <option value="">Select an option...</option>
+                    {HOW_HEARD_OPTIONS.map(option => (
+                      <option key={option} value={option}>{option}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Passwords */}
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-white/50 mb-2">
+                    Password *
                   </label>
                   <div className="relative">
                     <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-white/30" />
@@ -290,7 +375,7 @@ export default function SignUpPage() {
 
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-white/50 mb-2">
-                    Confirm Password
+                    Confirm Password *
                   </label>
                   <div className="relative">
                     <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-white/30" />

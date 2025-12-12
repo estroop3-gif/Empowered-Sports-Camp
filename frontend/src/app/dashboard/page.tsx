@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import {
@@ -8,19 +8,21 @@ import {
   Crown,
   CreditCard,
   Settings,
-  LogOut,
   Plus,
   ArrowRight,
-  Clock,
   MapPin,
   CheckCircle,
   AlertCircle,
   Zap,
   Bell,
   User,
+  Loader2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { createClient } from '@/lib/supabase/client'
+import { LogoutButton, UserMenu } from '@/components/layout/user-menu'
+import { useRouter } from 'next/navigation'
 
 /**
  * Parent Dashboard
@@ -29,86 +31,167 @@ import { cn } from '@/lib/utils'
  * - Personal view for parents/guardians
  * - Manage their athletes and view registrations
  * - Same fierce esports brand aesthetic
- * - Simpler navigation than admin portals
- *
- * This is the "parent's locker room" - should feel welcoming
- * but still unmistakably Empowered Athletes brand
+ * - All data fetched live from Supabase
  */
 
-// Mock data
-const parentData = {
-  name: 'Sarah Johnson',
-  email: 'sarah@example.com',
+interface Profile {
+  id: string
+  email: string
+  first_name: string | null
+  last_name: string | null
+  phone: string | null
+  city: string | null
+  state: string | null
 }
 
-const athletes = [
-  {
-    id: '1',
-    name: 'Emma Johnson',
-    age: 10,
-    tshirtSize: 'YM',
-    upcomingCamps: 2,
-    completedCamps: 5,
-  },
-  {
-    id: '2',
-    name: 'Lily Johnson',
-    age: 7,
-    tshirtSize: 'YS',
-    upcomingCamps: 1,
-    completedCamps: 2,
-  },
-]
+interface Athlete {
+  id: string
+  first_name: string
+  last_name: string
+  date_of_birth: string
+  tshirt_size: string | null
+  gender: string | null
+}
 
-const upcomingRegistrations = [
-  {
-    id: '1',
-    athlete: 'Emma Johnson',
-    camp: 'Summer Week 1 - Lincoln Park',
-    date: 'Jun 9-13, 2025',
-    location: 'Lincoln Park Athletic Field',
-    status: 'confirmed',
-    amount: 29900,
-  },
-  {
-    id: '2',
-    athlete: 'Emma Johnson',
-    camp: 'Basketball Intensive',
-    date: 'Jul 14-18, 2025',
-    location: 'Lincoln Park Athletic Field',
-    status: 'pending_payment',
-    amount: 34900,
-  },
-  {
-    id: '3',
-    athlete: 'Lily Johnson',
-    camp: 'Summer Week 2 - Evanston',
-    date: 'Jun 16-20, 2025',
-    location: 'Evanston Recreation Center',
-    status: 'confirmed',
-    amount: 29900,
-  },
-]
-
-const pastRegistrations = [
-  {
-    id: '4',
-    athlete: 'Emma Johnson',
-    camp: 'Fall Soccer Clinic',
-    date: 'Oct 14-18, 2024',
-    status: 'completed',
-  },
-  {
-    id: '5',
-    athlete: 'Emma Johnson',
-    camp: 'Summer Week 3 - 2024',
-    date: 'Jun 24-28, 2024',
-    status: 'completed',
-  },
-]
+interface Registration {
+  id: string
+  status: string
+  created_at: string
+  athlete_id: string
+  camp_id: string
+  athletes: {
+    first_name: string
+    last_name: string
+  }
+  camps: {
+    name: string
+    start_date: string
+    end_date: string
+    location_name: string | null
+    city: string | null
+    price_cents: number
+  }
+}
 
 export default function ParentDashboard() {
+  const router = useRouter()
+  const supabase = createClient()
   const [activeTab, setActiveTab] = useState<'upcoming' | 'past'>('upcoming')
+  const [loading, setLoading] = useState(true)
+  const [profile, setProfile] = useState<Profile | null>(null)
+  const [athletes, setAthletes] = useState<Athlete[]>([])
+  const [registrations, setRegistrations] = useState<Registration[]>([])
+
+  useEffect(() => {
+    loadDashboardData()
+  }, [])
+
+  const loadDashboardData = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (!user) {
+      router.push('/login')
+      return
+    }
+
+    // Load all data in parallel
+    const [profileResult, athletesResult, registrationsResult] = await Promise.all([
+      // Fetch profile
+      supabase
+        .from('profiles')
+        .select('id, email, first_name, last_name, phone, city, state')
+        .eq('id', user.id)
+        .single(),
+
+      // Fetch athletes for this parent
+      supabase
+        .from('athletes')
+        .select('id, first_name, last_name, date_of_birth, tshirt_size, gender')
+        .eq('parent_id', user.id)
+        .order('first_name'),
+
+      // Fetch registrations with athlete and camp details
+      supabase
+        .from('registrations')
+        .select(`
+          id,
+          status,
+          created_at,
+          athlete_id,
+          camp_id,
+          athletes!inner (
+            first_name,
+            last_name,
+            parent_id
+          ),
+          camps!inner (
+            name,
+            start_date,
+            end_date,
+            location_name,
+            city,
+            price_cents
+          )
+        `)
+        .eq('athletes.parent_id', user.id)
+        .order('camps(start_date)', { ascending: true })
+    ])
+
+    if (profileResult.data) {
+      setProfile(profileResult.data)
+    }
+
+    if (athletesResult.data) {
+      setAthletes(athletesResult.data)
+    }
+
+    if (registrationsResult.data) {
+      // Type assertion since Supabase returns joined data
+      setRegistrations(registrationsResult.data as unknown as Registration[])
+    }
+
+    setLoading(false)
+  }
+
+  // Calculate athlete age from DOB
+  const calculateAge = (dob: string) => {
+    const birthDate = new Date(dob)
+    const today = new Date()
+    let age = today.getFullYear() - birthDate.getFullYear()
+    const monthDiff = today.getMonth() - birthDate.getMonth()
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age--
+    }
+    return age
+  }
+
+  // Get registration counts per athlete
+  const getAthleteCampCounts = (athleteId: string) => {
+    const athleteRegs = registrations.filter(r => r.athlete_id === athleteId)
+    const today = new Date()
+    const upcoming = athleteRegs.filter(r => new Date(r.camps.start_date) >= today).length
+    const completed = athleteRegs.filter(r =>
+      new Date(r.camps.end_date) < today || r.status === 'completed'
+    ).length
+    return { upcoming, completed }
+  }
+
+  // Split registrations into upcoming and past
+  const today = new Date()
+  const upcomingRegistrations = registrations.filter(
+    r => new Date(r.camps.start_date) >= today && r.status !== 'cancelled'
+  )
+  const pastRegistrations = registrations.filter(
+    r => new Date(r.camps.end_date) < today || r.status === 'completed'
+  )
+
+  const formatDateRange = (startDate: string, endDate: string) => {
+    const start = new Date(startDate)
+    const end = new Date(endDate)
+    const options: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' }
+    const yearOptions: Intl.DateTimeFormatOptions = { year: 'numeric' }
+    return `${start.toLocaleDateString('en-US', options)}-${end.toLocaleDateString('en-US', options)}, ${end.toLocaleDateString('en-US', yearOptions)}`
+  }
 
   const formatCurrency = (cents: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -116,6 +199,25 @@ export default function ParentDashboard() {
       currency: 'USD',
       minimumFractionDigits: 0,
     }).format(cents / 100)
+  }
+
+  const getUserName = () => {
+    if (profile?.first_name) {
+      return `${profile.first_name} ${profile.last_name || ''}`.trim()
+    }
+    return profile?.email?.split('@')[0] || 'Parent'
+  }
+
+  const getUserEmail = () => {
+    return profile?.email || ''
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-neon" />
+      </div>
+    )
   }
 
   return (
@@ -161,11 +263,11 @@ export default function ParentDashboard() {
             <div className="flex items-center gap-4">
               <button className="relative p-2 text-white/50 hover:text-white transition-colors">
                 <Bell className="h-5 w-5" />
-                <span className="absolute top-1 right-1 h-2 w-2 bg-magenta rounded-full" />
+                {upcomingRegistrations.some(r => r.status === 'pending_payment') && (
+                  <span className="absolute top-1 right-1 h-2 w-2 bg-magenta rounded-full" />
+                )}
               </button>
-              <div className="h-10 w-10 bg-neon/10 border border-neon/30 flex items-center justify-center">
-                <span className="text-neon font-black">{parentData.name[0]}</span>
-              </div>
+              <UserMenu variant="header" />
             </div>
           </div>
         </div>
@@ -176,7 +278,7 @@ export default function ParentDashboard() {
         {/* Welcome Section */}
         <div className="mb-8">
           <h1 className="text-3xl font-black uppercase tracking-wider text-white">
-            Welcome back, {parentData.name.split(' ')[0]}
+            Welcome back, {profile?.first_name || 'Parent'}
           </h1>
           <p className="mt-2 text-white/50">
             Manage your athletes and camp registrations
@@ -204,33 +306,58 @@ export default function ParentDashboard() {
                 </Link>
               </div>
               <div className="p-6">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  {athletes.map((athlete) => (
-                    <Link
-                      key={athlete.id}
-                      href={`/dashboard/athletes/${athlete.id}`}
-                      className="p-4 bg-black/50 border border-white/10 hover:border-neon/30 hover:bg-neon/5 transition-all group"
-                    >
-                      <div className="flex items-start gap-4">
-                        <div className="h-14 w-14 bg-neon/10 border border-neon/30 flex items-center justify-center group-hover:bg-neon/20 transition-colors">
-                          <span className="text-neon font-black text-xl">{athlete.name[0]}</span>
-                        </div>
-                        <div className="flex-1">
-                          <h3 className="font-bold text-white">{athlete.name}</h3>
-                          <p className="text-xs text-white/40 mt-1">Age {athlete.age} • Size {athlete.tshirtSize}</p>
-                          <div className="flex gap-4 mt-3">
-                            <span className="text-xs text-neon font-bold">
-                              {athlete.upcomingCamps} upcoming
-                            </span>
-                            <span className="text-xs text-white/40">
-                              {athlete.completedCamps} completed
-                            </span>
-                          </div>
-                        </div>
-                      </div>
+                {athletes.length === 0 ? (
+                  // Empty state for no athletes
+                  <div className="text-center py-8">
+                    <div className="inline-flex h-16 w-16 items-center justify-center bg-neon/10 border border-neon/30 mb-4">
+                      <Crown className="h-8 w-8 text-neon" />
+                    </div>
+                    <h3 className="text-lg font-bold text-white mb-2">No Athletes Yet</h3>
+                    <p className="text-sm text-white/50 mb-6 max-w-xs mx-auto">
+                      Add your young athlete to register them for camps and track their progress.
+                    </p>
+                    <Link href="/dashboard/athletes/new">
+                      <Button variant="neon">
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add Your First Athlete
+                      </Button>
                     </Link>
-                  ))}
-                </div>
+                  </div>
+                ) : (
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    {athletes.map((athlete) => {
+                      const counts = getAthleteCampCounts(athlete.id)
+                      return (
+                        <Link
+                          key={athlete.id}
+                          href={`/dashboard/athletes/${athlete.id}`}
+                          className="p-4 bg-black/50 border border-white/10 hover:border-neon/30 hover:bg-neon/5 transition-all group"
+                        >
+                          <div className="flex items-start gap-4">
+                            <div className="h-14 w-14 bg-neon/10 border border-neon/30 flex items-center justify-center group-hover:bg-neon/20 transition-colors">
+                              <span className="text-neon font-black text-xl">{athlete.first_name[0]}</span>
+                            </div>
+                            <div className="flex-1">
+                              <h3 className="font-bold text-white">{athlete.first_name} {athlete.last_name}</h3>
+                              <p className="text-xs text-white/40 mt-1">
+                                Age {calculateAge(athlete.date_of_birth)}
+                                {athlete.tshirt_size && ` • Size ${athlete.tshirt_size}`}
+                              </p>
+                              <div className="flex gap-4 mt-3">
+                                <span className="text-xs text-neon font-bold">
+                                  {counts.upcoming} upcoming
+                                </span>
+                                <span className="text-xs text-white/40">
+                                  {counts.completed} completed
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </Link>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -260,76 +387,114 @@ export default function ParentDashboard() {
               </div>
               <div className="p-6">
                 {activeTab === 'upcoming' ? (
-                  <div className="space-y-4">
-                    {upcomingRegistrations.map((reg) => (
-                      <div
-                        key={reg.id}
-                        className={cn(
-                          'p-4 border transition-all',
-                          reg.status === 'pending_payment'
-                            ? 'bg-magenta/5 border-magenta/30'
-                            : 'bg-black/50 border-white/10'
-                        )}
-                      >
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2">
-                              <h4 className="font-bold text-white">{reg.camp}</h4>
-                              {reg.status === 'confirmed' ? (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-neon/10 text-neon text-xs font-bold uppercase tracking-wider border border-neon/30">
-                                  <CheckCircle className="h-3 w-3" />
-                                  Confirmed
+                  upcomingRegistrations.length === 0 ? (
+                    // Empty state for no upcoming registrations
+                    <div className="text-center py-8">
+                      <div className="inline-flex h-16 w-16 items-center justify-center bg-magenta/10 border border-magenta/30 mb-4">
+                        <Calendar className="h-8 w-8 text-magenta" />
+                      </div>
+                      <h3 className="text-lg font-bold text-white mb-2">No Upcoming Camps</h3>
+                      <p className="text-sm text-white/50 mb-6 max-w-xs mx-auto">
+                        {athletes.length === 0
+                          ? 'Add an athlete first, then register them for a camp.'
+                          : 'Browse available camps and register your athlete for one.'}
+                      </p>
+                      <Link href="/camps">
+                        <Button variant="outline-neon">
+                          <Calendar className="h-4 w-4 mr-2" />
+                          Browse Camps
+                        </Button>
+                      </Link>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {upcomingRegistrations.map((reg) => (
+                        <div
+                          key={reg.id}
+                          className={cn(
+                            'p-4 border transition-all',
+                            reg.status === 'pending_payment'
+                              ? 'bg-magenta/5 border-magenta/30'
+                              : 'bg-black/50 border-white/10'
+                          )}
+                        >
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <h4 className="font-bold text-white">{reg.camps.name}</h4>
+                                {reg.status === 'confirmed' || reg.status === 'registered' ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-neon/10 text-neon text-xs font-bold uppercase tracking-wider border border-neon/30">
+                                    <CheckCircle className="h-3 w-3" />
+                                    Confirmed
+                                  </span>
+                                ) : reg.status === 'pending_payment' ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-magenta/10 text-magenta text-xs font-bold uppercase tracking-wider border border-magenta/30">
+                                    <AlertCircle className="h-3 w-3" />
+                                    Payment Due
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-white/10 text-white/60 text-xs font-bold uppercase tracking-wider border border-white/20">
+                                    {reg.status}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-sm text-white/60 mt-1">
+                                Athlete: <span className="text-white">{reg.athletes.first_name} {reg.athletes.last_name}</span>
+                              </p>
+                              <div className="flex items-center gap-4 mt-2 flex-wrap">
+                                <span className="flex items-center gap-1 text-xs text-white/40">
+                                  <Calendar className="h-3 w-3" />
+                                  {formatDateRange(reg.camps.start_date, reg.camps.end_date)}
                                 </span>
-                              ) : (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-magenta/10 text-magenta text-xs font-bold uppercase tracking-wider border border-magenta/30">
-                                  <AlertCircle className="h-3 w-3" />
-                                  Payment Due
-                                </span>
+                                {(reg.camps.location_name || reg.camps.city) && (
+                                  <span className="flex items-center gap-1 text-xs text-white/40">
+                                    <MapPin className="h-3 w-3" />
+                                    {reg.camps.location_name || reg.camps.city}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <p className="font-black text-neon">{formatCurrency(reg.camps.price_cents)}</p>
+                              {reg.status === 'pending_payment' && (
+                                <Button variant="neon" size="sm" className="mt-2">
+                                  Pay Now
+                                </Button>
                               )}
                             </div>
-                            <p className="text-sm text-white/60 mt-1">
-                              Athlete: <span className="text-white">{reg.athlete}</span>
-                            </p>
-                            <div className="flex items-center gap-4 mt-2">
-                              <span className="flex items-center gap-1 text-xs text-white/40">
-                                <Calendar className="h-3 w-3" />
-                                {reg.date}
-                              </span>
-                              <span className="flex items-center gap-1 text-xs text-white/40">
-                                <MapPin className="h-3 w-3" />
-                                {reg.location}
-                              </span>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <p className="font-black text-neon">{formatCurrency(reg.amount)}</p>
-                            {reg.status === 'pending_payment' && (
-                              <Button variant="neon" size="sm" className="mt-2">
-                                Pay Now
-                              </Button>
-                            )}
                           </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  )
                 ) : (
-                  <div className="space-y-4">
-                    {pastRegistrations.map((reg) => (
-                      <div key={reg.id} className="p-4 bg-black/30 border border-white/5">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <h4 className="font-bold text-white/70">{reg.camp}</h4>
-                            <p className="text-sm text-white/40 mt-1">{reg.athlete}</p>
-                            <p className="text-xs text-white/30 mt-1">{reg.date}</p>
+                  pastRegistrations.length === 0 ? (
+                    // Empty state for no past registrations
+                    <div className="text-center py-8">
+                      <p className="text-sm text-white/40">No past camp registrations yet.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {pastRegistrations.map((reg) => (
+                        <div key={reg.id} className="p-4 bg-black/30 border border-white/5">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <h4 className="font-bold text-white/70">{reg.camps.name}</h4>
+                              <p className="text-sm text-white/40 mt-1">
+                                {reg.athletes.first_name} {reg.athletes.last_name}
+                              </p>
+                              <p className="text-xs text-white/30 mt-1">
+                                {formatDateRange(reg.camps.start_date, reg.camps.end_date)}
+                              </p>
+                            </div>
+                            <span className="text-xs font-bold uppercase tracking-wider text-white/30">
+                              Completed
+                            </span>
                           </div>
-                          <span className="text-xs font-bold uppercase tracking-wider text-white/30">
-                            Completed
-                          </span>
                         </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  )
                 )}
               </div>
             </div>
@@ -391,12 +556,26 @@ export default function ParentDashboard() {
                 <div className="space-y-3">
                   <div>
                     <p className="text-xs text-white/40 uppercase tracking-wider">Name</p>
-                    <p className="text-sm text-white">{parentData.name}</p>
+                    <p className="text-sm text-white">{getUserName()}</p>
                   </div>
                   <div>
                     <p className="text-xs text-white/40 uppercase tracking-wider">Email</p>
-                    <p className="text-sm text-white">{parentData.email}</p>
+                    <p className="text-sm text-white">{getUserEmail()}</p>
                   </div>
+                  {profile?.phone && (
+                    <div>
+                      <p className="text-xs text-white/40 uppercase tracking-wider">Phone</p>
+                      <p className="text-sm text-white">{profile.phone}</p>
+                    </div>
+                  )}
+                  {(profile?.city || profile?.state) && (
+                    <div>
+                      <p className="text-xs text-white/40 uppercase tracking-wider">Location</p>
+                      <p className="text-sm text-white">
+                        {[profile?.city, profile?.state].filter(Boolean).join(', ')}
+                      </p>
+                    </div>
+                  )}
                 </div>
                 <div className="mt-6 pt-4 border-t border-white/10 space-y-2">
                   <Link
@@ -406,10 +585,7 @@ export default function ParentDashboard() {
                     <Settings className="h-4 w-4" />
                     Account Settings
                   </Link>
-                  <button className="flex items-center gap-2 text-sm text-white/60 hover:text-red-400 transition-colors">
-                    <LogOut className="h-4 w-4" />
-                    Sign Out
-                  </button>
+                  <LogoutButton showLabel className="text-sm" />
                 </div>
               </div>
             </div>

@@ -1,174 +1,121 @@
-import { Suspense } from 'react'
-import { Metadata } from 'next'
+'use client'
+
+import { useState, useEffect, useCallback, Suspense } from 'react'
+import { useSearchParams, useRouter } from 'next/navigation'
 import { CampCard } from '@/components/camps/camp-card'
 import { CampFilters } from '@/components/camps/camp-filters'
-import { Zap, Crown } from 'lucide-react'
+import { Zap, Crown, Loader2 } from 'lucide-react'
 import type { CampCardData } from '@/types'
+import {
+  fetchPublicCamps,
+  fetchCampCities,
+  fetchProgramTypes,
+  getProgramTypeLabel,
+  type PublicCampCard,
+  type CampFilters as CampFilterParams,
+} from '@/lib/supabase/queries/camps'
 
-export const metadata: Metadata = {
-  title: 'Find Camps',
-  description: 'Browse and register for Empowered Sports Camp programs near you.',
+// Transform PublicCampCard to CampCardData for the UI
+function transformToCampCard(camp: PublicCampCard): CampCardData {
+  return {
+    id: camp.id,
+    slug: camp.slug,
+    name: camp.name,
+    programType: getProgramTypeLabel(camp.program_type),
+    location: camp.location_name || 'TBD',
+    city: camp.city || '',
+    state: camp.state || '',
+    startDate: camp.start_date,
+    endDate: camp.end_date,
+    minAge: camp.min_age,
+    maxAge: camp.max_age,
+    price: camp.current_price,
+    spotsLeft: camp.spots_remaining,
+    imageUrl: camp.image_url,
+  }
 }
 
-// Sample data - in production, this would come from Supabase
-const SAMPLE_CAMPS: CampCardData[] = [
-  {
-    id: '1',
-    slug: 'summer-week-1-lincoln-park',
-    name: 'Summer Week 1 - Lincoln Park',
-    programType: 'All Girls Sports Camp',
-    location: 'Lincoln Park',
-    city: 'Chicago',
-    state: 'IL',
-    startDate: '2025-06-09',
-    endDate: '2025-06-13',
-    minAge: 6,
-    maxAge: 12,
-    price: 29900,
-    spotsLeft: 8,
-    imageUrl: null,
-  },
-  {
-    id: '2',
-    slug: 'summer-week-2-evanston',
-    name: 'Summer Week 2 - Evanston',
-    programType: 'All Girls Sports Camp',
-    location: 'Evanston Recreation Center',
-    city: 'Evanston',
-    state: 'IL',
-    startDate: '2025-06-16',
-    endDate: '2025-06-20',
-    minAge: 6,
-    maxAge: 12,
-    price: 29900,
-    spotsLeft: 3,
-    imageUrl: null,
-  },
-  {
-    id: '3',
-    slug: 'cit-program-summer-2025',
-    name: 'CIT Program - Summer 2025',
-    programType: 'Counselor in Training',
-    location: 'Multiple Locations',
-    city: 'Chicago',
-    state: 'IL',
-    startDate: '2025-06-09',
-    endDate: '2025-08-08',
-    minAge: 14,
-    maxAge: 17,
-    price: 59900,
-    spotsLeft: 12,
-    imageUrl: null,
-  },
-  {
-    id: '4',
-    slug: 'summer-week-3-naperville',
-    name: 'Summer Week 3 - Naperville',
-    programType: 'All Girls Sports Camp',
-    location: 'Naperville Park District',
-    city: 'Naperville',
-    state: 'IL',
-    startDate: '2025-06-23',
-    endDate: '2025-06-27',
-    minAge: 6,
-    maxAge: 12,
-    price: 29900,
-    spotsLeft: 15,
-    imageUrl: null,
-  },
-  {
-    id: '5',
-    slug: 'soccer-strength-week-1',
-    name: 'Soccer & Strength - Week 1',
-    programType: 'Soccer & Strength',
-    location: 'Lincoln Park',
-    city: 'Chicago',
-    state: 'IL',
-    startDate: '2025-07-07',
-    endDate: '2025-07-11',
-    minAge: 10,
-    maxAge: 14,
-    price: 34900,
-    spotsLeft: 6,
-    imageUrl: null,
-  },
-  {
-    id: '6',
-    slug: 'basketball-intensive-july',
-    name: 'Basketball Intensive - July',
-    programType: 'Basketball Intensive',
-    location: 'Evanston Recreation Center',
-    city: 'Evanston',
-    state: 'IL',
-    startDate: '2025-07-14',
-    endDate: '2025-07-18',
-    minAge: 8,
-    maxAge: 14,
-    price: 34900,
-    spotsLeft: 0,
-    imageUrl: null,
-  },
-]
+function CampsContent() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
 
-const LOCATIONS = [
-  'Chicago',
-  'Evanston',
-  'Naperville',
-  'Oak Park',
-  'Schaumburg',
-]
+  // State
+  const [camps, setCamps] = useState<CampCardData[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [totalCamps, setTotalCamps] = useState(0)
+  const [locations, setLocations] = useState<string[]>([])
+  const [programTypes, setProgramTypes] = useState<string[]>([])
 
-const PROGRAM_TYPES = [
-  'All Girls Sports Camp',
-  'Counselor in Training',
-  'Soccer & Strength',
-  'Basketball Intensive',
-]
-
-interface PageProps {
-  searchParams: Promise<{
-    location?: string
-    age?: string
-    program?: string
-    zip?: string
-  }>
-}
-
-async function getCamps(filters: {
-  location?: string
-  age?: string
-  program?: string
-  zip?: string
-}): Promise<CampCardData[]> {
-  let camps = [...SAMPLE_CAMPS]
-
-  if (filters.location) {
-    camps = camps.filter(
-      (camp) =>
-        camp.city.toLowerCase() === filters.location?.toLowerCase() ||
-        camp.location.toLowerCase().includes(filters.location?.toLowerCase() || '')
-    )
+  // Extract filters from URL
+  const filters: CampFilterParams = {
+    city: searchParams.get('location') || undefined,
+    program_type: searchParams.get('program') || undefined,
+    search: searchParams.get('search') || undefined,
   }
 
-  if (filters.program) {
-    camps = camps.filter(
-      (camp) => camp.programType.toLowerCase() === filters.program?.toLowerCase()
-    )
+  // Parse age filter
+  const ageParam = searchParams.get('age')
+  if (ageParam) {
+    const [minAge, maxAge] = ageParam.split('-').map(Number)
+    if (!isNaN(minAge)) filters.min_age = minAge
+    if (!isNaN(maxAge)) filters.max_age = maxAge
   }
 
-  if (filters.age) {
-    const [minAge, maxAge] = filters.age.split('-').map(Number)
-    camps = camps.filter(
-      (camp) => camp.minAge <= maxAge && camp.maxAge >= minAge
-    )
-  }
+  // Load filter options on mount
+  useEffect(() => {
+    async function loadFilterOptions() {
+      try {
+        const [citiesData, typesData] = await Promise.all([
+          fetchCampCities(),
+          fetchProgramTypes(),
+        ])
+        setLocations(citiesData)
+        setProgramTypes(typesData.map(t => getProgramTypeLabel(t)))
+      } catch (err) {
+        console.error('Failed to load filter options:', err)
+        // Use fallback values
+        setLocations(['Chicago', 'Tampa', 'Evanston'])
+        setProgramTypes(['All Girls Sports Camp', 'CIT Program'])
+      }
+    }
+    loadFilterOptions()
+  }, [])
 
-  return camps
-}
+  // Load camps when filters change
+  const loadCamps = useCallback(async () => {
+    setLoading(true)
+    setError(null)
 
-export default async function CampsPage({ searchParams }: PageProps) {
-  const params = await searchParams
-  const camps = await getCamps(params)
+    try {
+      const result = await fetchPublicCamps(filters, {
+        page: 1,
+        pageSize: 50,
+        orderBy: 'start_date',
+        ascending: true,
+      })
+
+      setCamps(result.camps.map(transformToCampCard))
+      setTotalCamps(result.total)
+    } catch (err) {
+      console.error('Failed to load camps:', err)
+      setError('Failed to load camps. Please try again.')
+      setCamps([])
+      setTotalCamps(0)
+    } finally {
+      setLoading(false)
+    }
+  }, [
+    filters.city,
+    filters.program_type,
+    filters.min_age,
+    filters.max_age,
+    filters.search,
+  ])
+
+  useEffect(() => {
+    loadCamps()
+  }, [loadCamps])
 
   return (
     <div className="min-h-screen bg-black">
@@ -201,25 +148,61 @@ export default async function CampsPage({ searchParams }: PageProps) {
       {/* Filters and Results */}
       <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
         {/* Filters */}
-        <Suspense fallback={<div className="h-20 animate-pulse bg-dark-100 border border-white/10" />}>
-          <CampFilters locations={LOCATIONS} programTypes={PROGRAM_TYPES} />
-        </Suspense>
+        <CampFilters locations={locations} programTypes={programTypes} />
 
         {/* Results Count */}
         <div className="mt-10 flex items-center justify-between border-b border-white/10 pb-4">
           <p className="text-sm text-white/50 uppercase tracking-wider">
-            Showing <span className="font-bold text-neon">{camps.length}</span> camps
+            {loading ? (
+              <span className="flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading camps...
+              </span>
+            ) : (
+              <>
+                Showing <span className="font-bold text-neon">{camps.length}</span> of{' '}
+                <span className="font-bold text-neon">{totalCamps}</span> camps
+              </>
+            )}
           </p>
         </div>
 
+        {/* Error State */}
+        {error && (
+          <div className="mt-8 p-6 border border-magenta/30 bg-magenta/5 text-center">
+            <p className="text-magenta">{error}</p>
+            <button
+              onClick={() => loadCamps()}
+              className="mt-4 px-6 py-2 bg-magenta/20 border border-magenta/30 text-magenta hover:bg-magenta/30 transition-colors"
+            >
+              Try Again
+            </button>
+          </div>
+        )}
+
+        {/* Loading State */}
+        {loading && (
+          <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {[...Array(6)].map((_, i) => (
+              <div
+                key={i}
+                className="h-[400px] animate-pulse bg-dark-100 border border-white/10"
+              />
+            ))}
+          </div>
+        )}
+
         {/* Results Grid */}
-        {camps.length > 0 ? (
+        {!loading && !error && camps.length > 0 && (
           <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {camps.map((camp) => (
               <CampCard key={camp.id} camp={camp} />
             ))}
           </div>
-        ) : (
+        )}
+
+        {/* Empty State */}
+        {!loading && !error && camps.length === 0 && (
           <div className="mt-16 text-center">
             <div className="mx-auto flex h-24 w-24 items-center justify-center border border-white/10 bg-dark-100">
               <Crown className="h-12 w-12 text-white/20" />
@@ -230,9 +213,32 @@ export default async function CampsPage({ searchParams }: PageProps) {
             <p className="mt-3 text-white/50">
               Try adjusting your filters or check back soon for new sessions.
             </p>
+            <button
+              onClick={() => router.push('/camps')}
+              className="mt-6 px-8 py-3 bg-neon/20 border border-neon/30 text-neon hover:bg-neon/30 transition-colors"
+            >
+              Clear Filters
+            </button>
           </div>
         )}
       </div>
     </div>
+  )
+}
+
+export default function CampsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-black flex items-center justify-center">
+          <div className="text-center">
+            <Loader2 className="h-12 w-12 animate-spin text-neon mx-auto" />
+            <p className="mt-4 text-white/60">Loading camps...</p>
+          </div>
+        </div>
+      }
+    >
+      <CampsContent />
+    </Suspense>
   )
 }

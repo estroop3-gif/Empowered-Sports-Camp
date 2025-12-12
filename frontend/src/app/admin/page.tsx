@@ -112,7 +112,7 @@ export default function LicensorDashboard() {
 
   return (
     <AdminLayout
-      userRole="licensor_admin"
+      userRole="hq_admin"
       userName="Sarah Admin"
     >
       <PageHeader

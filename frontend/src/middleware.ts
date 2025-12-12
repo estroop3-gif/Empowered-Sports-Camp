@@ -1,6 +1,8 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
+const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK === 'true'
+
 /**
  * Authentication Middleware
  *
@@ -18,14 +20,19 @@ const protectedRoutes = [
   '/portal',
 ]
 
-// Routes that require specific roles
+// Routes that require specific roles (using new 5-tier system)
 const roleRoutes: Record<string, string[]> = {
-  '/admin': ['licensor_admin', 'licensor_staff'],
-  '/portal': ['licensee_owner', 'licensee_admin', 'licensee_coach'],
-  '/dashboard': ['parent', 'licensee_owner', 'licensee_admin', 'licensee_coach', 'licensor_admin', 'licensor_staff'],
+  '/admin': ['hq_admin'],
+  '/portal': ['hq_admin', 'licensee_owner', 'director', 'coach'],
+  '/dashboard': ['parent', 'coach', 'director', 'licensee_owner', 'hq_admin'],
 }
 
 export async function middleware(request: NextRequest) {
+  // Bypass auth checks in mock mode
+  if (USE_MOCK) {
+    return NextResponse.next()
+  }
+
   let response = NextResponse.next({
     request: {
       headers: request.headers,
@@ -82,15 +89,21 @@ export async function middleware(request: NextRequest) {
         .from('user_roles')
         .select('role, tenant_id')
         .eq('user_id', user.id)
-        .eq('active', true)
+        .eq('is_active', true)
         .single()
+
+      // If no role found and trying to access dashboard, allow it (new users)
+      if (!userRole && pathname.startsWith('/dashboard')) {
+        response.headers.set('x-user-role', 'parent')
+        return response
+      }
 
       if (!userRole || !requiredRoles.includes(userRole.role)) {
         // Redirect based on their actual role
         if (userRole) {
-          if (['licensor_admin', 'licensor_staff'].includes(userRole.role)) {
+          if (userRole.role === 'hq_admin') {
             return NextResponse.redirect(new URL('/admin', request.url))
-          } else if (['licensee_owner', 'licensee_admin', 'licensee_coach'].includes(userRole.role)) {
+          } else if (['licensee_owner', 'director', 'coach'].includes(userRole.role)) {
             return NextResponse.redirect(new URL('/portal', request.url))
           } else {
             return NextResponse.redirect(new URL('/dashboard', request.url))
@@ -115,13 +128,13 @@ export async function middleware(request: NextRequest) {
       .from('user_roles')
       .select('role')
       .eq('user_id', user.id)
-      .eq('active', true)
+      .eq('is_active', true)
       .single()
 
     if (userRole) {
-      if (['licensor_admin', 'licensor_staff'].includes(userRole.role)) {
+      if (userRole.role === 'hq_admin') {
         return NextResponse.redirect(new URL('/admin', request.url))
-      } else if (['licensee_owner', 'licensee_admin', 'licensee_coach'].includes(userRole.role)) {
+      } else if (['licensee_owner', 'director', 'coach'].includes(userRole.role)) {
         return NextResponse.redirect(new URL('/portal', request.url))
       }
     }

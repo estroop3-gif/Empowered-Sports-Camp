@@ -5,6 +5,8 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
+import { useAuth } from '@/lib/auth/context'
+import { LogoutButton, UserMenu } from '@/components/layout/user-menu'
 import {
   LayoutDashboard,
   Users,
@@ -12,7 +14,6 @@ import {
   Calendar,
   DollarSign,
   Settings,
-  LogOut,
   Menu,
   X,
   ChevronDown,
@@ -26,6 +27,7 @@ import {
   FileText,
   Shield,
 } from 'lucide-react'
+import { ViewAsControl } from './view-as-control'
 
 /**
  * AdminLayout - Brand-consistent admin shell
@@ -43,7 +45,7 @@ import {
  * - Mobile responsive with collapsible sidebar
  */
 
-type UserRole = 'licensor_admin' | 'licensor_staff' | 'licensee_owner' | 'licensee_admin' | 'licensee_coach'
+type UserRole = 'hq_admin' | 'licensee_owner' | 'director' | 'coach' | 'parent'
 
 interface AdminLayoutProps {
   children: React.ReactNode
@@ -66,13 +68,13 @@ const licensorNavItems: NavItem[] = [
     label: 'Dashboard',
     href: '/admin',
     icon: LayoutDashboard,
-    roles: ['licensor_admin', 'licensor_staff'],
+    roles: ['hq_admin'],
   },
   {
     label: 'Licensees',
     href: '/admin/licensees',
     icon: Building2,
-    roles: ['licensor_admin', 'licensor_staff'],
+    roles: ['hq_admin'],
     children: [
       { label: 'All Licensees', href: '/admin/licensees' },
       { label: 'Add New', href: '/admin/licensees/new' },
@@ -80,34 +82,44 @@ const licensorNavItems: NavItem[] = [
     ],
   },
   {
+    label: 'Camps',
+    href: '/portal/camps',
+    icon: Calendar,
+    roles: ['hq_admin'],
+    children: [
+      { label: 'All Camps', href: '/portal/camps' },
+      { label: 'Create Camp', href: '/portal/camps/new' },
+    ],
+  },
+  {
     label: 'Global Analytics',
     href: '/admin/analytics',
     icon: BarChart3,
-    roles: ['licensor_admin', 'licensor_staff'],
+    roles: ['hq_admin'],
   },
   {
     label: 'Revenue',
     href: '/admin/revenue',
     icon: DollarSign,
-    roles: ['licensor_admin'],
+    roles: ['hq_admin'],
   },
   {
     label: 'Users',
     href: '/admin/users',
     icon: Users,
-    roles: ['licensor_admin'],
+    roles: ['hq_admin'],
   },
   {
     label: 'Curriculum',
     href: '/admin/curriculum',
     icon: FileText,
-    roles: ['licensor_admin', 'licensor_staff'],
+    roles: ['hq_admin'],
   },
   {
     label: 'Settings',
     href: '/admin/settings',
     icon: Settings,
-    roles: ['licensor_admin'],
+    roles: ['hq_admin'],
   },
 ]
 
@@ -116,13 +128,13 @@ const licenseeNavItems: NavItem[] = [
     label: 'Dashboard',
     href: '/portal',
     icon: LayoutDashboard,
-    roles: ['licensee_owner', 'licensee_admin', 'licensee_coach'],
+    roles: ['licensee_owner', 'director', 'coach'],
   },
   {
     label: 'Camps',
     href: '/portal/camps',
     icon: Calendar,
-    roles: ['licensee_owner', 'licensee_admin', 'licensee_coach'],
+    roles: ['licensee_owner', 'director', 'coach'],
     children: [
       { label: 'All Camps', href: '/portal/camps' },
       { label: 'Create Camp', href: '/portal/camps/new' },
@@ -133,37 +145,37 @@ const licenseeNavItems: NavItem[] = [
     label: 'Registrations',
     href: '/portal/registrations',
     icon: Users,
-    roles: ['licensee_owner', 'licensee_admin', 'licensee_coach'],
+    roles: ['licensee_owner', 'director', 'coach'],
   },
   {
     label: 'Athletes',
     href: '/portal/athletes',
     icon: Crown,
-    roles: ['licensee_owner', 'licensee_admin', 'licensee_coach'],
+    roles: ['licensee_owner', 'director', 'coach'],
   },
   {
     label: 'Locations',
     href: '/portal/locations',
     icon: MapPin,
-    roles: ['licensee_owner', 'licensee_admin'],
+    roles: ['licensee_owner', 'director'],
   },
   {
     label: 'Staff',
     href: '/portal/staff',
     icon: UserCircle,
-    roles: ['licensee_owner', 'licensee_admin'],
+    roles: ['licensee_owner', 'director'],
   },
   {
     label: 'Financials',
     href: '/portal/financials',
     icon: DollarSign,
-    roles: ['licensee_owner', 'licensee_admin'],
+    roles: ['licensee_owner', 'director'],
   },
   {
     label: 'Reports',
     href: '/portal/reports',
     icon: BarChart3,
-    roles: ['licensee_owner', 'licensee_admin'],
+    roles: ['licensee_owner', 'director'],
   },
   {
     label: 'Settings',
@@ -184,7 +196,7 @@ export function AdminLayout({
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [expandedItems, setExpandedItems] = useState<string[]>([])
 
-  const isLicensor = userRole === 'licensor_admin' || userRole === 'licensor_staff'
+  const isLicensor = userRole === 'hq_admin'
   const navItems = isLicensor ? licensorNavItems : licenseeNavItems
   const filteredNavItems = navItems.filter((item) => item.roles.includes(userRole))
 
@@ -199,7 +211,7 @@ export function AdminLayout({
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + '/')
 
   return (
-    <div className="min-h-screen bg-dark-100">
+    <div className="min-h-screen bg-dark-100 pt-20">
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
         <div
@@ -208,10 +220,10 @@ export function AdminLayout({
         />
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar - positioned below the public navbar */}
       <aside
         className={cn(
-          'fixed top-0 left-0 z-50 h-full w-72 bg-black border-r border-white/10',
+          'fixed top-20 left-0 z-40 h-[calc(100vh-5rem)] w-72 bg-black border-r border-white/10',
           'transform transition-transform duration-300 lg:translate-x-0',
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         )}
@@ -245,7 +257,7 @@ export function AdminLayout({
         </div>
 
         {/* Navigation */}
-        <nav className="p-4 space-y-1 overflow-y-auto h-[calc(100vh-160px)]">
+        <nav className="p-4 space-y-1 overflow-y-auto h-[calc(100vh-15rem)]">
           {filteredNavItems.map((item) => {
             const active = isActive(item.href)
             const expanded = expandedItems.includes(item.label)
@@ -318,17 +330,15 @@ export function AdminLayout({
                 {userRole.replace('_', ' ')}
               </p>
             </div>
-            <button className="text-white/40 hover:text-red-400 transition-colors">
-              <LogOut className="h-5 w-5" />
-            </button>
+            <LogoutButton />
           </div>
         </div>
       </aside>
 
       {/* Main Content Area */}
       <div className="lg:pl-72">
-        {/* Top Bar */}
-        <header className="sticky top-0 z-30 h-20 bg-black border-b border-white/10">
+        {/* Top Bar - positioned below the public navbar */}
+        <header className="sticky top-20 z-30 h-20 bg-black border-b border-white/10">
           {/* Gradient accent line */}
           <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r from-neon via-magenta to-purple" />
 
@@ -355,6 +365,9 @@ export function AdminLayout({
 
             {/* Right side */}
             <div className="flex items-center gap-4">
+              {/* View As Control (hq_admin only) */}
+              <ViewAsControl variant="compact" />
+
               {/* Notifications */}
               <button className="relative p-2 text-white/50 hover:text-white transition-colors">
                 <Bell className="h-5 w-5" />

@@ -3,10 +3,13 @@
 import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
+import { usePathname } from 'next/navigation'
 import { Menu, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { NAV_LINKS, SITE_NAME } from '@/lib/constants'
 import { cn } from '@/lib/utils'
+import { useAuth } from '@/lib/auth/context'
+import { UserMenu, LogoutButton } from './user-menu'
 
 /**
  * Navbar - Empowered Athletes Brand
@@ -18,8 +21,20 @@ import { cn } from '@/lib/utils'
  * - Sharp edges, glow effects
  */
 export function Navbar() {
+  const pathname = usePathname()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
+  const { user, loading, isHqAdmin, isLicenseeOwner, isDirector, isCoach } = useAuth()
+
+  // Check if on admin/portal pages
+  const isAdminPage = pathname?.startsWith('/admin') || pathname?.startsWith('/portal')
+
+  // Determine dashboard link based on role
+  const getDashboardLink = () => {
+    if (isHqAdmin) return '/admin'
+    if (isLicenseeOwner || isDirector || isCoach) return '/portal'
+    return '/dashboard'
+  }
 
   useEffect(() => {
     const handleScroll = () => {
@@ -81,18 +96,37 @@ export function Navbar() {
           ))}
         </div>
 
-        {/* Desktop CTA */}
+        {/* Desktop CTA / User Menu */}
         <div className="hidden items-center gap-4 lg:flex">
-          <Link href="/login">
-            <Button variant="ghost" size="sm">
-              Sign In
-            </Button>
-          </Link>
-          <Link href="/camps">
-            <Button variant="neon" size="md">
-              Register Now
-            </Button>
-          </Link>
+          {loading ? (
+            // Loading skeleton
+            <div className="h-9 w-9 bg-white/10 animate-pulse" />
+          ) : user ? (
+            // Authenticated: show dashboard link and user menu
+            <>
+              <Link
+                href={getDashboardLink()}
+                className="px-4 py-2 text-sm font-semibold uppercase tracking-wider text-white/80 hover:text-neon transition-colors"
+              >
+                Dashboard
+              </Link>
+              <UserMenu variant="navbar" />
+            </>
+          ) : (
+            // Unauthenticated: show sign in / register
+            <>
+              <Link href="/login">
+                <Button variant="ghost" size="sm">
+                  Sign In
+                </Button>
+              </Link>
+              <Link href="/camps">
+                <Button variant="neon" size="md">
+                  Register Now
+                </Button>
+              </Link>
+            </>
+          )}
         </div>
 
         {/* Mobile Menu Button */}
@@ -131,17 +165,46 @@ export function Navbar() {
               {link.label}
             </Link>
           ))}
-          <div className="mt-6 flex flex-col gap-3 border-t border-white/10 pt-6">
-            <Link href="/login" onClick={() => setMobileMenuOpen(false)}>
-              <Button variant="outline-neon" className="w-full">
-                Sign In
-              </Button>
-            </Link>
-            <Link href="/camps" onClick={() => setMobileMenuOpen(false)}>
-              <Button variant="neon" className="w-full">
-                Register Now
-              </Button>
-            </Link>
+          {/* Auth section for mobile */}
+          <div className="mt-6 border-t border-white/10 pt-6">
+            {loading ? (
+              <div className="h-12 bg-white/10 animate-pulse" />
+            ) : user ? (
+              // Authenticated mobile menu
+              <div className="space-y-3">
+                <Link
+                  href={getDashboardLink()}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="block px-4 py-3 text-base font-semibold uppercase tracking-wider text-neon hover:bg-neon/10 transition-colors"
+                >
+                  Dashboard
+                </Link>
+                <Link
+                  href={`${getDashboardLink()}/settings`}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="block px-4 py-3 text-base font-semibold uppercase tracking-wider text-white/80 hover:text-white transition-colors"
+                >
+                  Settings
+                </Link>
+                <div className="pt-3 border-t border-white/10">
+                  <LogoutButton showLabel className="w-full justify-center px-4 py-3 text-base uppercase tracking-wider hover:bg-red-500/10" />
+                </div>
+              </div>
+            ) : (
+              // Unauthenticated mobile menu
+              <div className="flex flex-col gap-3">
+                <Link href="/login" onClick={() => setMobileMenuOpen(false)}>
+                  <Button variant="outline-neon" className="w-full">
+                    Sign In
+                  </Button>
+                </Link>
+                <Link href="/camps" onClick={() => setMobileMenuOpen(false)}>
+                  <Button variant="neon" className="w-full">
+                    Register Now
+                  </Button>
+                </Link>
+              </div>
+            )}
           </div>
         </div>
       </div>

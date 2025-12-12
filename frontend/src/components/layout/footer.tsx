@@ -1,5 +1,8 @@
+'use client'
+
 import Link from 'next/link'
 import Image from 'next/image'
+import { usePathname } from 'next/navigation'
 import { Facebook, Instagram, Twitter, Youtube, Mail, Phone, MapPin, Zap } from 'lucide-react'
 import { SITE_NAME } from '@/lib/constants'
 
@@ -13,6 +16,7 @@ import { SITE_NAME } from '@/lib/constants'
  * - Sharp, angular styling
  */
 
+// Footer links configuration
 const footerLinks = {
   programs: [
     { label: 'All Girls Sports Camp', href: '/programs/all-girls-sports-camp' },
@@ -42,6 +46,13 @@ const socialLinks = [
 ]
 
 export function Footer() {
+  const pathname = usePathname()
+
+  // Don't render footer on admin or portal pages
+  if (pathname?.startsWith('/admin') || pathname?.startsWith('/portal')) {
+    return null
+  }
+
   return (
     <footer className="bg-black relative">
       {/* Smooth fade from CTA section - extended overlap */}
