@@ -144,12 +144,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const fetchUserRoleAndTenant = async (userId: string) => {
-    // Get user role
-    const { data: userRole } = await supabase
+    // Get user role (only active roles)
+    const { data: userRole, error: roleError } = await supabase
       .from('user_roles')
       .select('role, tenant_id')
       .eq('user_id', userId)
+      .eq('is_active', true)
       .single()
+
+    if (roleError) {
+      console.error('Error fetching user role:', roleError)
+      console.error('Error code:', roleError.code, 'Message:', roleError.message)
+      // Default to parent if role fetch fails (likely RLS issue)
+      setActualRole('parent')
+      return
+    }
+
+    console.log('Fetched user role:', userRole?.role, 'tenant_id:', userRole?.tenant_id)
 
     if (userRole) {
       setActualRole(userRole.role as UserRole)
