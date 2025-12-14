@@ -13,6 +13,7 @@ import {
   ArrowRight,
   Loader2,
   Search,
+  ClipboardList,
 } from 'lucide-react'
 import { fetchCampsForDirector, type DirectorCampDetail } from '@/lib/services/camps'
 
@@ -230,7 +231,14 @@ export default function DirectorCampsPage() {
                     {/* Actions */}
                     <div className="flex items-center gap-2">
                       <Link
-                        href={`/director/camps/${camp.id}/groups`}
+                        href={`/director/camps/${camp.id}/roster`}
+                        className="px-4 py-2 bg-white/10 text-white text-sm font-bold uppercase tracking-wider hover:bg-white/20 transition-colors flex items-center gap-1"
+                      >
+                        <ClipboardList className="h-4 w-4" />
+                        Roster
+                      </Link>
+                      <Link
+                        href={`/director/camps/${camp.id}/grouping`}
                         className="px-4 py-2 bg-white/10 text-white text-sm font-bold uppercase tracking-wider hover:bg-white/20 transition-colors"
                       >
                         Groups

@@ -17,6 +17,8 @@ import {
   Trash2,
   Eye,
   Loader2,
+  ClipboardList,
+  UsersRound,
 } from 'lucide-react'
 import {
   fetchAdminCamps,
@@ -262,6 +264,20 @@ export default function AdminCampsPage() {
                               >
                                 <Edit className="h-4 w-4" />
                                 Edit Camp
+                              </Link>
+                              <Link
+                                href={`/admin/camps/${camp.id}/roster`}
+                                className="flex items-center gap-3 px-4 py-3 text-sm text-white/70 hover:bg-white/5 hover:text-white transition-colors"
+                              >
+                                <ClipboardList className="h-4 w-4" />
+                                The Roster
+                              </Link>
+                              <Link
+                                href={`/admin/camps/${camp.id}/grouping`}
+                                className="flex items-center gap-3 px-4 py-3 text-sm text-white/70 hover:bg-white/5 hover:text-white transition-colors"
+                              >
+                                <UsersRound className="h-4 w-4" />
+                                Grouping
                               </Link>
                               <Link
                                 href={`/camps/${camp.slug}`}
