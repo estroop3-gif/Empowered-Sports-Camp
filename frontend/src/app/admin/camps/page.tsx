@@ -19,6 +19,7 @@ import {
   Loader2,
   ClipboardList,
   UsersRound,
+  LayoutDashboard,
 } from 'lucide-react'
 import {
   fetchAdminCamps,
@@ -258,6 +259,13 @@ export default function AdminCampsPage() {
                               onClick={() => setActionMenuOpen(null)}
                             />
                             <div className="absolute right-0 top-full mt-1 z-20 w-48 bg-dark-100 border border-white/10 shadow-xl">
+                              <Link
+                                href={`/admin/camps/${camp.id}/hq`}
+                                className="flex items-center gap-3 px-4 py-3 text-sm text-neon font-bold hover:bg-neon/10 transition-colors"
+                              >
+                                <LayoutDashboard className="h-4 w-4" />
+                                Camp HQ
+                              </Link>
                               <Link
                                 href={`/admin/camps/${camp.id}`}
                                 className="flex items-center gap-3 px-4 py-3 text-sm text-white/70 hover:bg-white/5 hover:text-white transition-colors"

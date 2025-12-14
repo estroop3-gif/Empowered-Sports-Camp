@@ -14,6 +14,7 @@ import {
   Loader2,
   Search,
   ClipboardList,
+  LayoutDashboard,
 } from 'lucide-react'
 import { fetchCampsForDirector, type DirectorCampDetail } from '@/lib/services/camps'
 
@@ -250,11 +251,11 @@ export default function DirectorCampsPage() {
                         Schedule
                       </Link>
                       <Link
-                        href={`/director/camps/${camp.id}`}
+                        href={`/director/camps/${camp.id}/hq`}
                         className="px-4 py-2 bg-neon text-black text-sm font-bold uppercase tracking-wider hover:bg-neon/90 transition-colors flex items-center gap-1"
                       >
-                        Manage
-                        <ArrowRight className="h-4 w-4" />
+                        <LayoutDashboard className="h-4 w-4" />
+                        Camp HQ
                       </Link>
                     </div>
                   </div>

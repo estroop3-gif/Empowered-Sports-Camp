@@ -1204,3 +1204,269 @@ export async function updateGroupName(
     return { data: { success: false }, error: error as Error }
   }
 }
+
+// ============================================================================
+// TEAM COLOR TYPES
+// ============================================================================
+
+export interface TeamColorCamper {
+  id: string
+  camper_session_id: string
+  athlete_id: string
+  name: string
+  first_name: string
+  last_name: string
+  grade_level: number | null
+  friend_group_id: string | null
+  group_id: string | null
+  group_name: string | null
+  team_color: 'pink' | 'purple' | null
+  photo_url: string | null
+}
+
+export interface TeamColorState {
+  camp_id: string
+  camp_name: string
+  pink_team: {
+    campers: TeamColorCamper[]
+    count: number
+  }
+  purple_team: {
+    campers: TeamColorCamper[]
+    count: number
+  }
+  unassigned: {
+    campers: TeamColorCamper[]
+    count: number
+  }
+  total_campers: number
+  is_balanced: boolean
+  balance_diff: number
+}
+
+export interface TeamColorAssignmentResult {
+  pink_count: number
+  purple_count: number
+  campers_updated: number
+}
+
+// ============================================================================
+// TEAM COLOR FUNCTIONS
+// ============================================================================
+
+/**
+ * Get the current team color state for a camp
+ */
+export async function getTeamColorState(
+  campId: string
+): Promise<{ data: TeamColorState | null; error: Error | null }> {
+  try {
+    const camp = await prisma.camp.findUnique({
+      where: { id: campId },
+      select: {
+        id: true,
+        name: true,
+      },
+    })
+
+    if (!camp) {
+      return { data: null, error: new Error('Camp not found') }
+    }
+
+    const campers = await prisma.camperSessionData.findMany({
+      where: { campId },
+      include: {
+        athlete: {
+          select: {
+            firstName: true,
+            lastName: true,
+            photoUrl: true,
+          },
+        },
+        assignedGroup: {
+          select: {
+            id: true,
+            groupName: true,
+          },
+        },
+      },
+      orderBy: [
+        { teamColor: 'asc' },
+        { athlete: { lastName: 'asc' } },
+      ],
+    })
+
+    const transformCamper = (c: typeof campers[0]): TeamColorCamper => ({
+      id: c.id,
+      camper_session_id: c.id,
+      athlete_id: c.athleteId,
+      name: `${c.athlete.firstName} ${c.athlete.lastName}`,
+      first_name: c.athlete.firstName,
+      last_name: c.athlete.lastName,
+      grade_level: c.gradeValidated,
+      friend_group_id: c.friendGroupId,
+      group_id: c.assignedGroupId,
+      group_name: c.assignedGroup?.groupName || null,
+      team_color: c.teamColor as 'pink' | 'purple' | null,
+      photo_url: c.athlete.photoUrl,
+    })
+
+    const pinkCampers = campers.filter(c => c.teamColor === 'pink').map(transformCamper)
+    const purpleCampers = campers.filter(c => c.teamColor === 'purple').map(transformCamper)
+    const unassignedCampers = campers.filter(c => !c.teamColor).map(transformCamper)
+
+    const balanceDiff = Math.abs(pinkCampers.length - purpleCampers.length)
+
+    return {
+      data: {
+        camp_id: camp.id,
+        camp_name: camp.name,
+        pink_team: {
+          campers: pinkCampers,
+          count: pinkCampers.length,
+        },
+        purple_team: {
+          campers: purpleCampers,
+          count: purpleCampers.length,
+        },
+        unassigned: {
+          campers: unassignedCampers,
+          count: unassignedCampers.length,
+        },
+        total_campers: campers.length,
+        is_balanced: balanceDiff <= 1,
+        balance_diff: balanceDiff,
+      },
+      error: null,
+    }
+  } catch (error) {
+    console.error('[getTeamColorState] Error:', error)
+    return { data: null, error: error as Error }
+  }
+}
+
+/**
+ * Auto-assign team colors (pink/purple) while keeping friends together
+ *
+ * Algorithm:
+ * 1. Group campers by friend_group_id (friends stay together)
+ * 2. Sort clusters by size descending for better balance
+ * 3. Assign each cluster to the team with fewer members
+ * 4. Persist assignments
+ */
+export async function autoAssignTeamColors(
+  campId: string
+): Promise<{ data: TeamColorAssignmentResult | null; error: Error | null }> {
+  try {
+    // Fetch all campers with friend group info
+    const campers = await prisma.camperSessionData.findMany({
+      where: { campId },
+      select: {
+        id: true,
+        athleteId: true,
+        friendGroupId: true,
+        gradeValidated: true,
+      },
+    })
+
+    if (campers.length === 0) {
+      return {
+        data: { pink_count: 0, purple_count: 0, campers_updated: 0 },
+        error: null,
+      }
+    }
+
+    // Group campers by friendGroupId
+    // Campers without a friend group are their own singleton cluster
+    const clusters: Map<string, typeof campers> = new Map()
+
+    for (const camper of campers) {
+      const clusterId = camper.friendGroupId || `solo_${camper.id}`
+      const existing = clusters.get(clusterId) || []
+      clusters.set(clusterId, [...existing, camper])
+    }
+
+    // Convert to array and sort by size descending (larger clusters first for better balance)
+    const clusterArray = Array.from(clusters.entries())
+      .map(([clusterId, members]) => ({
+        clusterId,
+        members,
+        size: members.length,
+        avgGrade: members.reduce((sum, m) => sum + (m.gradeValidated || 0), 0) / members.length,
+      }))
+      .sort((a, b) => b.size - a.size)
+
+    // Assign clusters to teams
+    let pinkCount = 0
+    let purpleCount = 0
+    const assignments: { id: string; teamColor: 'pink' | 'purple' }[] = []
+
+    for (const cluster of clusterArray) {
+      // Assign to the team with fewer members
+      // If equal, use deterministic tiebreaker (cluster ID hash or avg grade)
+      let assignedColor: 'pink' | 'purple'
+
+      if (pinkCount < purpleCount) {
+        assignedColor = 'pink'
+      } else if (purpleCount < pinkCount) {
+        assignedColor = 'purple'
+      } else {
+        // Tiebreaker: use cluster average grade (lower grades go to pink)
+        assignedColor = cluster.avgGrade <= 6 ? 'pink' : 'purple'
+      }
+
+      // Add all cluster members to the assigned color
+      for (const member of cluster.members) {
+        assignments.push({ id: member.id, teamColor: assignedColor })
+      }
+
+      if (assignedColor === 'pink') {
+        pinkCount += cluster.size
+      } else {
+        purpleCount += cluster.size
+      }
+    }
+
+    // Persist assignments in a transaction
+    await prisma.$transaction(
+      assignments.map(a =>
+        prisma.camperSessionData.update({
+          where: { id: a.id },
+          data: { teamColor: a.teamColor },
+        })
+      )
+    )
+
+    return {
+      data: {
+        pink_count: pinkCount,
+        purple_count: purpleCount,
+        campers_updated: assignments.length,
+      },
+      error: null,
+    }
+  } catch (error) {
+    console.error('[autoAssignTeamColors] Error:', error)
+    return { data: null, error: error as Error }
+  }
+}
+
+/**
+ * Update a single camper's team color (manual override)
+ */
+export async function updateTeamColor(
+  camperSessionId: string,
+  teamColor: 'pink' | 'purple' | null
+): Promise<{ data: { success: boolean }; error: Error | null }> {
+  try {
+    await prisma.camperSessionData.update({
+      where: { id: camperSessionId },
+      data: { teamColor },
+    })
+
+    return { data: { success: true }, error: null }
+  } catch (error) {
+    console.error('[updateTeamColor] Error:', error)
+    return { data: { success: false }, error: error as Error }
+  }
+}

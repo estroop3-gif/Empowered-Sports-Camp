@@ -30,6 +30,7 @@ import {
   ShoppingBag,
   Inbox,
   Briefcase,
+  Trophy,
 } from 'lucide-react'
 import { ViewAsControl } from './view-as-control'
 
@@ -90,18 +91,21 @@ const licensorNavItems: NavItem[] = [
     roles: ['hq_admin'],
     children: [
       { label: 'All Licensees', href: '/admin/licensees' },
-      { label: 'Add New', href: '/admin/licensees/new' },
+      { label: 'Add Licensee', href: '/admin/licensees/new' },
       { label: 'Territories', href: '/admin/licensees/territories' },
+      { label: 'New Territory', href: '/admin/licensees/territories/new' },
     ],
   },
   {
-    label: 'Camps',
+    label: 'Camp Manager',
     href: '/admin/camps',
     icon: Calendar,
     roles: ['hq_admin'],
     children: [
       { label: 'All Camps', href: '/admin/camps' },
       { label: 'Create Camp', href: '/admin/camps/new' },
+      { label: 'Camp HQ', href: '/admin/camp-hq' },
+      { label: 'Check-In Kiosk', href: '/camp-checkin' },
     ],
   },
   {
@@ -117,6 +121,12 @@ const licensorNavItems: NavItem[] = [
     roles: ['hq_admin'],
   },
   {
+    label: 'Scorecards',
+    href: '/admin/scorecards',
+    icon: Trophy,
+    roles: ['hq_admin'],
+  },
+  {
     label: 'Users',
     href: '/admin/users',
     icon: Users,
@@ -127,14 +137,21 @@ const licensorNavItems: NavItem[] = [
     href: '/admin/curriculum',
     icon: FileText,
     roles: ['hq_admin'],
+    children: [
+      { label: 'Overview', href: '/admin/curriculum' },
+      { label: 'Assign', href: '/admin/curriculum/assign' },
+      { label: 'New Block', href: '/admin/curriculum/blocks/new' },
+      { label: 'New Template', href: '/admin/curriculum/templates/new' },
+    ],
   },
   {
-    label: 'EmpowerU Studio',
-    href: '/admin/lms',
+    label: 'EmpowerU',
+    href: '/admin/empoweru',
     icon: GraduationCap,
     roles: ['hq_admin'],
     children: [
-      { label: 'Modules', href: '/admin/lms' },
+      { label: 'Training Portal', href: '/admin/empoweru' },
+      { label: 'Manage Modules', href: '/admin/lms' },
       { label: 'Progress Tracking', href: '/admin/lms/progress' },
     ],
   },
@@ -145,6 +162,7 @@ const licensorNavItems: NavItem[] = [
     roles: ['hq_admin'],
     children: [
       { label: 'Catalog', href: '/admin/shop' },
+      { label: 'Add Product', href: '/admin/shop/products/new' },
       { label: 'Orders', href: '/admin/shop/orders' },
       { label: 'Settings', href: '/admin/shop/settings' },
     ],
@@ -182,7 +200,6 @@ const licenseeNavItems: NavItem[] = [
     children: [
       { label: 'All Camps', href: '/portal/camps' },
       { label: 'Create Camp', href: '/portal/camps/new' },
-      { label: 'Schedule', href: '/portal/camps/schedule' },
     ],
   },
   {
@@ -208,6 +225,30 @@ const licenseeNavItems: NavItem[] = [
     href: '/portal/staff',
     icon: UserCircle,
     roles: ['licensee_owner', 'director'],
+  },
+  {
+    label: 'EmpowerU',
+    href: '/licensee/empoweru',
+    icon: GraduationCap,
+    roles: ['licensee_owner'],
+  },
+  {
+    label: 'EmpowerU',
+    href: '/director/empoweru',
+    icon: GraduationCap,
+    roles: ['director'],
+  },
+  {
+    label: 'Scorecards',
+    href: '/licensee/scorecards',
+    icon: Trophy,
+    roles: ['licensee_owner'],
+  },
+  {
+    label: 'Scorecards',
+    href: '/director/scorecards',
+    icon: Trophy,
+    roles: ['director'],
   },
   {
     label: 'Financials',

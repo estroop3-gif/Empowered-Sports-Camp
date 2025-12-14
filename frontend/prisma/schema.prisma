@@ -238,6 +238,51 @@ enum CitProgressEventType {
   application_submitted
 }
 
+enum TeamColor {
+  pink
+  purple
+}
+
+// ============================================================================
+// EMPOWERU LMS ENUMS
+// ============================================================================
+
+enum PortalType {
+  OPERATIONAL
+  BUSINESS
+  SKILL_STATION
+}
+
+enum VideoProvider {
+  YOUTUBE
+  VIMEO
+  EMBED
+}
+
+enum EmpowerUProgressStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum QuestionType {
+  MULTIPLE_CHOICE
+}
+
+enum ContributionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  REVISION_REQUESTED
+}
+
+enum CompensationPlanCode {
+  HIGH
+  MID
+  ENTRY
+  FIXED
+}
+
 // ============================================================================
 // CORE TABLES
 // ============================================================================
@@ -284,6 +329,7 @@ model Tenant {
   shopOrders             ShopOrder[]
   territories            Territory[]
   volunteerCertifications VolunteerCertification[]
+  sessionCompensations   CampSessionCompensation[]
 
   @@map("tenants")
 }
@@ -374,6 +420,10 @@ model Camp {
   parentOnboarding     ParentOnboarding[]
   staffAssignments     CampStaffAssignment[]
 
+  // Compensation relations
+  sessionCompensations       CampSessionCompensation[]
+  dayCompensationSnapshots   CampDayCompensationSnapshot[]
+
   @@unique([tenantId, slug])
   @@index([tenantId])
   @@index([startDate, endDate])
@@ -417,6 +467,10 @@ model Profile {
   parentOnboarding            ParentOnboarding[]         @relation("ParentOnboarding")
   authorizedPickups           AuthorizedPickup[]         @relation("AuthorizedPickups")
   staffAssignments            CampStaffAssignment[]      @relation("StaffAssignments")
+
+  // Compensation relations
+  sessionCompensations        CampSessionCompensation[]  @relation("StaffCompensation")
+  dailyCompensationSnapshots  CampDayCompensationSnapshot[] @relation("DailyCompensationSnapshots")
 
   @@map("profiles")
 }
@@ -652,6 +706,9 @@ model CamperSessionData {
   assignedGroupId           String?        @map("assigned_group_id") @db.Uuid
   assignmentType            AssignmentType? @map("assignment_type")
   assignmentReason          String?        @map("assignment_reason")
+
+  // Team color for scrimmage/big-team logic
+  teamColor                 TeamColor?     @map("team_color")
 
   createdAt                 DateTime       @default(now()) @map("created_at") @db.Timestamptz
   updatedAt                 DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
@@ -1666,6 +1723,7 @@ model CampDay {
   pickupTokens    PickupToken[]
   incidents       CampIncident[]
   scheduleBlockProgress ScheduleBlockProgress[]
+  compensationSnapshots CampDayCompensationSnapshot[]
 
   @@unique([campId, date])
   @@unique([campId, dayNumber])
@@ -1860,4 +1918,305 @@ model CampStaffAssignment {
   @@index([campId])
   @@index([userId])
   @@map("camp_staff_assignments")
+}
+
+// ============================================================================
+// EMPOWERU LMS TABLES
+// ============================================================================
+
+model EmpowerUModule {
+  id               String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId         String?       @map("tenant_id") @db.Uuid
+  title            String
+  slug             String
+  description      String?       @db.Text
+  portalType       PortalType    @map("portal_type")
+  level            Int           @default(1)
+  videoProvider    VideoProvider @default(YOUTUBE) @map("video_provider")
+  videoUrl         String?       @map("video_url")
+  estimatedMinutes Int           @default(30) @map("estimated_minutes")
+  isPublished      Boolean       @default(false) @map("is_published")
+  createdByUserId  String?       @map("created_by_user_id") @db.Uuid
+  contributionId   String?       @map("contribution_id") @db.Uuid
+  createdAt        DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  quiz             EmpowerUQuiz?
+  progress         EmpowerUModuleProgress[]
+  unlockRuleModules EmpowerUUnlockRuleModule[]
+  contribution     EmpowerUContribution? @relation(fields: [contributionId], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, slug])
+  @@index([tenantId])
+  @@index([portalType])
+  @@index([level])
+  @@index([isPublished])
+  @@map("empoweru_modules")
+}
+
+model EmpowerUQuiz {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  moduleId     String   @unique @map("module_id") @db.Uuid
+  title        String
+  passingScore Int      @default(80) @map("passing_score")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  module    EmpowerUModule       @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  questions EmpowerUQuizQuestion[]
+
+  @@index([moduleId])
+  @@map("empoweru_quizzes")
+}
+
+model EmpowerUQuizQuestion {
+  id           String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  quizId       String       @map("quiz_id") @db.Uuid
+  questionText String       @map("question_text") @db.Text
+  questionType QuestionType @default(MULTIPLE_CHOICE) @map("question_type")
+  orderIndex   Int          @default(0) @map("order_index")
+  createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  quiz    EmpowerUQuiz         @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  options EmpowerUQuizOption[]
+
+  @@index([quizId])
+  @@index([quizId, orderIndex])
+  @@map("empoweru_quiz_questions")
+}
+
+model EmpowerUQuizOption {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  questionId String   @map("question_id") @db.Uuid
+  optionText String   @map("option_text") @db.Text
+  isCorrect  Boolean  @default(false) @map("is_correct")
+  orderIndex Int      @default(0) @map("order_index")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relations
+  question EmpowerUQuizQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@index([questionId])
+  @@map("empoweru_quiz_options")
+}
+
+model EmpowerUModuleProgress {
+  id          String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  moduleId    String                 @map("module_id") @db.Uuid
+  userId      String                 @map("user_id") @db.Uuid
+  role        String
+  tenantId    String?                @map("tenant_id") @db.Uuid
+  status      EmpowerUProgressStatus @default(NOT_STARTED)
+  quizScore   Int?                   @map("quiz_score")
+  quizPassed  Boolean?               @map("quiz_passed")
+  completedAt DateTime?              @map("completed_at") @db.Timestamptz
+  createdAt   DateTime               @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime               @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  module EmpowerUModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@unique([moduleId, userId, tenantId])
+  @@index([moduleId])
+  @@index([userId])
+  @@index([tenantId])
+  @@index([status])
+  @@map("empoweru_module_progress")
+}
+
+model EmpowerUContribution {
+  id               String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId         String?            @map("tenant_id") @db.Uuid
+  submittedByUserId String            @map("submitted_by_user_id") @db.Uuid
+  submittedByRole  String             @map("submitted_by_role")
+  title            String
+  description      String?            @db.Text
+  portalType       PortalType         @map("portal_type")
+  videoUrl         String?            @map("video_url")
+  attachmentUrl    String?            @map("attachment_url")
+  status           ContributionStatus @default(PENDING)
+  adminReviewerId  String?            @map("admin_reviewer_id") @db.Uuid
+  adminNotes       String?            @map("admin_notes") @db.Text
+  createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  createdModules   EmpowerUModule[]
+
+  @@index([tenantId])
+  @@index([submittedByUserId])
+  @@index([status])
+  @@index([portalType])
+  @@map("empoweru_contributions")
+}
+
+model EmpowerUUnlockRule {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  portalType        PortalType @map("portal_type")
+  unlockFeatureCode String   @map("unlock_feature_code")
+  description       String?
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  requiredModules   EmpowerUUnlockRuleModule[]
+
+  @@unique([portalType, unlockFeatureCode])
+  @@index([portalType])
+  @@index([unlockFeatureCode])
+  @@map("empoweru_unlock_rules")
+}
+
+model EmpowerUUnlockRuleModule {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ruleId     String   @map("rule_id") @db.Uuid
+  moduleId   String   @map("module_id") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relations
+  rule   EmpowerUUnlockRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  module EmpowerUModule     @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@unique([ruleId, moduleId])
+  @@index([ruleId])
+  @@index([moduleId])
+  @@map("empoweru_unlock_rule_modules")
+}
+
+model EmpowerUUserUnlock {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  tenantId    String?  @map("tenant_id") @db.Uuid
+  featureCode String   @map("feature_code")
+  unlockedAt  DateTime @default(now()) @map("unlocked_at") @db.Timestamptz
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@unique([userId, tenantId, featureCode])
+  @@index([userId])
+  @@index([tenantId])
+  @@index([featureCode])
+  @@map("empoweru_user_unlocks")
+}
+
+// ============================================================================
+// STAFF COMPENSATION & INCENTIVE TRACKING
+// ============================================================================
+
+model CompensationPlan {
+  id                        String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                      String               // e.g. "High Range", "Mid Range", "Entry Level", "Fixed Stipend"
+  planCode                  CompensationPlanCode @unique @map("plan_code")
+  preCampStipendAmount      Decimal              @map("pre_camp_stipend_amount") @db.Decimal(10, 2)
+  onSiteStipendAmount       Decimal              @map("on_site_stipend_amount") @db.Decimal(10, 2)
+  enrollmentThreshold       Int?                 @map("enrollment_threshold")
+  enrollmentBonusPerCamper  Decimal?             @map("enrollment_bonus_per_camper") @db.Decimal(10, 2)
+  csatRequiredScore         Decimal?             @map("csat_required_score") @db.Decimal(3, 2)
+  csatBonusAmount           Decimal?             @map("csat_bonus_amount") @db.Decimal(10, 2)
+  budgetEfficiencyRate      Decimal?             @map("budget_efficiency_rate") @db.Decimal(5, 4) // e.g. 0.15 for 15%
+  guestSpeakerRequiredCount Int?                 @map("guest_speaker_required_count")
+  guestSpeakerBonusAmount   Decimal?             @map("guest_speaker_bonus_amount") @db.Decimal(10, 2)
+  isActive                  Boolean              @default(true) @map("is_active")
+  createdAt                 DateTime             @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt                 DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  sessionCompensations CampSessionCompensation[]
+
+  @@index([planCode])
+  @@index([isActive])
+  @@map("compensation_plans")
+}
+
+model CampSessionCompensation {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  campId              String   @map("camp_id") @db.Uuid
+  tenantId            String   @map("tenant_id") @db.Uuid
+  staffProfileId      String   @map("staff_profile_id") @db.Uuid
+  compensationPlanId  String   @map("compensation_plan_id") @db.Uuid
+
+  // Snapshotted plan parameters (copied from plan at assignment time)
+  preCampStipendAmount      Decimal  @map("pre_camp_stipend_amount") @db.Decimal(10, 2)
+  onSiteStipendAmount       Decimal  @map("on_site_stipend_amount") @db.Decimal(10, 2)
+  enrollmentThreshold       Int?     @map("enrollment_threshold")
+  enrollmentBonusPerCamper  Decimal? @map("enrollment_bonus_per_camper") @db.Decimal(10, 2)
+  csatRequiredScore         Decimal? @map("csat_required_score") @db.Decimal(3, 2)
+  csatBonusAmount           Decimal? @map("csat_bonus_amount") @db.Decimal(10, 2)
+  budgetEfficiencyRate      Decimal? @map("budget_efficiency_rate") @db.Decimal(5, 4)
+  guestSpeakerRequiredCount Int?     @map("guest_speaker_required_count")
+  guestSpeakerBonusAmount   Decimal? @map("guest_speaker_bonus_amount") @db.Decimal(10, 2)
+
+  // Performance metrics (populated during/after camp)
+  totalEnrolledCampers      Int?     @map("total_enrolled_campers")
+  csatAvgScore              Decimal? @map("csat_avg_score") @db.Decimal(3, 2)
+  budgetPreapprovedTotal    Decimal? @map("budget_preapproved_total") @db.Decimal(10, 2)
+  budgetActualTotal         Decimal? @map("budget_actual_total") @db.Decimal(10, 2)
+  budgetSavingsAmount       Decimal? @map("budget_savings_amount") @db.Decimal(10, 2)
+  guestSpeakerCount         Int?     @map("guest_speaker_count")
+
+  // Calculated incentive amounts
+  enrollmentBonusEarned       Decimal? @map("enrollment_bonus_earned") @db.Decimal(10, 2)
+  csatBonusEarned             Decimal? @map("csat_bonus_earned") @db.Decimal(10, 2)
+  budgetEfficiencyBonusEarned Decimal? @map("budget_efficiency_bonus_earned") @db.Decimal(10, 2)
+  guestSpeakerBonusEarned     Decimal? @map("guest_speaker_bonus_earned") @db.Decimal(10, 2)
+  fixedStipendTotal           Decimal? @map("fixed_stipend_total") @db.Decimal(10, 2)
+  totalVariableBonus          Decimal? @map("total_variable_bonus") @db.Decimal(10, 2)
+  totalCompensation           Decimal? @map("total_compensation") @db.Decimal(10, 2)
+
+  // Status
+  calculatedAt DateTime? @map("calculated_at") @db.Timestamptz
+  isFinalized  Boolean   @default(false) @map("is_finalized")
+
+  // Audit
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  camp             Camp             @relation(fields: [campId], references: [id], onDelete: Cascade)
+  tenant           Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  staffProfile     Profile          @relation("StaffCompensation", fields: [staffProfileId], references: [id], onDelete: Cascade)
+  compensationPlan CompensationPlan @relation(fields: [compensationPlanId], references: [id])
+  dailySnapshots   CampDayCompensationSnapshot[]
+
+  @@unique([campId, staffProfileId])
+  @@index([campId])
+  @@index([tenantId])
+  @@index([staffProfileId])
+  @@index([isFinalized])
+  @@map("camp_session_compensations")
+}
+
+model CampDayCompensationSnapshot {
+  id                       String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  campDayId                String   @map("camp_day_id") @db.Uuid
+  campId                   String   @map("camp_id") @db.Uuid
+  staffProfileId           String   @map("staff_profile_id") @db.Uuid
+  sessionCompensationId    String   @map("session_compensation_id") @db.Uuid
+
+  // Daily metrics
+  dayEnrolledCampers Int?     @map("day_enrolled_campers")
+  dayCheckedInCount  Int?     @map("day_checked_in_count")
+  dayCheckedOutCount Int?     @map("day_checked_out_count")
+  dayNoShowCount     Int?     @map("day_no_show_count")
+  dayCsatAvgScore    Decimal? @map("day_csat_avg_score") @db.Decimal(3, 2)
+  dayGuestSpeakerCount Int?   @map("day_guest_speaker_count")
+  notes              String?  @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relations
+  campDay             CampDay                 @relation(fields: [campDayId], references: [id], onDelete: Cascade)
+  camp                Camp                    @relation(fields: [campId], references: [id], onDelete: Cascade)
+  staffProfile        Profile                 @relation("DailyCompensationSnapshots", fields: [staffProfileId], references: [id], onDelete: Cascade)
+  sessionCompensation CampSessionCompensation @relation(fields: [sessionCompensationId], references: [id], onDelete: Cascade)
+
+  @@unique([campDayId, staffProfileId])
+  @@index([campDayId])
+  @@index([campId])
+  @@index([staffProfileId])
+  @@index([sessionCompensationId])
+  @@map("camp_day_compensation_snapshots")
 }
