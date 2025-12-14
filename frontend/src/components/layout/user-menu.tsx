@@ -102,9 +102,8 @@ export function UserMenu({ variant = 'navbar', className }: UserMenuProps) {
   // Get user display info
   const getUserDisplayName = () => {
     if (!user) return ''
-    const metadata = user.user_metadata
-    if (metadata?.first_name) {
-      return `${metadata.first_name} ${metadata.last_name || ''}`.trim()
+    if (user.firstName) {
+      return `${user.firstName} ${user.lastName || ''}`.trim()
     }
     return user.email?.split('@')[0] || 'User'
   }

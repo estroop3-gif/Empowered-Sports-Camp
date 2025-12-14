@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import {
   User,
@@ -18,8 +17,9 @@ import {
   Zap,
   Loader2,
 } from 'lucide-react'
-
-interface ParentProfile {
+import { useAuth } from '@/lib/auth/context'
+// Type definition (no longer imported from service)
+interface Profile {
   id: string
   email: string
   first_name: string | null
@@ -28,36 +28,40 @@ interface ParentProfile {
   city: string | null
   state: string | null
   zip_code: string | null
+  avatar_url: string | null
+  onboarding_completed: boolean
 }
 
 export default function OnboardingPage() {
   const router = useRouter()
-  const supabase = createClient()
-  const [profile, setProfile] = useState<ParentProfile | null>(null)
+  const { user, loading: authLoading } = useAuth()
+  const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    loadProfile()
-  }, [])
+    if (!authLoading) {
+      if (!user) {
+        router.push('/login')
+      } else {
+        loadProfile()
+      }
+    }
+  }, [user, authLoading])
 
   const loadProfile = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
+    if (!user?.id) return
 
-    if (!user) {
-      router.push('/login')
-      return
-    }
+    try {
+      const res = await fetch(`/api/profiles?action=byId&profileId=${user.id}`)
+      const { data, error } = await res.json()
 
-    const { data: profileData, error } = await supabase
-      .from('profiles')
-      .select('id, email, first_name, last_name, phone, city, state, zip_code')
-      .eq('id', user.id)
-      .single()
-
-    if (error) {
-      console.error('Error loading profile:', error)
-    } else {
-      setProfile(profileData)
+      if (error) {
+        console.error('Error loading profile:', error)
+      } else {
+        setProfile(data)
+      }
+    } catch (err) {
+      console.error('Error loading profile:', err)
     }
 
     setLoading(false)

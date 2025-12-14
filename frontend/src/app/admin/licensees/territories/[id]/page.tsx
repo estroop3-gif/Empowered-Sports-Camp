@@ -14,7 +14,7 @@ import {
   Territory,
   UpdateTerritoryInput,
   TerritoryStatus,
-} from '@/lib/supabase/territories'
+} from '@/lib/services/territories'
 import { cn } from '@/lib/utils'
 import {
   ArrowLeft,

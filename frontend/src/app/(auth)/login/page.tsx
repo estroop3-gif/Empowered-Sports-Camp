@@ -4,14 +4,15 @@ import { useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
+import { signIn, forgotPassword } from '@/lib/auth/cognito-client'
+import { useAuth } from '@/lib/auth/context'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Zap, Mail, Lock, ArrowRight, Crown } from 'lucide-react'
 
 export default function LoginPage() {
   const router = useRouter()
-  const supabase = createClient()
+  const { refreshAuth } = useAuth()
 
   const [formData, setFormData] = useState({
     email: '',
@@ -19,6 +20,7 @@ export default function LoginPage() {
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [message, setMessage] = useState<string | null>(null)
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData(prev => ({
@@ -26,35 +28,57 @@ export default function LoginPage() {
       [e.target.name]: e.target.value
     }))
     setError(null)
+    setMessage(null)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError(null)
+    setMessage(null)
 
     try {
-      const { data, error: signInError } = await supabase.auth.signInWithPassword({
+      const session = await signIn({
         email: formData.email,
         password: formData.password,
       })
 
-      if (signInError) {
-        if (signInError.message === 'Invalid login credentials') {
-          setError('Invalid email or password. Please try again.')
-        } else {
-          setError(signInError.message)
-        }
-        return
-      }
+      // Store tokens in HTTP-only cookies for server-side auth
+      const idToken = session.getIdToken().getJwtToken()
+      const accessToken = session.getAccessToken().getJwtToken()
+      const refreshToken = session.getRefreshToken().getToken()
+      const expiresIn = session.getIdToken().getExpiration() - Math.floor(Date.now() / 1000)
 
-      if (data.user) {
-        router.push('/dashboard')
-        router.refresh()
+      await fetch('/api/auth/set-tokens', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          idToken,
+          accessToken,
+          refreshToken,
+          expiresIn,
+        }),
+      })
+
+      // Refresh auth context
+      await refreshAuth()
+
+      router.push('/dashboard')
+      router.refresh()
+    } catch (err: unknown) {
+      const error = err as Error & { code?: string }
+      console.error('Sign in error:', error)
+
+      if (error.code === 'NotAuthorizedException' || error.message?.includes('Incorrect')) {
+        setError('Invalid email or password. Please try again.')
+      } else if (error.code === 'UserNotConfirmedException') {
+        setError('Please verify your email address before signing in.')
+        // Could redirect to confirmation page
+      } else if (error.code === 'UserNotFoundException') {
+        setError('No account found with this email address.')
+      } else {
+        setError(error.message || 'An unexpected error occurred. Please try again.')
       }
-    } catch (err) {
-      setError('An unexpected error occurred. Please try again.')
-      console.error(err)
     } finally {
       setLoading(false)
     }
@@ -68,20 +92,21 @@ export default function LoginPage() {
 
     setLoading(true)
     setError(null)
+    setMessage(null)
 
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(formData.email, {
-        redirectTo: `${window.location.origin}/auth/reset-password`,
-      })
-
-      if (error) {
-        setError(error.message)
+      await forgotPassword(formData.email)
+      setMessage('Password reset code sent! Check your email.')
+      // Could redirect to reset password page
+    } catch (err: unknown) {
+      const error = err as Error & { code?: string }
+      if (error.code === 'UserNotFoundException') {
+        setError('No account found with this email address.')
+      } else if (error.code === 'LimitExceededException') {
+        setError('Too many attempts. Please try again later.')
       } else {
-        setError(null)
-        alert('Password reset email sent! Check your inbox.')
+        setError('Failed to send reset email. Please try again.')
       }
-    } catch (err) {
-      setError('Failed to send reset email. Please try again.')
       console.error(err)
     } finally {
       setLoading(false)
@@ -130,6 +155,12 @@ export default function LoginPage() {
               {error && (
                 <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
                   {error}
+                </div>
+              )}
+
+              {message && (
+                <div className="mb-6 p-4 bg-neon/10 border border-neon/30 text-neon text-sm">
+                  {message}
                 </div>
               )}
 

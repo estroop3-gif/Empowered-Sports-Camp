@@ -20,8 +20,8 @@ import { SITE_NAME } from '@/lib/constants'
 const footerLinks = {
   programs: [
     { label: 'All Girls Sports Camp', href: '/programs/all-girls-sports-camp' },
-    { label: 'CIT Program', href: '/programs/cit' },
-    { label: 'Soccer & Strength', href: '/programs/soccer-strength' },
+    { label: 'CIT Program', href: '/programs/cit-program' },
+    { label: 'Soccer & Strength', href: '/programs/soccer-and-strength' },
     { label: 'Basketball Intensive', href: '/programs/basketball-intensive' },
   ],
   company: [

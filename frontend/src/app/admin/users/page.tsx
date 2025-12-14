@@ -1,22 +1,17 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import Link from 'next/link'
 import { AdminLayout, PageHeader, ContentCard } from '@/components/admin/admin-layout'
 import { useAuth } from '@/lib/auth/context'
-import { createClient } from '@/lib/supabase/client'
 import {
   Users,
   Search,
-  Filter,
   Plus,
   Shield,
   Building2,
   Crown,
   UserCheck,
   User,
-  Mail,
-  Calendar,
   MoreVertical,
   Loader2,
 } from 'lucide-react'
@@ -24,21 +19,22 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 
-/**
- * Users Management Page
- *
- * HQ Admin can view and manage all users across the system
- */
-
-interface UserData {
+// Type definition (no longer imported from service)
+interface UserWithRole {
   id: string
   email: string
   first_name: string | null
   last_name: string | null
   created_at: string
-  role?: string
-  tenant_name?: string
+  role: string
+  tenant_name: string | null
 }
+
+/**
+ * Users Management Page
+ *
+ * HQ Admin can view and manage all users across the system
+ */
 
 const ROLE_ICONS: Record<string, React.ElementType> = {
   hq_admin: Shield,
@@ -58,13 +54,12 @@ const ROLE_COLORS: Record<string, string> = {
 
 export default function UsersPage() {
   const { user } = useAuth()
-  const supabase = createClient()
-  const [users, setUsers] = useState<UserData[]>([])
+  const [users, setUsers] = useState<UserWithRole[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [roleFilter, setRoleFilter] = useState<string>('all')
 
-  const userName = user?.user_metadata?.first_name || user?.email?.split('@')[0] || 'Admin'
+  const userName = user?.firstName || user?.email?.split('@')[0] || 'Admin'
 
   useEffect(() => {
     loadUsers()
@@ -73,48 +68,23 @@ export default function UsersPage() {
   const loadUsers = async () => {
     setLoading(true)
 
-    // Fetch profiles with their roles
-    const { data: profiles, error } = await supabase
-      .from('profiles')
-      .select(`
-        id,
-        email,
-        first_name,
-        last_name,
-        created_at
-      `)
-      .order('created_at', { ascending: false })
-      .limit(100)
+    try {
+      const res = await fetch('/api/users?action=withRoles&limit=100')
+      const { data, error } = await res.json()
 
-    if (error) {
-      console.error('Error loading users:', error)
-      setLoading(false)
-      return
+      if (error) {
+        console.error('Error loading users:', error)
+        setLoading(false)
+        return
+      }
+
+      if (data) {
+        setUsers(data)
+      }
+    } catch (err) {
+      console.error('Error loading users:', err)
     }
 
-    // Fetch roles for all users
-    const { data: roles } = await supabase
-      .from('user_roles')
-      .select('user_id, role, tenants(name)')
-      .eq('is_active', true)
-
-    // Merge roles into profiles
-    const usersWithRoles = (profiles || []).map((profile: {
-      id: string
-      email: string
-      first_name: string | null
-      last_name: string | null
-      created_at: string
-    }) => {
-      const userRole = roles?.find((r: { user_id: string }) => r.user_id === profile.id)
-      return {
-        ...profile,
-        role: (userRole as { role?: string } | undefined)?.role || 'parent',
-        tenant_name: ((userRole as { tenants?: { name: string } | null } | undefined)?.tenants)?.name,
-      }
-    })
-
-    setUsers(usersWithRoles)
     setLoading(false)
   }
 

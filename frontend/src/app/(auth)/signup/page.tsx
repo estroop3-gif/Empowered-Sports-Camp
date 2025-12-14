@@ -4,7 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
+import { signUp } from '@/lib/auth/cognito-client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Zap, Mail, Lock, User, Phone, ArrowRight, Crown, MapPin } from 'lucide-react'
@@ -29,7 +29,6 @@ const US_STATES = [
 
 export default function SignUpPage() {
   const router = useRouter()
-  const supabase = createClient()
 
   const [formData, setFormData] = useState({
     email: '',
@@ -73,69 +72,55 @@ export default function SignUpPage() {
     }
 
     try {
-      // Sign up with Supabase Auth
-      const { data, error: signUpError } = await supabase.auth.signUp({
+      // Sign up with Cognito
+      const result = await signUp({
         email: formData.email,
         password: formData.password,
-        options: {
-          data: {
-            first_name: formData.firstName,
-            last_name: formData.lastName,
-            phone: formData.phone,
-          },
-          emailRedirectTo: `${window.location.origin}/auth/callback?next=/onboarding`,
-        },
+        firstName: formData.firstName,
+        lastName: formData.lastName,
       })
 
-      if (signUpError) {
-        setError(signUpError.message)
-        return
-      }
+      // Get the user ID from Cognito
+      const userId = result.userSub
 
-      if (data.user) {
-        // Create profile in profiles table with all parent info
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .insert({
-            id: data.user.id,
+      if (userId) {
+        // Create profile and role in database via API
+        const response = await fetch('/api/auth/create-user', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId,
             email: formData.email,
-            first_name: formData.firstName,
-            last_name: formData.lastName,
+            firstName: formData.firstName,
+            lastName: formData.lastName,
             phone: formData.phone,
             city: formData.city,
             state: formData.state,
-            zip_code: formData.zipCode,
-          })
+            zipCode: formData.zipCode,
+          }),
+        })
 
-        if (profileError && profileError.code !== '23505') {
-          console.error('Profile creation error:', profileError)
-        }
-
-        // Create default parent role for new users
-        const { error: roleError } = await supabase
-          .from('user_roles')
-          .insert({
-            user_id: data.user.id,
-            role: 'parent',
-            is_active: true,
-          })
-
-        if (roleError && roleError.code !== '23505') {
-          console.error('Role creation error:', roleError)
-        }
-
-        // Check if email confirmation is required
-        if (data.session) {
-          // User is signed in immediately (email confirmation disabled)
-          router.push('/onboarding')
-        } else {
-          // Email confirmation required - show success message
-          router.push('/signup/confirm?email=' + encodeURIComponent(formData.email))
+        if (!response.ok) {
+          console.error('Failed to create user profile:', await response.text())
         }
       }
-    } catch (err) {
-      setError('An unexpected error occurred. Please try again.')
-      console.error(err)
+
+      // Cognito will send a verification email
+      // Redirect to confirmation page
+      router.push('/signup/confirm?email=' + encodeURIComponent(formData.email))
+    } catch (err: unknown) {
+      const error = err as Error & { code?: string }
+      console.error('Sign up error:', error)
+
+      if (error.code === 'UsernameExistsException') {
+        setError('An account with this email already exists.')
+      } else if (error.code === 'InvalidPasswordException') {
+        setError('Password does not meet requirements. Must include uppercase, lowercase, numbers, and special characters.')
+      } else if (error.code === 'InvalidParameterException') {
+        setError('Please check your input and try again.')
+      } else {
+        setError(error.message || 'An unexpected error occurred. Please try again.')
+      }
     } finally {
       setLoading(false)
     }

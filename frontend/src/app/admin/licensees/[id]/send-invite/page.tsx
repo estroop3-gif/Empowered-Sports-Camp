@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter, useParams } from 'next/navigation'
 import { AdminLayout, PageHeader, ContentCard } from '@/components/admin/admin-layout'
-import { getLicenseeById, Licensee } from '@/lib/supabase/licensees'
+import { getLicenseeById, Licensee } from '@/lib/services/licensees'
 import { sendLicenseeApplicationEmail } from '@/lib/email'
 import {
   ArrowLeft,

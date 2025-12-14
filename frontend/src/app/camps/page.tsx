@@ -13,7 +13,7 @@ import {
   getProgramTypeLabel,
   type PublicCampCard,
   type CampFilters as CampFilterParams,
-} from '@/lib/supabase/queries/camps'
+} from '@/lib/services/camps'
 
 // Transform PublicCampCard to CampCardData for the UI
 function transformToCampCard(camp: PublicCampCard): CampCardData {

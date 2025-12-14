@@ -41,7 +41,7 @@ export default function AdminSettingsPage() {
   const [activeSection, setActiveSection] = useState('organization')
   const [saving, setSaving] = useState(false)
 
-  const userName = user?.user_metadata?.first_name || user?.email?.split('@')[0] || 'Admin'
+  const userName = user?.firstName || user?.email?.split('@')[0] || 'Admin'
 
   const handleSave = async () => {
     setSaving(true)
@@ -218,7 +218,7 @@ export default function AdminSettingsPage() {
                 </div>
                 <div className="p-4 bg-white/5 border border-white/10">
                   <p className="text-sm text-white/60">
-                    Email templates can be customized in the Supabase dashboard under Authentication → Email Templates.
+                    Email templates can be customized in the AWS Cognito console under User Pool → Messaging.
                   </p>
                 </div>
               </div>

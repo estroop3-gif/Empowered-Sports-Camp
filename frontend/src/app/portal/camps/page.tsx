@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { AdminLayout, PageHeader, ContentCard } from '@/components/admin/admin-layout'
 import { DataTable, TableBadge } from '@/components/ui/data-table'
+import { useAuth } from '@/lib/auth/context'
 import {
   Calendar,
   MapPin,
@@ -24,7 +25,7 @@ import {
   duplicateCamp,
   deleteCamp,
   type AdminCamp,
-} from '@/lib/supabase/queries/admin-camps'
+} from '@/lib/services/admin-camps'
 
 const STATUS_COLORS: Record<string, 'success' | 'warning' | 'danger' | 'default'> = {
   open: 'success',
@@ -34,6 +35,7 @@ const STATUS_COLORS: Record<string, 'success' | 'warning' | 'danger' | 'default'
 }
 
 export default function CampsListPage() {
+  const { user } = useAuth()
   const [camps, setCamps] = useState<AdminCamp[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -44,15 +46,21 @@ export default function CampsListPage() {
   const [actionMenuOpen, setActionMenuOpen] = useState<string | null>(null)
 
   useEffect(() => {
-    loadUserAndCamps()
-  }, [statusFilter])
+    if (user) {
+      loadUserAndCamps()
+    }
+  }, [statusFilter, user])
 
   async function loadUserAndCamps() {
+    if (!user) {
+      setError('Not authenticated')
+      return
+    }
     setLoading(true)
     setError(null)
 
     try {
-      const roleData = await getCurrentUserRole()
+      const roleData = await getCurrentUserRole(user.id)
       if (!roleData) {
         setError('Not authenticated')
         return

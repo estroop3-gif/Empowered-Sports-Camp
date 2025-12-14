@@ -1,11 +1,15 @@
 'use client'
 
-import { createContext, useContext, useEffect, useState, useCallback } from 'react'
-import { createClient } from '@/lib/supabase/client'
-import type { User, AuthChangeEvent, Session } from '@supabase/supabase-js'
+import { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
+import {
+  getCurrentUser,
+  getCurrentSession,
+  signOut as cognitoSignOut,
+  type AuthUser,
+} from './cognito-client'
 
 /**
- * Auth Context
+ * Auth Context (Cognito + Prisma)
  *
  * Provides authentication state and role/tenant information
  * throughout the application.
@@ -20,12 +24,26 @@ export type UserRole =
   | 'director'
   | 'licensee_owner'
   | 'hq_admin'
+  | 'cit_volunteer'
 
 interface Tenant {
   id: string
   name: string
   slug: string
-  logo_url?: string
+  logoUrl?: string
+}
+
+interface LmsStatus {
+  hasCompletedCore: boolean
+  hasCompletedDirector: boolean
+  hasCompletedVolunteer: boolean
+}
+
+interface User {
+  id: string
+  email: string
+  firstName?: string
+  lastName?: string
 }
 
 interface AuthContextType {
@@ -34,6 +52,8 @@ interface AuthContextType {
   actualRole: UserRole | null  // The user's real role (never changes)
   tenant: Tenant | null
   loading: boolean
+  // LMS completion status
+  lmsStatus: LmsStatus
   // View as role feature (hq_admin only)
   viewingAsRole: UserRole | null
   setViewingAsRole: (role: UserRole | null) => void
@@ -46,15 +66,20 @@ interface AuthContextType {
   isDirector: boolean
   isCoach: boolean
   isParent: boolean
+  isVolunteer: boolean
   // Access level helpers (role or higher)
   hasHqAccess: boolean
   hasTenantAccess: boolean
   hasCampManageAccess: boolean
   hasCampViewAccess: boolean
+  // LMS gating helpers
+  hasCompletedRequiredLms: boolean
   // Legacy compatibility
   isLicensor: boolean
   isLicensee: boolean
   signOut: () => Promise<void>
+  // New: refresh auth state
+  refreshAuth: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -67,8 +92,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [viewingAsRole, setViewingAsRoleState] = useState<UserRole | null>(null)
   const [tenant, setTenant] = useState<Tenant | null>(null)
   const [loading, setLoading] = useState(true)
-
-  const supabase = createClient()
+  const initializedRef = useRef(false)
+  const [lmsStatus, setLmsStatus] = useState<LmsStatus>({
+    hasCompletedCore: false,
+    hasCompletedDirector: false,
+    hasCompletedVolunteer: false,
+  })
 
   // Load viewing as role from sessionStorage on mount
   useEffect(() => {
@@ -106,99 +135,124 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  useEffect(() => {
-    // Get initial session
-    const getSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      setUser(session?.user ?? null)
+  // Fetch user role and tenant from API
+  const fetchUserRoleAndTenant = async (userId: string) => {
+    try {
+      const response = await fetch(`/api/auth/user-info?userId=${userId}`)
 
-      if (session?.user) {
-        await fetchUserRoleAndTenant(session.user.id)
+      if (!response.ok) {
+        setActualRole('parent') // Default
+        return
       }
-      setLoading(false)
-    }
 
-    getSession()
+      const data = await response.json()
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event: AuthChangeEvent, session: Session | null) => {
-        setUser(session?.user ?? null)
+      if (data.role) {
+        setActualRole(data.role as UserRole)
 
-        if (session?.user) {
-          await fetchUserRoleAndTenant(session.user.id)
-        } else {
-          setActualRole(null)
-          setTenant(null)
-          // Clear viewing as role on logout
+        // If user is NOT hq_admin but has a viewingAsRole stored, clear it
+        if (data.role !== 'hq_admin') {
           setViewingAsRoleState(null)
           if (typeof window !== 'undefined') {
             sessionStorage.removeItem(VIEWING_AS_ROLE_KEY)
           }
         }
-        setLoading(false)
       }
-    )
 
-    return () => subscription.unsubscribe()
-  }, [])
+      // Set LMS status
+      if (data.lmsStatus) {
+        setLmsStatus(data.lmsStatus)
+      }
 
-  const fetchUserRoleAndTenant = async (userId: string) => {
-    // Get user role (only active roles)
-    const { data: userRole, error: roleError } = await supabase
-      .from('user_roles')
-      .select('role, tenant_id')
-      .eq('user_id', userId)
-      .eq('is_active', true)
-      .single()
-
-    if (roleError) {
-      console.error('Error fetching user role:', roleError)
-      console.error('Error code:', roleError.code, 'Message:', roleError.message)
-      // Default to parent if role fetch fails (likely RLS issue)
+      // Set tenant
+      if (data.tenant) {
+        setTenant(data.tenant)
+      }
+    } catch {
       setActualRole('parent')
-      // Clear any "view as" role since we can't verify permissions
-      setViewingAsRoleState(null)
-      if (typeof window !== 'undefined') {
-        sessionStorage.removeItem(VIEWING_AS_ROLE_KEY)
-      }
+    }
+  }
+
+  // Initialize auth state
+  const initAuth = useCallback(async (force = false) => {
+    // Prevent multiple initializations
+    if (initializedRef.current && !force) {
       return
     }
 
-    console.log('Fetched user role:', userRole?.role, 'tenant_id:', userRole?.tenant_id)
+    initializedRef.current = true
+    setLoading(true)
 
-    if (userRole) {
-      setActualRole(userRole.role as UserRole)
+    try {
+      const cognitoUser = await getCurrentUser()
 
-      // If user is NOT hq_admin but has a viewingAsRole stored, clear it
-      if (userRole.role !== 'hq_admin') {
+      if (cognitoUser) {
+        setUser({
+          id: cognitoUser.id,
+          email: cognitoUser.email,
+          firstName: cognitoUser.firstName,
+          lastName: cognitoUser.lastName,
+        })
+        await fetchUserRoleAndTenant(cognitoUser.id)
+      } else {
+        setUser(null)
+        setActualRole(null)
+        setTenant(null)
+      }
+    } catch {
+      setUser(null)
+      setActualRole(null)
+      setTenant(null)
+    }
+
+    setLoading(false)
+  }, [])
+
+  // Initialize on mount only
+  useEffect(() => {
+    initAuth()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Check session periodically (every 5 minutes)
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      const session = await getCurrentSession()
+      if (!session && user) {
+        // Session expired
+        setUser(null)
+        setActualRole(null)
+        setTenant(null)
         setViewingAsRoleState(null)
+        initializedRef.current = false
         if (typeof window !== 'undefined') {
           sessionStorage.removeItem(VIEWING_AS_ROLE_KEY)
         }
       }
+    }, 5 * 60 * 1000)
 
-      // Get tenant info if applicable
-      if (userRole.tenant_id) {
-        const { data: tenantData } = await supabase
-          .from('tenants')
-          .select('id, name, slug, logo_url')
-          .eq('id', userRole.tenant_id)
-          .single()
+    return () => clearInterval(interval)
+  }, [user])
 
-        if (tenantData) {
-          setTenant(tenantData)
-        }
-      }
-    }
-  }
+  // Public refresh function (forces re-initialization)
+  const refreshAuth = useCallback(async () => {
+    await initAuth(true)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const signOut = async () => {
-    await supabase.auth.signOut()
+    try {
+      // Clear server-side cookies
+      await fetch('/api/auth/set-tokens', { method: 'DELETE' })
+      // Clear Cognito session
+      cognitoSignOut()
+    } catch (error) {
+      console.error('[Auth] Sign out error:', error)
+    }
+
     setUser(null)
     setActualRole(null)
     setTenant(null)
     setViewingAsRoleState(null)
+    initializedRef.current = false // Allow re-initialization on next login
     if (typeof window !== 'undefined') {
       sessionStorage.removeItem(VIEWING_AS_ROLE_KEY)
     }
@@ -215,12 +269,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isDirector = effectiveRole === 'director'
   const isCoach = effectiveRole === 'coach'
   const isParent = effectiveRole === 'parent'
+  const isVolunteer = effectiveRole === 'cit_volunteer'
 
   // Access level helpers (role or higher)
   const hasHqAccess = isHqAdmin
   const hasTenantAccess = isHqAdmin || isLicenseeOwner
   const hasCampManageAccess = hasTenantAccess || isDirector
-  const hasCampViewAccess = hasCampManageAccess || isCoach
+  const hasCampViewAccess = hasCampManageAccess || isCoach || isVolunteer
+
+  // LMS completion check based on current role
+  const hasCompletedRequiredLms = (() => {
+    switch (effectiveRole) {
+      case 'director':
+        return lmsStatus.hasCompletedDirector
+      case 'cit_volunteer':
+        return lmsStatus.hasCompletedVolunteer
+      case 'licensee_owner':
+      case 'coach':
+        return lmsStatus.hasCompletedCore
+      case 'hq_admin':
+      case 'parent':
+      default:
+        return true // No LMS requirement for these roles
+    }
+  })()
 
   // Legacy compatibility
   const isLicensor = isHqAdmin
@@ -240,6 +312,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         actualRole,
         tenant,
         loading,
+        // LMS status
+        lmsStatus,
         // View as role
         viewingAsRole,
         setViewingAsRole,
@@ -252,15 +326,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isDirector,
         isCoach,
         isParent,
+        isVolunteer,
         // Access level helpers
         hasHqAccess,
         hasTenantAccess,
         hasCampManageAccess,
         hasCampViewAccess,
+        // LMS gating
+        hasCompletedRequiredLms,
         // Legacy
         isLicensor,
         isLicensee,
         signOut,
+        refreshAuth,
       }}
     >
       {children}
@@ -278,13 +356,6 @@ export function useAuth() {
 
 /**
  * Hook for checking permissions
- *
- * Permission matrix:
- * - parent: View own registrations only
- * - coach: View camp rosters, check-in campers
- * - director: Manage camps, groups, registrations for assigned camps
- * - licensee_owner: Full access within their tenant
- * - hq_admin: Full system access
  */
 export function usePermissions() {
   const {
@@ -293,6 +364,9 @@ export function usePermissions() {
     hasCampManageAccess,
     hasCampViewAccess,
     isParent,
+    isVolunteer,
+    isDirector,
+    hasCompletedRequiredLms,
   } = useAuth()
 
   return {
@@ -305,21 +379,92 @@ export function usePermissions() {
     canViewFinancials: hasTenantAccess,
     canManageBilling: hasTenantAccess,
 
-    // Camp management
-    canManageCamps: hasCampManageAccess,
-    canManageGroups: hasCampManageAccess,
-    canManageRegistrations: hasCampManageAccess,
-    canFinalizeGroups: hasCampManageAccess,
+    // Camp management (gated by LMS for directors)
+    canManageCamps: hasCampManageAccess && (hasCompletedRequiredLms || hasTenantAccess),
+    canManageGroups: hasCampManageAccess && (hasCompletedRequiredLms || hasTenantAccess),
+    canManageRegistrations: hasCampManageAccess && (hasCompletedRequiredLms || hasTenantAccess),
+    canFinalizeGroups: hasCampManageAccess && (hasCompletedRequiredLms || hasTenantAccess),
 
     // Camp operations
     canViewRosters: hasCampViewAccess,
-    canCheckInCampers: hasCampViewAccess,
+    canCheckInCampers: hasCampViewAccess && hasCompletedRequiredLms,
     canViewCampDetails: hasCampViewAccess,
+
+    // Curriculum access
+    canViewCurriculum: hasCampViewAccess || isVolunteer,
+    canContributeCurriculum: hasCampManageAccess || (isVolunteer && hasCompletedRequiredLms),
+
+    // Volunteer-specific
+    canUploadCertifications: isVolunteer || hasTenantAccess,
+    canReviewCertifications: hasTenantAccess,
+
+    // LMS access
+    canAccessLms: true, // Everyone can access their required LMS
+    canManageLms: hasHqAccess,
+
+    // Daily operations (gated for directors)
+    canAccessDailyRecaps: isDirector && hasCompletedRequiredLms,
+    canSendCommunications: (isDirector && hasCompletedRequiredLms) || hasTenantAccess,
 
     // Parent access
     canRegisterAthletes: isParent || hasCampViewAccess,
     canViewOwnRegistrations: true, // Everyone can view their own
   }
+}
+
+/**
+ * Role display configuration
+ */
+export const ROLE_CONFIG: Record<UserRole, {
+  label: string
+  description: string
+  portalPath: string
+  color: string
+}> = {
+  hq_admin: {
+    label: 'Licensor Admin',
+    description: 'Full system access and control',
+    portalPath: '/portal',
+    color: 'neon',
+  },
+  licensee_owner: {
+    label: 'Licensee Owner',
+    description: 'Full access within your franchise territory',
+    portalPath: '/portal',
+    color: 'purple',
+  },
+  director: {
+    label: 'Camp Director',
+    description: 'Manage camps and daily operations',
+    portalPath: '/director',
+    color: 'magenta',
+  },
+  coach: {
+    label: 'Coach',
+    description: 'View rosters and assist with camp operations',
+    portalPath: '/coach',
+    color: 'blue',
+  },
+  cit_volunteer: {
+    label: 'CIT / Volunteer',
+    description: 'Training, certifications, and curriculum access',
+    portalPath: '/volunteer',
+    color: 'orange',
+  },
+  parent: {
+    label: 'Parent / Guardian',
+    description: 'Register athletes and view camp information',
+    portalPath: '/dashboard',
+    color: 'white',
+  },
+}
+
+/**
+ * Get the appropriate portal path for a role
+ */
+export function getPortalPathForRole(role: UserRole | null): string {
+  if (!role) return '/login'
+  return ROLE_CONFIG[role]?.portalPath || '/dashboard'
 }
 
 /**

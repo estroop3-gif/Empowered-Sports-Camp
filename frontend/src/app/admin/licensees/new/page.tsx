@@ -4,7 +4,18 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { AdminLayout, PageHeader, ContentCard } from '@/components/admin/admin-layout'
-import { createLicensee, CreateLicenseeInput } from '@/lib/supabase/licensees'
+
+// Type definition (no longer imported from service)
+interface CreateLicenseeInput {
+  email: string
+  first_name: string
+  last_name: string
+  phone?: string
+  territory_name: string
+  city: string
+  state: string
+  status?: 'pending' | 'active' | 'inactive'
+}
 import {
   ArrowLeft,
   Building2,
@@ -24,7 +35,7 @@ import { cn } from '@/lib/utils'
  * Create New Licensee Page
  *
  * Form for onboarding a new licensee/territory operator.
- * Creates profile, user_role, and tenant records in Supabase.
+ * Creates profile, user_role, and tenant records in the database.
  */
 
 interface FormData {
@@ -124,18 +135,29 @@ export default function NewLicenseePage() {
       status: formData.status,
     }
 
-    const { data, error: createError } = await createLicensee(input)
+    try {
+      const res = await fetch('/api/licensees', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'create', ...input }),
+      })
+      const { data, error: createError } = await res.json()
 
-    if (createError) {
-      setError(createError.message || 'Failed to create licensee')
+      if (createError) {
+        setError(createError || 'Failed to create licensee')
+        setSaving(false)
+        return
+      }
+
+      // If send_invite is checked, trigger email (placeholder for now)
+      if (formData.send_invite && data) {
+        // TODO: Call Resend API to send invite email
+        console.log('Would send invite email to:', formData.email)
+      }
+    } catch (err) {
+      setError('Failed to create licensee')
       setSaving(false)
       return
-    }
-
-    // If send_invite is checked, trigger email (placeholder for now)
-    if (formData.send_invite && data) {
-      // TODO: Call Resend API to send invite email
-      console.log('Would send invite email to:', formData.email)
     }
 
     setSuccess(true)

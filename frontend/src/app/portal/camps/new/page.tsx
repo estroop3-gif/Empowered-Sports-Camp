@@ -4,8 +4,11 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { AdminLayout, PageHeader, ContentCard } from '@/components/admin/admin-layout'
+import { CampCreateStepper, getStepsForCurrentStep } from '@/components/admin/camps/CampCreateStepper'
+import { useAuth } from '@/lib/auth/context'
 import {
   ArrowLeft,
+  ArrowRight,
   Calendar,
   MapPin,
   Users,
@@ -25,7 +28,7 @@ import {
   type CampFormData,
   type Tenant,
   type Location,
-} from '@/lib/supabase/queries/admin-camps'
+} from '@/lib/services/admin-camps'
 
 const SPORTS = [
   'Multi-Sport',
@@ -48,6 +51,7 @@ const STATUS_OPTIONS = [
 
 export default function CreateCampPage() {
   const router = useRouter()
+  const { user } = useAuth()
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -80,8 +84,10 @@ export default function CreateCampPage() {
   })
 
   useEffect(() => {
-    loadInitialData()
-  }, [])
+    if (user) {
+      loadInitialData()
+    }
+  }, [user])
 
   useEffect(() => {
     if (formData.tenant_id) {
@@ -90,8 +96,12 @@ export default function CreateCampPage() {
   }, [formData.tenant_id])
 
   async function loadInitialData() {
+    if (!user) {
+      setError('Not authenticated')
+      return
+    }
     try {
-      const roleData = await getCurrentUserRole()
+      const roleData = await getCurrentUserRole(user.id)
       if (!roleData) {
         setError('Not authenticated')
         return
@@ -157,8 +167,8 @@ export default function CreateCampPage() {
 
     try {
       const newCamp = await createCamp(formData)
-      // Use replace instead of push to prevent back button issues
-      router.replace(`/portal/camps/${newCamp.id}`)
+      // Navigate to Step 2: Curriculum & Schedule
+      router.replace(`/portal/camps/${newCamp.id}/schedule`)
     } catch (err) {
       console.error('Failed to create camp:', err)
       setError(err instanceof Error ? err.message : 'Failed to create camp')
@@ -196,6 +206,9 @@ export default function CreateCampPage() {
       </div>
 
       <PageHeader title="Create New Camp" description="Set up a new camp session for registration" />
+
+      {/* Wizard Stepper */}
+      <CampCreateStepper steps={getStepsForCurrentStep(1)} currentStep={1} />
 
       {error && (
         <div className="mb-6 p-4 bg-magenta/10 border border-magenta/30 flex items-center gap-3">
@@ -548,8 +561,8 @@ export default function CreateCampPage() {
                     </>
                   ) : (
                     <>
-                      <Save className="h-5 w-5" />
-                      Create Camp
+                      Save & Continue
+                      <ArrowRight className="h-5 w-5" />
                     </>
                   )}
                 </button>

@@ -5,7 +5,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
-import { useAuth } from '@/lib/auth/context'
+import { useAuth, type UserRole } from '@/lib/auth/context'
 import { LogoutButton, UserMenu } from '@/components/layout/user-menu'
 import {
   LayoutDashboard,
@@ -26,6 +26,9 @@ import {
   BarChart3,
   FileText,
   Shield,
+  GraduationCap,
+  ShoppingBag,
+  Inbox,
 } from 'lucide-react'
 import { ViewAsControl } from './view-as-control'
 
@@ -44,8 +47,6 @@ import { ViewAsControl } from './view-as-control'
  * - Licensee Portal (scoped navigation)
  * - Mobile responsive with collapsible sidebar
  */
-
-type UserRole = 'hq_admin' | 'licensee_owner' | 'director' | 'coach' | 'parent'
 
 interface AdminLayoutProps {
   children: React.ReactNode
@@ -71,6 +72,17 @@ const licensorNavItems: NavItem[] = [
     roles: ['hq_admin'],
   },
   {
+    label: 'Inbox',
+    href: '/admin/cit',
+    icon: Inbox,
+    roles: ['hq_admin'],
+    children: [
+      { label: 'CIT Applications', href: '/admin/cit' },
+      { label: 'Licensee Applications', href: '/admin/licensee-applications' },
+      { label: 'Contact Messages', href: '/admin/contact' },
+    ],
+  },
+  {
     label: 'Licensees',
     href: '/admin/licensees',
     icon: Building2,
@@ -83,12 +95,12 @@ const licensorNavItems: NavItem[] = [
   },
   {
     label: 'Camps',
-    href: '/portal/camps',
+    href: '/admin/camps',
     icon: Calendar,
     roles: ['hq_admin'],
     children: [
-      { label: 'All Camps', href: '/portal/camps' },
-      { label: 'Create Camp', href: '/portal/camps/new' },
+      { label: 'All Camps', href: '/admin/camps' },
+      { label: 'Create Camp', href: '/admin/camps/new' },
     ],
   },
   {
@@ -114,6 +126,27 @@ const licensorNavItems: NavItem[] = [
     href: '/admin/curriculum',
     icon: FileText,
     roles: ['hq_admin'],
+  },
+  {
+    label: 'EmpowerU Studio',
+    href: '/admin/lms',
+    icon: GraduationCap,
+    roles: ['hq_admin'],
+    children: [
+      { label: 'Modules', href: '/admin/lms' },
+      { label: 'Progress Tracking', href: '/admin/lms/progress' },
+    ],
+  },
+  {
+    label: 'Locker Room',
+    href: '/admin/shop',
+    icon: ShoppingBag,
+    roles: ['hq_admin'],
+    children: [
+      { label: 'Catalog', href: '/admin/shop' },
+      { label: 'Orders', href: '/admin/shop/orders' },
+      { label: 'Settings', href: '/admin/shop/settings' },
+    ],
   },
   {
     label: 'Settings',

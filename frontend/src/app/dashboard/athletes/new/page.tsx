@@ -4,7 +4,6 @@ import { useState, Suspense } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -19,6 +18,7 @@ import {
   Loader2,
   Zap,
 } from 'lucide-react'
+import { useAuth } from '@/lib/auth/context'
 
 const SPORTS_OPTIONS = [
   'Soccer',
@@ -69,7 +69,7 @@ function AddAthleteContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const fromOnboarding = searchParams.get('from') === 'onboarding'
-  const supabase = createClient()
+  const { user } = useAuth()
 
   const [formData, setFormData] = useState({
     firstName: '',
@@ -120,41 +120,46 @@ function AddAthleteContent() {
       return
     }
 
+    if (!user?.id) {
+      setError('You must be logged in to add an athlete')
+      setSaving(false)
+      return
+    }
+
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      // Combine medical notes for the medical_notes field
+      const medicalNotes = [
+        formData.medicalConditions,
+        formData.medications && `Medications: ${formData.medications}`,
+        formData.dietaryRestrictions && `Dietary: ${formData.dietaryRestrictions}`,
+        formData.specialNeeds && `Special needs: ${formData.specialNeeds}`,
+      ]
+        .filter(Boolean)
+        .join('\n')
 
-      if (!user) {
-        setError('You must be logged in to add an athlete')
-        setSaving(false)
-        return
-      }
-
-      // Insert athlete
-      const { error: insertError } = await supabase
-        .from('athletes')
-        .insert({
+      // Insert athlete via API
+      const res = await fetch('/api/athletes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'create',
           parent_id: user.id,
           first_name: formData.firstName,
           last_name: formData.lastName,
           date_of_birth: formData.dateOfBirth,
-          gender: formData.gender || null,
-          grade: formData.grade || null,
-          school_name: formData.schoolName || null,
-          tshirt_size: formData.tshirtSize || null,
-          allergies: formData.allergies || null,
-          medical_conditions: formData.medicalConditions || null,
-          medications: formData.medications || null,
-          dietary_restrictions: formData.dietaryRestrictions || null,
-          special_needs: formData.specialNeeds || null,
-          sports_experience: formData.preferredSports.length > 0
-            ? `Interested in: ${formData.preferredSports.join(', ')}`
-            : null,
-          photo_consent: formData.photoConsent,
-        })
+          gender: formData.gender || undefined,
+          grade: formData.grade || undefined,
+          school: formData.schoolName || undefined,
+          allergies: formData.allergies || undefined,
+          medical_notes: medicalNotes || undefined,
+        }),
+      })
+
+      const { data, error: insertError } = await res.json()
 
       if (insertError) {
         console.error('Error adding athlete:', insertError)
-        setError(insertError.message)
+        setError(insertError)
         setSaving(false)
         return
       }

@@ -10,7 +10,7 @@ import {
   checkTerritoryConflicts,
   CreateTerritoryInput,
   TerritoryStatus,
-} from '@/lib/supabase/territories'
+} from '@/lib/services/territories'
 import { cn } from '@/lib/utils'
 import {
   ArrowLeft,

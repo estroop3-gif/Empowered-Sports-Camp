@@ -49,12 +49,8 @@ export function RoleDashboardRouter({ children }: RoleDashboardRouterProps) {
     // We redirect when:
     // 1. User is at a dashboard root that doesn't match their viewing role
     // 2. User just changed their viewing role
-    const isAtDashboardRoot = pathname === '/dashboard' || pathname === '/admin' || pathname === '/portal'
-    const isAtWrongDashboard = (
-      (effectiveRole === 'parent' && (pathname.startsWith('/admin') || pathname.startsWith('/portal'))) ||
-      (effectiveRole === 'hq_admin' && pathname === '/dashboard') ||
-      (['licensee_owner', 'director', 'coach'].includes(effectiveRole) && pathname === '/dashboard')
-    )
+    const dashboardRoots = ['/dashboard', '/admin', '/portal', '/director', '/volunteer']
+    const isAtDashboardRoot = dashboardRoots.some(root => pathname === root)
 
     // Only redirect at root dashboard pages to avoid disrupting deep navigation
     if (isAtDashboardRoot && !pathname.startsWith(targetHome)) {

@@ -33,9 +33,13 @@ import {
   MapPin,
   UserCircle,
   Clipboard,
+  GraduationCap,
+  Upload,
+  BookOpen,
+  ExternalLink,
 } from 'lucide-react'
 
-export type UserRole = 'parent' | 'coach' | 'director' | 'licensee_owner' | 'hq_admin'
+export type UserRole = 'parent' | 'coach' | 'director' | 'licensee_owner' | 'hq_admin' | 'cit_volunteer'
 
 /**
  * Role hierarchy from lowest to highest privilege
@@ -43,6 +47,7 @@ export type UserRole = 'parent' | 'coach' | 'director' | 'licensee_owner' | 'hq_
  */
 export const ROLE_HIERARCHY: UserRole[] = [
   'parent',
+  'cit_volunteer',
   'coach',
   'director',
   'licensee_owner',
@@ -57,8 +62,9 @@ export const ROLE_HIERARCHY: UserRole[] = [
  */
 export const ROLE_HOME_ROUTES: Record<UserRole, string> = {
   parent: '/dashboard',
+  cit_volunteer: '/volunteer',
   coach: '/portal',
-  director: '/portal',
+  director: '/director',
   licensee_owner: '/portal',
   hq_admin: '/admin',
 }
@@ -122,6 +128,15 @@ export const ROLE_CONFIG: Record<UserRole, {
     bgColor: 'bg-white/5',
     borderColor: 'border-white/20',
   },
+  cit_volunteer: {
+    label: 'CIT / Volunteer',
+    shortLabel: 'Volunteer',
+    description: 'Training, certifications, and curriculum access',
+    icon: UserCheck,
+    color: 'text-orange-400',
+    bgColor: 'bg-orange-400/10',
+    borderColor: 'border-orange-400/30',
+  },
 }
 
 /**
@@ -180,6 +195,13 @@ export const ROLE_NAV_ITEMS: Record<UserRole, NavItem[]> = {
     { label: 'Find Camps', href: '/camps', icon: Calendar },
     { label: 'Registrations', href: '/dashboard/registrations', icon: Clipboard },
     { label: 'Settings', href: '/dashboard/settings', icon: Settings },
+  ],
+  cit_volunteer: [
+    { label: 'Dashboard', href: '/volunteer', icon: LayoutDashboard },
+    { label: 'Training & LMS', href: '/volunteer/lms', icon: GraduationCap },
+    { label: 'Certifications', href: '/volunteer/certifications', icon: Upload },
+    { label: 'Curriculum', href: '/volunteer/curriculum', icon: BookOpen },
+    { label: 'Guest Speakers', href: '/volunteer/guest-speakers', icon: Users },
   ],
 }
 

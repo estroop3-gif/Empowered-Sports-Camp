@@ -20,7 +20,7 @@ import {
   formatAgeRange,
   getProgramTypeLabel,
   type PublicCampCard,
-} from '@/lib/supabase/queries/camps'
+} from '@/lib/services/camps'
 
 interface PageProps {
   params: Promise<{ slug: string }>

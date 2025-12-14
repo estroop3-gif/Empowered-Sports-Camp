@@ -1,10 +1,29 @@
 'use client'
 
-import { useEffect, useMemo } from 'react'
+import { useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import { GroupingProvider, useGrouping } from '@/lib/grouping'
 import { GroupingBoard } from '@/components/grouping/grouping-board'
-import { mockCamps, mockTenant } from '@/lib/supabase/mock-data'
+
+// Development mock data (will be replaced with real data from services)
+const mockTenant = {
+  id: 'mock-tenant-1',
+  name: 'Empowered Sports Camp',
+  logo_url: null,
+  primary_color: '#CCFF00',
+  secondary_color: '#FF2DCE',
+}
+
+const mockCamps = [
+  {
+    id: 'mock-camp-1',
+    slug: 'summer-2025',
+    name: 'Summer Sports Camp 2025',
+    start_date: '2025-06-15',
+    end_date: '2025-06-20',
+    location: { name: 'Main Campus' },
+  },
+]
 
 /**
  * GROUP ASSIGNMENT PAGE

@@ -45,7 +45,7 @@ export async function POST(req: Request) {
       const registrationId = session.metadata?.registration_id
 
       if (registrationId) {
-        // TODO: Update registration status to 'confirmed' in Supabase
+        // TODO: Update registration status to 'confirmed' in database
         // TODO: Update payment record with stripe_charge_id
         // TODO: Increment session enrolled_count
         // TODO: Send confirmation email via Resend

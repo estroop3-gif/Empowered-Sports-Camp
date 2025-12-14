@@ -4,6 +4,7 @@ import { useState, useEffect, use } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { AdminLayout, PageHeader, ContentCard } from '@/components/admin/admin-layout'
+import { useAuth } from '@/lib/auth/context'
 import {
   ArrowLeft,
   Calendar,
@@ -27,7 +28,7 @@ import {
   type AdminCamp,
   type CampFormData,
   type Location,
-} from '@/lib/supabase/queries/admin-camps'
+} from '@/lib/services/admin-camps'
 
 const SPORTS = [
   'Multi-Sport',
@@ -56,6 +57,7 @@ interface PageProps {
 export default function EditCampPage({ params }: PageProps) {
   const { campId } = use(params)
   const router = useRouter()
+  const { user } = useAuth()
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -68,12 +70,18 @@ export default function EditCampPage({ params }: PageProps) {
   const [formData, setFormData] = useState<Partial<CampFormData>>({})
 
   useEffect(() => {
-    loadCamp()
-  }, [campId])
+    if (user) {
+      loadCamp()
+    }
+  }, [campId, user])
 
   async function loadCamp() {
+    if (!user) {
+      setError('Not authenticated')
+      return
+    }
     try {
-      const roleData = await getCurrentUserRole()
+      const roleData = await getCurrentUserRole(user.id)
       if (!roleData) {
         setError('Not authenticated')
         return

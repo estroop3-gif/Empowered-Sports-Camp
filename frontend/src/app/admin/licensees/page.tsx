@@ -4,7 +4,23 @@ import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { AdminLayout, PageHeader, ContentCard } from '@/components/admin/admin-layout'
-import { getAllLicensees, deactivateLicensee, Licensee } from '@/lib/supabase/licensees'
+
+// Type definition (no longer imported from service)
+interface Licensee {
+  id: string
+  email: string
+  first_name: string | null
+  last_name: string | null
+  phone: string | null
+  city: string | null
+  state: string | null
+  created_at: string
+  role_id?: string
+  tenant_id?: string | null
+  is_active?: boolean
+  tenant_name?: string | null
+  territory_name?: string | null
+}
 import {
   Building2,
   Plus,
@@ -48,13 +64,19 @@ export default function AllLicenseesPage() {
       setLoading(true)
       setError(null)
 
-      const { data, error: fetchError } = await getAllLicensees()
+      try {
+        const res = await fetch('/api/licensees?action=all')
+        const { data, error: fetchError } = await res.json()
 
-      if (fetchError) {
-        setError(fetchError.message || 'Failed to load licensees')
+        if (fetchError) {
+          setError(fetchError || 'Failed to load licensees')
+          setLicensees([])
+        } else {
+          setLicensees(data || [])
+        }
+      } catch (err) {
+        setError('Failed to load licensees')
         setLicensees([])
-      } else {
-        setLicensees(data || [])
       }
 
       setLoading(false)
@@ -93,15 +115,25 @@ export default function AllLicenseesPage() {
     if (!confirm('Are you sure you want to deactivate this licensee?')) return
 
     setDeactivating(id)
-    const { success, error: deactivateError } = await deactivateLicensee(id)
 
-    if (success) {
-      // Update local state
-      setLicensees((prev) =>
-        prev.map((l) => (l.id === id ? { ...l, is_active: false } : l))
-      )
-    } else {
-      alert(deactivateError?.message || 'Failed to deactivate licensee')
+    try {
+      const res = await fetch('/api/licensees', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'deactivate', id }),
+      })
+      const { success, error: deactivateError } = await res.json()
+
+      if (success) {
+        // Update local state
+        setLicensees((prev) =>
+          prev.map((l) => (l.id === id ? { ...l, is_active: false } : l))
+        )
+      } else {
+        alert(deactivateError || 'Failed to deactivate licensee')
+      }
+    } catch (err) {
+      alert('Failed to deactivate licensee')
     }
 
     setDeactivating(null)

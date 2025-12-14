@@ -20,20 +20,10 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { createClient } from '@/lib/supabase/client'
 import { LogoutButton, UserMenu } from '@/components/layout/user-menu'
 import { useRouter } from 'next/navigation'
-
-/**
- * Parent Dashboard
- *
- * DESIGN NOTES:
- * - Personal view for parents/guardians
- * - Manage their athletes and view registrations
- * - Same fierce esports brand aesthetic
- * - All data fetched live from Supabase
- */
-
+import { useAuth } from '@/lib/auth/context'
+// Types (no longer imported from services)
 interface Profile {
   id: string
   email: string
@@ -42,40 +32,66 @@ interface Profile {
   phone: string | null
   city: string | null
   state: string | null
+  zip_code: string | null
+  avatar_url: string | null
+  stripe_customer_id: string | null
+  onboarding_completed: boolean
 }
 
 interface Athlete {
   id: string
+  parent_id: string
   first_name: string
   last_name: string
   date_of_birth: string
-  tshirt_size: string | null
   gender: string | null
+  grade: string | null
+  school: string | null
+  tshirt_size: string | null
+  allergies: string | null
+  medical_notes: string | null
+  emergency_contact_name: string | null
+  emergency_contact_phone: string | null
+  photo_url: string | null
 }
 
 interface Registration {
   id: string
-  status: string
-  created_at: string
   athlete_id: string
   camp_id: string
-  athletes: {
+  status: string
+  payment_status: string
+  notes: string | null
+  created_at: string
+  athletes?: {
     first_name: string
     last_name: string
   }
-  camps: {
+  camps?: {
     name: string
     start_date: string
     end_date: string
+    location: string
     location_name: string | null
     city: string | null
+    state: string | null
     price_cents: number
   }
 }
 
+/**
+ * Parent Dashboard
+ *
+ * DESIGN NOTES:
+ * - Personal view for parents/guardians
+ * - Manage their athletes and view registrations
+ * - Same fierce esports brand aesthetic
+ * - All data fetched live from database
+ */
+
 export default function ParentDashboard() {
   const router = useRouter()
-  const supabase = createClient()
+  const { user, loading: authLoading } = useAuth()
   const [activeTab, setActiveTab] = useState<'upcoming' | 'past'>('upcoming')
   const [loading, setLoading] = useState(true)
   const [profile, setProfile] = useState<Profile | null>(null)
@@ -83,71 +99,45 @@ export default function ParentDashboard() {
   const [registrations, setRegistrations] = useState<Registration[]>([])
 
   useEffect(() => {
-    loadDashboardData()
-  }, [])
+    if (!authLoading) {
+      if (!user) {
+        router.push('/login')
+      } else {
+        loadDashboardData()
+      }
+    }
+  }, [user, authLoading])
 
   const loadDashboardData = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
+    if (!user?.id) return
 
-    if (!user) {
-      router.push('/login')
-      return
-    }
+    try {
+      // Load all data in parallel
+      const [profileRes, athletesRes, registrationsRes] = await Promise.all([
+        fetch(`/api/profiles?action=byId&profileId=${user.id}`),
+        fetch(`/api/athletes?action=byParent&parentId=${user.id}`),
+        fetch(`/api/registrations?action=byParent&parentId=${user.id}`),
+      ])
 
-    // Load all data in parallel
-    const [profileResult, athletesResult, registrationsResult] = await Promise.all([
-      // Fetch profile
-      supabase
-        .from('profiles')
-        .select('id, email, first_name, last_name, phone, city, state')
-        .eq('id', user.id)
-        .single(),
+      const [profileResult, athletesResult, registrationsResult] = await Promise.all([
+        profileRes.json(),
+        athletesRes.json(),
+        registrationsRes.json(),
+      ])
 
-      // Fetch athletes for this parent
-      supabase
-        .from('athletes')
-        .select('id, first_name, last_name, date_of_birth, tshirt_size, gender')
-        .eq('parent_id', user.id)
-        .order('first_name'),
+      if (profileResult.data) {
+        setProfile(profileResult.data)
+      }
 
-      // Fetch registrations with athlete and camp details
-      supabase
-        .from('registrations')
-        .select(`
-          id,
-          status,
-          created_at,
-          athlete_id,
-          camp_id,
-          athletes!inner (
-            first_name,
-            last_name,
-            parent_id
-          ),
-          camps!inner (
-            name,
-            start_date,
-            end_date,
-            location_name,
-            city,
-            price_cents
-          )
-        `)
-        .eq('athletes.parent_id', user.id)
-        .order('camps(start_date)', { ascending: true })
-    ])
+      if (athletesResult.data) {
+        setAthletes(athletesResult.data)
+      }
 
-    if (profileResult.data) {
-      setProfile(profileResult.data)
-    }
-
-    if (athletesResult.data) {
-      setAthletes(athletesResult.data)
-    }
-
-    if (registrationsResult.data) {
-      // Type assertion since Supabase returns joined data
-      setRegistrations(registrationsResult.data as unknown as Registration[])
+      if (registrationsResult.data) {
+        setRegistrations(registrationsResult.data)
+      }
+    } catch (err) {
+      console.error('Failed to load dashboard data:', err)
     }
 
     setLoading(false)
@@ -167,22 +157,24 @@ export default function ParentDashboard() {
 
   // Get registration counts per athlete
   const getAthleteCampCounts = (athleteId: string) => {
-    const athleteRegs = registrations.filter(r => r.athlete_id === athleteId)
+    const athleteRegs = registrations.filter(r => r.athlete_id === athleteId && r.camps)
     const today = new Date()
-    const upcoming = athleteRegs.filter(r => new Date(r.camps.start_date) >= today).length
+    const upcoming = athleteRegs.filter(r => r.camps && new Date(r.camps.start_date) >= today).length
     const completed = athleteRegs.filter(r =>
-      new Date(r.camps.end_date) < today || r.status === 'completed'
+      r.camps && (new Date(r.camps.end_date) < today || r.status === 'completed')
     ).length
     return { upcoming, completed }
   }
 
-  // Split registrations into upcoming and past
+  // Split registrations into upcoming and past (only those with camp data)
   const today = new Date()
   const upcomingRegistrations = registrations.filter(
-    r => new Date(r.camps.start_date) >= today && r.status !== 'cancelled'
+    (r): r is Registration & { camps: NonNullable<Registration['camps']>; athletes: NonNullable<Registration['athletes']> } =>
+      !!r.camps && !!r.athletes && new Date(r.camps.start_date) >= today && r.status !== 'cancelled'
   )
   const pastRegistrations = registrations.filter(
-    r => new Date(r.camps.end_date) < today || r.status === 'completed'
+    (r): r is Registration & { camps: NonNullable<Registration['camps']>; athletes: NonNullable<Registration['athletes']> } =>
+      !!r.camps && !!r.athletes && (new Date(r.camps.end_date) < today || r.status === 'completed')
   )
 
   const formatDateRange = (startDate: string, endDate: string) => {

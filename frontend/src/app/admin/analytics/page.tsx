@@ -77,7 +77,7 @@ export default function GlobalAnalyticsPage() {
   const { user } = useAuth()
   const [timeRange, setTimeRange] = useState<'7d' | '30d' | '90d' | 'ytd'>('30d')
 
-  const userName = user?.user_metadata?.first_name || user?.email?.split('@')[0] || 'Admin'
+  const userName = user?.firstName || user?.email?.split('@')[0] || 'Admin'
 
   return (
     <AdminLayout

@@ -1,144 +1,90 @@
-import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
-
-const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK === 'true'
+import { jwtDecode } from 'jwt-decode'
 
 /**
- * Authentication Middleware
+ * Authentication Middleware (Cognito)
  *
  * Handles:
- * - Session refresh
- * - Route protection based on authentication
- * - Role-based access control
- * - Tenant context injection
+ * - Route protection based on authentication (via JWT cookies)
+ * - Redirect unauthenticated users to login
+ * - Redirect authenticated users away from auth pages
+ *
+ * Note: Full role-based access control is handled client-side
+ * in the auth context. Middleware does basic auth checks only.
  */
+
+interface CognitoIdToken {
+  sub: string
+  email: string
+  'cognito:username': string
+  exp: number
+  iat: number
+}
 
 // Routes that require authentication
 const protectedRoutes = [
   '/dashboard',
   '/admin',
   '/portal',
+  '/director',
+  '/coach',
+  '/volunteer',
 ]
 
-// Routes that require specific roles (using new 5-tier system)
-const roleRoutes: Record<string, string[]> = {
-  '/admin': ['hq_admin'],
-  '/portal': ['hq_admin', 'licensee_owner', 'director', 'coach'],
-  '/dashboard': ['parent', 'coach', 'director', 'licensee_owner', 'hq_admin'],
+// Auth routes (redirect away if authenticated)
+const authRoutes = ['/login', '/signup']
+
+function isTokenExpired(token: string): boolean {
+  try {
+    const decoded = jwtDecode<CognitoIdToken>(token)
+    const now = Math.floor(Date.now() / 1000)
+    return decoded.exp < now
+  } catch {
+    return true
+  }
+}
+
+function getUserIdFromToken(token: string): string | null {
+  try {
+    const decoded = jwtDecode<CognitoIdToken>(token)
+    return decoded.sub
+  } catch {
+    return null
+  }
 }
 
 export async function middleware(request: NextRequest) {
-  // Bypass auth checks in mock mode
-  if (USE_MOCK) {
-    return NextResponse.next()
-  }
-
-  let response = NextResponse.next({
-    request: {
-      headers: request.headers,
-    },
-  })
-
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll()
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
-          response = NextResponse.next({
-            request: {
-              headers: request.headers,
-            },
-          })
-          cookiesToSet.forEach(({ name, value, options }) =>
-            response.cookies.set(name, value, options)
-          )
-        },
-      },
-    }
-  )
-
-  // Refresh session
-  const { data: { user } } = await supabase.auth.getUser()
-
   const pathname = request.nextUrl.pathname
+
+  // Get auth token from cookies
+  const idToken = request.cookies.get('id_token')?.value
+
+  // Check if user is authenticated (has valid, non-expired token)
+  const isAuthenticated = idToken && !isTokenExpired(idToken)
+  const userId = isAuthenticated ? getUserIdFromToken(idToken) : null
 
   // Check if route requires authentication
   const isProtectedRoute = protectedRoutes.some(route => pathname.startsWith(route))
+  const isAuthRoute = authRoutes.some(route => pathname.startsWith(route))
 
-  if (isProtectedRoute) {
-    if (!user) {
-      // Redirect to login with return URL
-      const redirectUrl = new URL('/login', request.url)
-      redirectUrl.searchParams.set('redirect', pathname)
-      return NextResponse.redirect(redirectUrl)
-    }
-
-    // Check role-based access
-    const requiredRoles = Object.entries(roleRoutes).find(([route]) =>
-      pathname.startsWith(route)
-    )?.[1]
-
-    if (requiredRoles) {
-      // Get user's role from user_roles table
-      const { data: userRole } = await supabase
-        .from('user_roles')
-        .select('role, tenant_id')
-        .eq('user_id', user.id)
-        .eq('is_active', true)
-        .single()
-
-      // If no role found and trying to access dashboard, allow it (new users)
-      if (!userRole && pathname.startsWith('/dashboard')) {
-        response.headers.set('x-user-role', 'parent')
-        return response
-      }
-
-      if (!userRole || !requiredRoles.includes(userRole.role)) {
-        // Redirect based on their actual role
-        if (userRole) {
-          if (userRole.role === 'hq_admin') {
-            return NextResponse.redirect(new URL('/admin', request.url))
-          } else if (['licensee_owner', 'director', 'coach'].includes(userRole.role)) {
-            return NextResponse.redirect(new URL('/portal', request.url))
-          } else {
-            return NextResponse.redirect(new URL('/dashboard', request.url))
-          }
-        }
-        // No role found, redirect to dashboard
-        return NextResponse.redirect(new URL('/dashboard', request.url))
-      }
-
-      // Add tenant_id to headers for downstream use
-      if (userRole.tenant_id) {
-        response.headers.set('x-tenant-id', userRole.tenant_id)
-      }
-      response.headers.set('x-user-role', userRole.role)
-    }
+  // Redirect unauthenticated users from protected routes
+  if (isProtectedRoute && !isAuthenticated) {
+    const redirectUrl = new URL('/login', request.url)
+    redirectUrl.searchParams.set('redirect', pathname)
+    return NextResponse.redirect(redirectUrl)
   }
 
   // Redirect authenticated users away from auth pages
-  if (user && (pathname === '/login' || pathname === '/signup')) {
-    // Check their role to determine where to redirect
-    const { data: userRole } = await supabase
-      .from('user_roles')
-      .select('role')
-      .eq('user_id', user.id)
-      .eq('is_active', true)
-      .single()
-
-    if (userRole) {
-      if (userRole.role === 'hq_admin') {
-        return NextResponse.redirect(new URL('/admin', request.url))
-      } else if (['licensee_owner', 'director', 'coach'].includes(userRole.role)) {
-        return NextResponse.redirect(new URL('/portal', request.url))
-      }
-    }
+  if (isAuthRoute && isAuthenticated) {
+    // Default redirect to dashboard - client-side auth context
+    // will handle role-based redirect if needed
     return NextResponse.redirect(new URL('/dashboard', request.url))
+  }
+
+  // Add user info to headers for server components
+  const response = NextResponse.next()
+  if (userId) {
+    response.headers.set('x-user-id', userId)
   }
 
   return response
