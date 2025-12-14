@@ -369,6 +369,11 @@ model Camp {
   campSessionCurriculum CampSessionCurriculum?
   campSessionDays      CampSessionDay[]
 
+  // Camp Day Flow relations
+  campDays             CampDay[]
+  parentOnboarding     ParentOnboarding[]
+  staffAssignments     CampStaffAssignment[]
+
   @@unique([tenantId, slug])
   @@index([tenantId])
   @@index([startDate, endDate])
@@ -405,6 +410,13 @@ model Profile {
   volunteerCertifications     VolunteerCertification[]   @relation("Owner")
   certificationsReviewed      VolunteerCertification[]   @relation("Reviewer")
   lmsProgress                 LmsProgress[]
+
+  // Camp Day Flow relations
+  parentAttendance            CampAttendance[]           @relation("ParentAttendance")
+  parentPickupTokens          PickupToken[]              @relation("ParentPickupTokens")
+  parentOnboarding            ParentOnboarding[]         @relation("ParentOnboarding")
+  authorizedPickups           AuthorizedPickup[]         @relation("AuthorizedPickups")
+  staffAssignments            CampStaffAssignment[]      @relation("StaffAssignments")
 
   @@map("profiles")
 }
@@ -449,6 +461,13 @@ model Athlete {
   parent            Profile             @relation(fields: [parentId], references: [id], onDelete: Cascade)
   registrations     Registration[]
   camperSessionData CamperSessionData[]
+
+  // Camp Day Flow relations
+  attendance        CampAttendance[]
+  pickupTokens      PickupToken[]
+  incidents         CampIncident[]
+  parentOnboarding  ParentOnboarding[]
+  authorizedPickups AuthorizedPickup[]
 
   @@index([parentId])
   @@map("athletes")
@@ -503,6 +522,9 @@ model Registration {
   promoCode          PromoCode?          @relation(fields: [promoCodeId], references: [id], onDelete: SetNull)
   registrationAddons RegistrationAddon[]
   camperSessionData  CamperSessionData?
+
+  // Camp Day Flow relations
+  attendance         CampAttendance[]
 
   @@unique([campId, athleteId])
   @@index([campId])
@@ -704,6 +726,9 @@ model CampGroup {
   groupAssignmentsFrom GroupAssignment[]     @relation("FromGroup")
   groupAssignmentsTo   GroupAssignment[]     @relation("ToGroup")
   constraintViolations ConstraintViolation[]
+
+  // Camp Day Flow relations
+  attendance           CampAttendance[]
 
   @@unique([campId, groupNumber])
   @@index([campId])
@@ -1016,6 +1041,9 @@ model CampSessionScheduleBlock {
   // Relations
   campSessionDay  CampSessionDay   @relation(fields: [campSessionDayId], references: [id], onDelete: Cascade)
   curriculumBlock CurriculumBlock? @relation(fields: [curriculumBlockId], references: [id], onDelete: SetNull)
+
+  // Camp Day Flow relations
+  progress        ScheduleBlockProgress[]
 
   @@index([campSessionDayId])
   @@index([curriculumBlockId])
@@ -1540,6 +1568,35 @@ enum EmploymentType {
   contract
 }
 
+// ============================================================================
+// CAMP DAY FLOW ENUMS
+// ============================================================================
+
+enum CampDayStatus {
+  not_started
+  in_progress
+  finished
+}
+
+enum AttendanceStatus {
+  not_arrived
+  checked_in
+  checked_out
+  absent
+}
+
+enum CheckMethod {
+  qr
+  manual
+}
+
+enum IncidentSeverity {
+  low
+  medium
+  high
+  critical
+}
+
 model JobPosting {
   id                      String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
 
@@ -1584,4 +1641,223 @@ model JobPosting {
   @@index([createdAt])
   @@index([priority])
   @@map("job_postings")
+}
+
+// ============================================================================
+// CAMP DAY FLOW TABLES
+// ============================================================================
+
+model CampDay {
+  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  campId          String        @map("camp_id") @db.Uuid
+  date            DateTime      @db.Date
+  dayNumber       Int           @map("day_number")
+  title           String?
+  status          CampDayStatus @default(not_started)
+  notes           String?       @db.Text
+  completedAt     DateTime?     @map("completed_at") @db.Timestamptz
+  completedBy     String?       @map("completed_by") @db.Uuid
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  camp            Camp              @relation(fields: [campId], references: [id], onDelete: Cascade)
+  attendance      CampAttendance[]
+  pickupTokens    PickupToken[]
+  incidents       CampIncident[]
+  scheduleBlockProgress ScheduleBlockProgress[]
+
+  @@unique([campId, date])
+  @@unique([campId, dayNumber])
+  @@index([campId])
+  @@index([date])
+  @@index([status])
+  @@map("camp_days")
+}
+
+model CampAttendance {
+  id               String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  campDayId        String           @map("camp_day_id") @db.Uuid
+  athleteId        String           @map("athlete_id") @db.Uuid
+  parentProfileId  String           @map("parent_profile_id") @db.Uuid
+  registrationId   String           @map("registration_id") @db.Uuid
+  groupId          String?          @map("group_id") @db.Uuid
+
+  // Check-in tracking
+  checkInTime      DateTime?        @map("check_in_time") @db.Timestamptz
+  checkInMethod    CheckMethod?     @map("check_in_method")
+  checkInByUserId  String?          @map("check_in_by_user_id") @db.Uuid
+  checkInNotes     String?          @map("check_in_notes")
+
+  // Check-out tracking
+  checkOutTime     DateTime?        @map("check_out_time") @db.Timestamptz
+  checkOutMethod   CheckMethod?     @map("check_out_method")
+  checkOutByUserId String?          @map("check_out_by_user_id") @db.Uuid
+  checkOutNotes    String?          @map("check_out_notes")
+
+  // Status and general info
+  status           AttendanceStatus @default(not_arrived)
+  notes            String?          @db.Text
+
+  createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  campDay          CampDay          @relation(fields: [campDayId], references: [id], onDelete: Cascade)
+  athlete          Athlete          @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+  parentProfile    Profile          @relation("ParentAttendance", fields: [parentProfileId], references: [id])
+  registration     Registration     @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  group            CampGroup?       @relation(fields: [groupId], references: [id], onDelete: SetNull)
+
+  @@unique([campDayId, athleteId])
+  @@index([campDayId])
+  @@index([athleteId])
+  @@index([parentProfileId])
+  @@index([registrationId])
+  @@index([status])
+  @@map("camp_attendance")
+}
+
+model PickupToken {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  campDayId       String    @map("camp_day_id") @db.Uuid
+  athleteId       String    @map("athlete_id") @db.Uuid
+  parentProfileId String    @map("parent_profile_id") @db.Uuid
+  token           String    @unique
+  isUsed          Boolean   @default(false) @map("is_used")
+  usedAt          DateTime? @map("used_at") @db.Timestamptz
+  usedByUserId    String?   @map("used_by_user_id") @db.Uuid
+  manualReason    String?   @map("manual_reason")
+  expiresAt       DateTime  @map("expires_at") @db.Timestamptz
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relations
+  campDay         CampDay   @relation(fields: [campDayId], references: [id], onDelete: Cascade)
+  athlete         Athlete   @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+  parentProfile   Profile   @relation("ParentPickupTokens", fields: [parentProfileId], references: [id])
+
+  @@index([campDayId])
+  @@index([athleteId])
+  @@index([parentProfileId])
+  @@index([token])
+  @@index([isUsed])
+  @@map("pickup_tokens")
+}
+
+model CampIncident {
+  id               String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  campDayId        String           @map("camp_day_id") @db.Uuid
+  athleteId        String?          @map("athlete_id") @db.Uuid
+  scheduleBlockId  String?          @map("schedule_block_id") @db.Uuid
+  reportedByUserId String           @map("reported_by_user_id") @db.Uuid
+  incidentType     String           @map("incident_type")
+  severity         IncidentSeverity @default(low)
+  description      String           @db.Text
+  actionTaken      String?          @map("action_taken") @db.Text
+  parentNotified   Boolean          @default(false) @map("parent_notified")
+  parentNotifiedAt DateTime?        @map("parent_notified_at") @db.Timestamptz
+  resolvedAt       DateTime?        @map("resolved_at") @db.Timestamptz
+  resolvedByUserId String?          @map("resolved_by_user_id") @db.Uuid
+  createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  campDay          CampDay          @relation(fields: [campDayId], references: [id], onDelete: Cascade)
+  athlete          Athlete?         @relation(fields: [athleteId], references: [id], onDelete: SetNull)
+
+  @@index([campDayId])
+  @@index([athleteId])
+  @@index([severity])
+  @@map("camp_incidents")
+}
+
+model ScheduleBlockProgress {
+  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  campDayId            String    @map("camp_day_id") @db.Uuid
+  scheduleBlockId      String    @map("schedule_block_id") @db.Uuid
+  startedAt            DateTime? @map("started_at") @db.Timestamptz
+  completedAt          DateTime? @map("completed_at") @db.Timestamptz
+  startedByUserId      String?   @map("started_by_user_id") @db.Uuid
+  completedByUserId    String?   @map("completed_by_user_id") @db.Uuid
+  notes                String?   @db.Text
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  campDay              CampDay                  @relation(fields: [campDayId], references: [id], onDelete: Cascade)
+  scheduleBlock        CampSessionScheduleBlock @relation(fields: [scheduleBlockId], references: [id], onDelete: Cascade)
+
+  @@unique([campDayId, scheduleBlockId])
+  @@index([campDayId])
+  @@index([scheduleBlockId])
+  @@map("schedule_block_progress")
+}
+
+model ParentOnboarding {
+  id                        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  parentProfileId           String    @map("parent_profile_id") @db.Uuid
+  campId                    String    @map("camp_id") @db.Uuid
+  athleteId                 String    @map("athlete_id") @db.Uuid
+
+  // Onboarding completion flags
+  emergencyContactConfirmed Boolean   @default(false) @map("emergency_contact_confirmed")
+  medicalInfoConfirmed      Boolean   @default(false) @map("medical_info_confirmed")
+  pickupAuthConfirmed       Boolean   @default(false) @map("pickup_auth_confirmed")
+  waiverAccepted            Boolean   @default(false) @map("waiver_accepted")
+  waiverAcceptedAt          DateTime? @map("waiver_accepted_at") @db.Timestamptz
+
+  completedAt               DateTime? @map("completed_at") @db.Timestamptz
+  createdAt                 DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt                 DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  parentProfile             Profile   @relation("ParentOnboarding", fields: [parentProfileId], references: [id], onDelete: Cascade)
+  camp                      Camp      @relation(fields: [campId], references: [id], onDelete: Cascade)
+  athlete                   Athlete   @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+
+  @@unique([parentProfileId, campId, athleteId])
+  @@index([parentProfileId])
+  @@index([campId])
+  @@index([athleteId])
+  @@map("parent_onboarding")
+}
+
+model AuthorizedPickup {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  parentProfileId String   @map("parent_profile_id") @db.Uuid
+  athleteId       String   @map("athlete_id") @db.Uuid
+  name            String
+  relationship    String
+  phone           String?
+  photoIdOnFile   Boolean  @default(false) @map("photo_id_on_file")
+  isActive        Boolean  @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  parentProfile   Profile  @relation("AuthorizedPickups", fields: [parentProfileId], references: [id], onDelete: Cascade)
+  athlete         Athlete  @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+
+  @@index([parentProfileId])
+  @@index([athleteId])
+  @@map("authorized_pickups")
+}
+
+model CampStaffAssignment {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  campId    String   @map("camp_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  role      String   // 'director', 'coach', 'cit_volunteer'
+  isLead    Boolean  @default(false) @map("is_lead")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  camp      Camp     @relation(fields: [campId], references: [id], onDelete: Cascade)
+  user      Profile  @relation("StaffAssignments", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([campId, userId])
+  @@index([campId])
+  @@index([userId])
+  @@map("camp_staff_assignments")
 }
