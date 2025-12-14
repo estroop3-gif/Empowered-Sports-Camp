@@ -29,6 +29,7 @@ import {
   GraduationCap,
   ShoppingBag,
   Inbox,
+  Briefcase,
 } from 'lucide-react'
 import { ViewAsControl } from './view-as-control'
 
@@ -153,6 +154,16 @@ const licensorNavItems: NavItem[] = [
     href: '/admin/settings',
     icon: Settings,
     roles: ['hq_admin'],
+  },
+  {
+    label: 'Job Board',
+    href: '/admin/jobs',
+    icon: Briefcase,
+    roles: ['hq_admin'],
+    children: [
+      { label: 'All Postings', href: '/admin/jobs' },
+      { label: 'Create Job', href: '/admin/jobs/new' },
+    ],
   },
 ]
 

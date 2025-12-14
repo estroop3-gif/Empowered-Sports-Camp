@@ -1520,3 +1520,68 @@ model LicenseeApplication {
   @@index([createdAt])
   @@map("licensee_applications")
 }
+
+// ============================================================================
+// JOB POSTINGS (Careers / Job Board)
+// ============================================================================
+
+enum JobStatus {
+  draft
+  open
+  closed
+  archived
+}
+
+enum EmploymentType {
+  seasonal
+  part_time
+  full_time
+  internship
+  contract
+}
+
+model JobPosting {
+  id                      String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  // Core job info
+  title                   String
+  slug                    String          @unique
+  shortDescription        String          @map("short_description") @db.Text
+  fullDescription         String          @map("full_description") @db.Text
+
+  // Location and type
+  locationLabel           String          @map("location_label")
+  employmentType          EmploymentType  @default(seasonal) @map("employment_type")
+  isRemoteFriendly        Boolean         @default(false) @map("is_remote_friendly")
+
+  // Compensation (optional, in cents)
+  minCompCents            Int?            @map("min_comp_cents")
+  maxCompCents            Int?            @map("max_comp_cents")
+  compFrequency           String?         @map("comp_frequency") // "hourly", "weekly", "salary", "stipend"
+
+  // Application instructions
+  applicationInstructions String?         @map("application_instructions") @db.Text
+  applicationEmail        String?         @map("application_email")
+  applicationUrl          String?         @map("application_url")
+
+  // Status and visibility
+  status                  JobStatus       @default(draft)
+  priority                Int             @default(0) // Higher = more prominent
+
+  // Multi-tenant support (null = HQ global role)
+  tenantId                String?         @map("tenant_id") @db.Uuid
+
+  // Tracking
+  createdByUserId         String          @map("created_by_user_id") @db.Uuid
+  publishedAt             DateTime?       @map("published_at") @db.Timestamptz
+
+  createdAt               DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt               DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([status])
+  @@index([tenantId])
+  @@index([employmentType])
+  @@index([createdAt])
+  @@index([priority])
+  @@map("job_postings")
+}
