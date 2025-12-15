@@ -4,55 +4,42 @@
  * Today's Camps Dashboard
  *
  * Director view showing all camps running today.
- * Entry point to Camp Day control panels.
+ * Entry point to Camp Day control panels and Camp HQ.
+ * Styled consistently with the Empowered Sports Camp brand.
  */
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-
-interface CampDayInfo {
-  id: string
-  camp_id: string
-  camp_name: string
-  location: string
-  day_number: number
-  status: 'not_started' | 'check_in' | 'in_progress' | 'dismissal' | 'completed'
-  date: string
-  start_time: string
-  end_time: string
-  stats: {
-    registered: number
-    checked_in: number
-    absent: number
-    checked_out: number
-  }
-}
+import { useAuth } from '@/lib/auth/context'
+import { PortalPageHeader, PortalCard, LmsGate } from '@/components/portal'
+import { cn } from '@/lib/utils'
+import {
+  Calendar,
+  MapPin,
+  Clock,
+  Users,
+  Loader2,
+  ChevronRight,
+  Play,
+  Square,
+  CheckCircle,
+  AlertCircle,
+  RefreshCw,
+  LayoutDashboard,
+  UsersRound,
+  FileText,
+} from 'lucide-react'
+import type { DirectorTodayCamp } from '@/lib/services/director-dashboard'
 
 export default function TodaysCampsPage() {
+  const { user } = useAuth()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [campDays, setCampDays] = useState<CampDayInfo[]>([])
+  const [campDays, setCampDays] = useState<DirectorTodayCamp[]>([])
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
+  const [refreshing, setRefreshing] = useState(false)
 
   useEffect(() => {
-    const fetchCampDays = async () => {
-      setLoading(true)
-      try {
-        const res = await fetch(`/api/camp-days?date=${selectedDate}`)
-        const json = await res.json()
-
-        if (!res.ok) {
-          throw new Error(json.error || 'Failed to load camps')
-        }
-
-        setCampDays(json.data || [])
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Something went wrong')
-      } finally {
-        setLoading(false)
-      }
-    }
-
     fetchCampDays()
 
     // Refresh every minute
@@ -60,181 +47,316 @@ export default function TodaysCampsPage() {
     return () => clearInterval(interval)
   }, [selectedDate])
 
-  const getStatusColor = (status: CampDayInfo['status']) => {
-    switch (status) {
-      case 'not_started':
-        return 'bg-gray-100 text-gray-800'
-      case 'check_in':
-        return 'bg-blue-100 text-blue-800'
-      case 'in_progress':
-        return 'bg-green-100 text-green-800'
-      case 'dismissal':
-        return 'bg-orange-100 text-orange-800'
-      case 'completed':
-        return 'bg-purple-100 text-purple-800'
-      default:
-        return 'bg-gray-100 text-gray-800'
+  async function fetchCampDays() {
+    try {
+      // Use the director dashboard API for today's camps
+      const res = await fetch('/api/director/dashboard')
+      const json = await res.json()
+
+      if (!res.ok) {
+        throw new Error(json.error || 'Failed to load camps')
+      }
+
+      // Filter by selected date if not today
+      const today = new Date().toISOString().split('T')[0]
+      if (selectedDate === today) {
+        setCampDays(json.data?.today_camps || [])
+      } else {
+        // For other dates, we'll need a separate endpoint
+        // For now, show empty for non-today dates
+        setCampDays([])
+      }
+      setError(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong')
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
     }
   }
 
-  const getStatusLabel = (status: CampDayInfo['status']) => {
-    switch (status) {
-      case 'not_started':
-        return 'Not Started'
-      case 'check_in':
-        return 'Check-In'
-      case 'in_progress':
-        return 'In Progress'
-      case 'dismissal':
-        return 'Dismissal'
-      case 'completed':
-        return 'Completed'
-      default:
-        return status
-    }
+  function handleRefresh() {
+    setRefreshing(true)
+    fetchCampDays()
   }
+
+  const today = new Date().toISOString().split('T')[0]
+  const isToday = selectedDate === today
+
+  // Group camps by status
+  const activeCamps = campDays.filter((c) => c.status === 'in_progress')
+  const pendingCamps = campDays.filter((c) => c.status === 'not_started')
+  const finishedCamps = campDays.filter((c) => c.status === 'finished')
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      {/* Header */}
-      <div className="bg-white shadow">
-        <div className="max-w-6xl mx-auto px-4 py-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Today&apos;s Camps</h1>
-              <p className="text-gray-500">Manage your camp days</p>
+    <LmsGate featureName="today's camps">
+      <div>
+        <PortalPageHeader
+          title="Today's Camps"
+          description={isToday
+            ? `${campDays.length} camp${campDays.length !== 1 ? 's' : ''} scheduled for today`
+            : `Viewing camps for ${new Date(selectedDate).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}`
+          }
+          actions={
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleRefresh}
+                disabled={refreshing}
+                className="p-2 bg-white/10 text-white hover:bg-white/20 transition-colors disabled:opacity-50"
+              >
+                <RefreshCw className={cn('h-5 w-5', refreshing && 'animate-spin')} />
+              </button>
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="px-4 py-2 bg-black border border-white/20 text-white focus:border-neon focus:outline-none"
+              />
             </div>
-            <input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-            />
-          </div>
-        </div>
-      </div>
+          }
+        />
 
-      <div className="max-w-6xl mx-auto px-4 py-6">
+        {/* Active Camps Alert */}
+        {activeCamps.length > 0 && (
+          <div className="mb-6 p-4 bg-neon/10 border border-neon/30 flex items-center gap-4">
+            <div className="h-10 w-10 bg-neon/20 flex items-center justify-center">
+              <Play className="h-5 w-5 text-neon" />
+            </div>
+            <div className="flex-1">
+              <div className="font-bold text-white">
+                {activeCamps.length} Camp{activeCamps.length !== 1 ? 's' : ''} Currently Running
+              </div>
+              <div className="text-sm text-white/50">
+                Click any camp to access Camp HQ or Camp Day operations
+              </div>
+            </div>
+          </div>
+        )}
+
         {loading ? (
-          <div className="text-center py-12">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mx-auto"></div>
-            <p className="mt-4 text-gray-600">Loading camps...</p>
+          <div className="flex items-center justify-center py-20">
+            <Loader2 className="h-12 w-12 text-neon animate-spin" />
           </div>
         ) : error ? (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
-            <p className="text-red-700">{error}</p>
-            <button
-              onClick={() => window.location.reload()}
-              className="mt-4 text-red-600 hover:text-red-800 underline"
-            >
-              Try again
-            </button>
-          </div>
-        ) : campDays.length === 0 ? (
-          <div className="bg-white rounded-lg shadow p-12 text-center">
-            <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
-              <svg className="w-8 h-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-            </div>
-            <h2 className="text-xl font-semibold text-gray-900 mb-2">No Camps Today</h2>
-            <p className="text-gray-600">
-              {selectedDate === new Date().toISOString().split('T')[0]
-                ? "You don't have any camps scheduled for today."
-                : `No camps scheduled for ${new Date(selectedDate).toLocaleDateString()}.`}
-            </p>
-          </div>
-        ) : (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {campDays.map((campDay) => (
-              <Link
-                key={campDay.id}
-                href={`/director/camp-day/${campDay.id}`}
-                className="bg-white rounded-lg shadow hover:shadow-md transition-shadow"
+          <PortalCard>
+            <div className="text-center py-12">
+              <AlertCircle className="h-12 w-12 text-magenta mx-auto mb-4" />
+              <h3 className="text-lg font-bold text-white mb-2">Error Loading Camps</h3>
+              <p className="text-white/50 mb-4">{error}</p>
+              <button
+                onClick={handleRefresh}
+                className="px-6 py-3 bg-neon text-black font-bold uppercase tracking-wider hover:bg-neon/90 transition-colors"
               >
-                <div className="p-6">
-                  <div className="flex items-start justify-between mb-4">
-                    <div>
-                      <h3 className="font-semibold text-gray-900 text-lg">
-                        {campDay.camp_name}
-                      </h3>
-                      <p className="text-sm text-gray-500">{campDay.location}</p>
-                    </div>
-                    <span
-                      className={`text-xs font-medium px-2.5 py-1 rounded-full ${getStatusColor(
-                        campDay.status
-                      )}`}
-                    >
-                      {getStatusLabel(campDay.status)}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-4 text-sm text-gray-600 mb-4">
-                    <span>Day {campDay.day_number}</span>
-                    <span>
-                      {campDay.start_time} - {campDay.end_time}
-                    </span>
-                  </div>
-
-                  {/* Stats */}
-                  <div className="grid grid-cols-4 gap-2 pt-4 border-t border-gray-100">
-                    <div className="text-center">
-                      <p className="text-2xl font-bold text-gray-900">
-                        {campDay.stats?.registered || 0}
-                      </p>
-                      <p className="text-xs text-gray-500">Registered</p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-2xl font-bold text-green-600">
-                        {campDay.stats?.checked_in || 0}
-                      </p>
-                      <p className="text-xs text-gray-500">Checked In</p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-2xl font-bold text-red-600">
-                        {campDay.stats?.absent || 0}
-                      </p>
-                      <p className="text-xs text-gray-500">Absent</p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-2xl font-bold text-purple-600">
-                        {campDay.stats?.checked_out || 0}
-                      </p>
-                      <p className="text-xs text-gray-500">Picked Up</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Quick Actions */}
-                <div className="bg-gray-50 px-6 py-3 rounded-b-lg border-t border-gray-100">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-500">
-                      {campDay.status === 'not_started'
-                        ? 'Tap to start check-in'
-                        : campDay.status === 'completed'
-                        ? 'View day summary'
-                        : 'Manage camp day'}
-                    </span>
-                    <svg
-                      className="w-5 h-5 text-gray-400"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M9 5l7 7-7 7"
-                      />
-                    </svg>
-                  </div>
-                </div>
+                Try Again
+              </button>
+            </div>
+          </PortalCard>
+        ) : campDays.length === 0 ? (
+          <PortalCard>
+            <div className="text-center py-12">
+              <Calendar className="h-12 w-12 text-white/20 mx-auto mb-4" />
+              <h2 className="text-xl font-bold text-white mb-2">No Camps {isToday ? 'Today' : 'Scheduled'}</h2>
+              <p className="text-white/50 mb-6">
+                {isToday
+                  ? "You don't have any camps scheduled for today."
+                  : `No camps scheduled for ${new Date(selectedDate).toLocaleDateString()}.`}
+              </p>
+              <Link
+                href="/director/camps"
+                className="inline-flex items-center gap-2 px-6 py-3 bg-white/10 text-white font-bold uppercase tracking-wider hover:bg-white/20 transition-colors"
+              >
+                View All Camps
+                <ChevronRight className="h-4 w-4" />
               </Link>
-            ))}
+            </div>
+          </PortalCard>
+        ) : (
+          <div className="space-y-8">
+            {/* Active Camps Section */}
+            {activeCamps.length > 0 && (
+              <div>
+                <h2 className="text-lg font-bold text-neon uppercase tracking-wider mb-4 flex items-center gap-2">
+                  <Play className="h-5 w-5" />
+                  In Progress ({activeCamps.length})
+                </h2>
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {activeCamps.map((camp) => (
+                    <CampDayCard key={camp.id} camp={camp} />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Pending Camps Section */}
+            {pendingCamps.length > 0 && (
+              <div>
+                <h2 className="text-lg font-bold text-white/70 uppercase tracking-wider mb-4 flex items-center gap-2">
+                  <Clock className="h-5 w-5" />
+                  Not Started ({pendingCamps.length})
+                </h2>
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {pendingCamps.map((camp) => (
+                    <CampDayCard key={camp.id} camp={camp} />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Finished Camps Section */}
+            {finishedCamps.length > 0 && (
+              <div>
+                <h2 className="text-lg font-bold text-purple uppercase tracking-wider mb-4 flex items-center gap-2">
+                  <CheckCircle className="h-5 w-5" />
+                  Completed ({finishedCamps.length})
+                </h2>
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {finishedCamps.map((camp) => (
+                    <CampDayCard key={camp.id} camp={camp} />
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
-    </div>
+    </LmsGate>
+  )
+}
+
+// =============================================================================
+// Camp Day Card Component
+// =============================================================================
+
+function CampDayCard({ camp }: { camp: DirectorTodayCamp }) {
+  const statusConfig = {
+    not_started: {
+      label: 'Not Started',
+      color: 'bg-white/10 text-white/50',
+      icon: Clock,
+      accent: undefined as 'neon' | 'purple' | 'magenta' | undefined,
+    },
+    in_progress: {
+      label: 'In Progress',
+      color: 'bg-neon/20 text-neon',
+      icon: Play,
+      accent: 'neon' as const,
+    },
+    finished: {
+      label: 'Completed',
+      color: 'bg-purple/20 text-purple',
+      icon: CheckCircle,
+      accent: 'purple' as const,
+    },
+  }
+
+  const status = statusConfig[camp.status]
+  const StatusIcon = status.icon
+  const hasCampDayId = camp.id && !camp.id.startsWith('pending-')
+
+  return (
+    <PortalCard accent={status.accent}>
+      {/* Header */}
+      <div className="flex items-start justify-between mb-4">
+        <div className="flex-1 min-w-0">
+          <h3 className="font-bold text-white truncate">{camp.camp_name}</h3>
+          {camp.location_name && (
+            <p className="text-sm text-white/50 flex items-center gap-1 mt-1">
+              <MapPin className="h-3 w-3 flex-shrink-0" />
+              {camp.location_city}, {camp.location_state}
+            </p>
+          )}
+        </div>
+        <span className={cn('px-2 py-1 text-xs font-bold uppercase flex-shrink-0', status.color)}>
+          <StatusIcon className="h-3 w-3 inline mr-1" />
+          {status.label}
+        </span>
+      </div>
+
+      {/* Info Row */}
+      <div className="flex items-center gap-4 text-sm text-white/50 mb-4">
+        <span className="flex items-center gap-1">
+          <Calendar className="h-3 w-3" />
+          Day {camp.day_number}/{camp.total_days}
+        </span>
+        {camp.start_time && camp.end_time && (
+          <span className="flex items-center gap-1">
+            <Clock className="h-3 w-3" />
+            {camp.start_time} - {camp.end_time}
+          </span>
+        )}
+      </div>
+
+      {/* Stats Grid */}
+      <div className="grid grid-cols-4 gap-2 py-4 border-t border-b border-white/10">
+        <div className="text-center">
+          <p className="text-xl font-bold text-white">{camp.stats.registered}</p>
+          <p className="text-[10px] text-white/40 uppercase">Registered</p>
+        </div>
+        <div className="text-center">
+          <p className="text-xl font-bold text-neon">{camp.stats.checked_in}</p>
+          <p className="text-[10px] text-white/40 uppercase">Checked In</p>
+        </div>
+        <div className="text-center">
+          <p className="text-xl font-bold text-purple">{camp.stats.checked_out}</p>
+          <p className="text-[10px] text-white/40 uppercase">Picked Up</p>
+        </div>
+        <div className="text-center">
+          <p className={cn('text-xl font-bold', camp.stats.absent > 0 ? 'text-magenta' : 'text-white/30')}>
+            {camp.stats.absent}
+          </p>
+          <p className="text-[10px] text-white/40 uppercase">Absent</p>
+        </div>
+      </div>
+
+      {/* Quick Actions */}
+      <div className="flex flex-wrap gap-2 mt-4">
+        <Link
+          href={`/director/camps/${camp.camp_id}/hq`}
+          className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-neon text-black font-bold uppercase tracking-wider text-xs hover:bg-neon/90 transition-colors"
+        >
+          <LayoutDashboard className="h-3 w-3" />
+          Camp HQ
+        </Link>
+        {hasCampDayId && (
+          <>
+            <Link
+              href={`/director/camp-day/${camp.id}?tab=checkin`}
+              className="flex items-center justify-center gap-1 px-3 py-2 bg-white/10 text-white font-bold uppercase tracking-wider text-xs hover:bg-white/20 transition-colors"
+            >
+              <CheckCircle className="h-3 w-3" />
+              Check-In
+            </Link>
+            {(camp.status === 'in_progress' || camp.status === 'finished') && !camp.recap_complete && (
+              <Link
+                href={`/director/camp-day/${camp.id}?tab=recap`}
+                className="flex items-center justify-center gap-1 px-3 py-2 bg-purple text-white font-bold uppercase tracking-wider text-xs hover:bg-purple/90 transition-colors"
+              >
+                <FileText className="h-3 w-3" />
+                Recap
+              </Link>
+            )}
+          </>
+        )}
+        <Link
+          href={`/director/camps/${camp.camp_id}/grouping`}
+          className="flex items-center justify-center gap-1 px-3 py-2 bg-white/10 text-white font-bold uppercase tracking-wider text-xs hover:bg-white/20 transition-colors"
+        >
+          <UsersRound className="h-3 w-3" />
+          Groups
+        </Link>
+      </div>
+
+      {/* Footer Hint */}
+      <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between">
+        <span className="text-xs text-white/40">
+          {camp.status === 'not_started'
+            ? 'Ready to start check-in'
+            : camp.status === 'finished'
+            ? camp.recap_complete ? 'Day complete' : 'Recap needed'
+            : `${camp.stats.on_site} campers on-site`}
+        </span>
+        <ChevronRight className="h-4 w-4 text-white/20" />
+      </div>
+    </PortalCard>
   )
 }

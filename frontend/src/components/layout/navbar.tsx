@@ -10,6 +10,7 @@ import { NAV_LINKS, SITE_NAME } from '@/lib/constants'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/lib/auth/context'
 import { UserMenu, LogoutButton } from './user-menu'
+import { NotificationBell } from '@/components/notifications'
 
 /**
  * Navbar - Empowered Athletes Brand
@@ -102,7 +103,7 @@ export function Navbar() {
             // Loading skeleton
             <div className="h-9 w-9 bg-white/10 animate-pulse" />
           ) : user ? (
-            // Authenticated: show dashboard link and user menu
+            // Authenticated: show dashboard link, notifications, and user menu
             <>
               <Link
                 href={getDashboardLink()}
@@ -110,6 +111,7 @@ export function Navbar() {
               >
                 Dashboard
               </Link>
+              <NotificationBell />
               <UserMenu variant="navbar" />
             </>
           ) : (

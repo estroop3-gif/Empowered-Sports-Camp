@@ -9,7 +9,7 @@
 
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/lib/auth/context'
-import { PortalLayout, LmsGate } from '@/components/portal'
+import { LmsGate } from '@/components/portal'
 import {
   EmpowerUShell,
   PortalProgressHeader,

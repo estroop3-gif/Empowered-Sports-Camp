@@ -330,6 +330,14 @@ model Tenant {
   territories            Territory[]
   volunteerCertifications VolunteerCertification[]
   sessionCompensations   CampSessionCompensation[]
+  royaltyInvoices        RoyaltyInvoice[]
+
+  // SHELL: New relations for messaging, notifications, reports
+  pdfReports             PdfReport[]
+  notifications          Notification[]
+  messageThreads         MessageThread[]
+  revenueSnapshots       RevenueSnapshot[]
+  curriculumSubmissions  CurriculumSubmission[]
 
   @@map("tenants")
 }
@@ -424,6 +432,9 @@ model Camp {
   sessionCompensations       CampSessionCompensation[]
   dayCompensationSnapshots   CampDayCompensationSnapshot[]
 
+  // Royalty relations
+  royaltyInvoices            RoyaltyInvoice[]
+
   @@unique([tenantId, slug])
   @@index([tenantId])
   @@index([startDate, endDate])
@@ -471,6 +482,13 @@ model Profile {
   // Compensation relations
   sessionCompensations        CampSessionCompensation[]  @relation("StaffCompensation")
   dailyCompensationSnapshots  CampDayCompensationSnapshot[] @relation("DailyCompensationSnapshots")
+
+  // SHELL: New relations for messaging, notifications, curriculum submissions
+  notifications               Notification[]
+  messageParticipations       MessageParticipant[]
+  sentMessages                Message[]
+  submittedCurriculums        CurriculumSubmission[]     @relation("SubmittedCurriculums")
+  reviewedCurriculums         CurriculumSubmission[]     @relation("ReviewedCurriculums")
 
   @@map("profiles")
 }
@@ -985,6 +1003,9 @@ model CurriculumBlock {
   creator            Profile?                   @relation("CreatedBy", fields: [createdBy], references: [id])
   dayBlocks          CurriculumDayBlock[]
   scheduleBlocks     CampSessionScheduleBlock[]
+
+  // SHELL: Relation for approved submissions
+  approvedSubmissions CurriculumSubmission[]
 
   @@index([licenseeId])
   @@index([sport])
@@ -1902,13 +1923,17 @@ model AuthorizedPickup {
 }
 
 model CampStaffAssignment {
-  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  campId    String   @map("camp_id") @db.Uuid
-  userId    String   @map("user_id") @db.Uuid
-  role      String   // 'director', 'coach', 'cit_volunteer'
-  isLead    Boolean  @default(false) @map("is_lead")
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  campId      String   @map("camp_id") @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  role        String   // 'director', 'coach', 'cit_volunteer'
+  isLead      Boolean  @default(false) @map("is_lead")
+  stationName String?  @map("station_name") // e.g., "Skill Station A: Dribbling"
+  notes       String?  @db.Text
+  callTime    DateTime? @map("call_time") @db.Time // CIT arrival time
+  endTime     DateTime? @map("end_time") @db.Time // CIT departure time
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   // Relations
   camp      Camp     @relation(fields: [campId], references: [id], onDelete: Cascade)
@@ -2219,4 +2244,340 @@ model CampDayCompensationSnapshot {
   @@index([staffProfileId])
   @@index([sessionCompensationId])
   @@map("camp_day_compensation_snapshots")
+}
+
+// ============================================================================
+// ROYALTY & FINANCIAL TRACKING
+// ============================================================================
+
+enum RoyaltyInvoiceStatus {
+  pending
+  invoiced
+  paid
+  overdue
+  disputed
+  waived
+}
+
+enum RoyaltyPeriodType {
+  camp_session
+  weekly
+  monthly
+  quarterly
+}
+
+model RoyaltyInvoice {
+  id              String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId        String               @map("tenant_id") @db.Uuid
+  campId          String?              @map("camp_id") @db.Uuid
+
+  // Invoice identification
+  invoiceNumber   String               @unique @map("invoice_number")
+  periodType      RoyaltyPeriodType    @default(camp_session) @map("period_type")
+  periodStart     DateTime             @map("period_start") @db.Date
+  periodEnd       DateTime             @map("period_end") @db.Date
+
+  // Revenue breakdown
+  grossRevenueCents         Int        @map("gross_revenue_cents")
+  registrationRevenueCents  Int        @map("registration_revenue_cents")
+  addonRevenueCents         Int        @default(0) @map("addon_revenue_cents")
+  merchandiseRevenueCents   Int        @default(0) @map("merchandise_revenue_cents")
+  refundsTotalCents         Int        @default(0) @map("refunds_total_cents")
+  netRevenueCents           Int        @map("net_revenue_cents")
+
+  // Royalty calculation
+  royaltyRateBps  Int                  @map("royalty_rate_bps") // Basis points (e.g., 1000 = 10%)
+  royaltyDueCents Int                  @map("royalty_due_cents")
+
+  // Adjustments
+  adjustmentCents Int                  @default(0) @map("adjustment_cents")
+  adjustmentNotes String?              @map("adjustment_notes") @db.Text
+
+  // Final amount
+  totalDueCents   Int                  @map("total_due_cents")
+
+  // Status tracking
+  status          RoyaltyInvoiceStatus @default(pending)
+  dueDate         DateTime             @map("due_date") @db.Date
+
+  // Invoice generation
+  generatedAt     DateTime             @default(now()) @map("generated_at") @db.Timestamptz
+  generatedBy     String?              @map("generated_by") @db.Uuid
+
+  // Payment tracking
+  paidAt          DateTime?            @map("paid_at") @db.Timestamptz
+  paidAmountCents Int?                 @map("paid_amount_cents")
+  paymentMethod   String?              @map("payment_method")
+  paymentReference String?             @map("payment_reference")
+  paidBy          String?              @map("paid_by") @db.Uuid
+
+  // Notes and disputes
+  notes           String?              @db.Text
+  disputeReason   String?              @map("dispute_reason") @db.Text
+  disputedAt      DateTime?            @map("disputed_at") @db.Timestamptz
+  resolvedAt      DateTime?            @map("resolved_at") @db.Timestamptz
+
+  createdAt       DateTime             @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  tenant          Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  camp            Camp?                @relation(fields: [campId], references: [id], onDelete: SetNull)
+  lineItems       RoyaltyLineItem[]
+
+  @@index([tenantId])
+  @@index([campId])
+  @@index([status])
+  @@index([dueDate])
+  @@index([periodStart, periodEnd])
+  @@map("royalty_invoices")
+}
+
+model RoyaltyLineItem {
+  id              String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  invoiceId       String          @map("invoice_id") @db.Uuid
+  description     String
+  category        String          // 'registration', 'addon', 'merchandise', 'refund', 'adjustment'
+  quantity        Int             @default(1)
+  unitAmountCents Int             @map("unit_amount_cents")
+  totalAmountCents Int            @map("total_amount_cents")
+  royaltyApplies  Boolean         @default(true) @map("royalty_applies")
+  notes           String?         @db.Text
+
+  createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relations
+  invoice         RoyaltyInvoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@index([category])
+  @@map("royalty_line_items")
+}
+
+// ============================================================================
+// SHELL MODELS: PDF Reports, Notifications, Messaging, Revenue Snapshots
+// SHELL: These models are scaffolds - refine fields and constraints as needed
+// ============================================================================
+
+// SHELL: PDF Report tracking
+enum PdfReportType {
+  session_report
+  camp_day_report
+  curriculum_export
+  roster_export
+  financial_summary
+}
+
+model PdfReport {
+  id          String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String        @map("tenant_id") @db.Uuid
+  type        PdfReportType
+  resourceId  String        @map("resource_id") @db.Uuid // campId, campDayId, curriculumId, etc.
+  url         String?       // S3 URL to generated PDF
+  fileName    String?       @map("file_name")
+  generatedBy String?       @map("generated_by") @db.Uuid
+  status      String        @default("pending") // pending, generating, completed, failed
+  error       String?       @db.Text
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  expiresAt   DateTime?     @map("expires_at") @db.Timestamptz // For auto-cleanup
+
+  // Relations
+  tenant      Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([type])
+  @@index([resourceId])
+  @@index([status])
+  @@map("pdf_reports")
+}
+
+// SHELL: In-app notifications
+enum NotificationType {
+  camp_reminder
+  payment_received
+  payment_failed
+  registration_confirmed
+  message_received
+  certification_approved
+  certification_rejected
+  camp_day_complete
+  report_ready
+  royalty_due
+  staff_assigned
+  schedule_changed
+  system_alert
+}
+
+model Notification {
+  id          String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId      String           @map("user_id") @db.Uuid
+  tenantId    String?          @map("tenant_id") @db.Uuid
+  type        NotificationType
+  title       String
+  body        String           @db.Text
+  actionUrl   String?          @map("action_url")
+  isRead      Boolean          @default(false) @map("is_read")
+  readAt      DateTime?        @map("read_at") @db.Timestamptz
+  metadata    Json?            // Additional data for the notification
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relations
+  user        Profile          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant      Tenant?          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tenantId])
+  @@index([type])
+  @@index([isRead])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+// SHELL: Internal messaging system
+enum MessageThreadType {
+  licensee_director
+  director_parent
+  director_staff
+  admin_licensee
+  support
+  general
+}
+
+model MessageThread {
+  id           String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId     String?           @map("tenant_id") @db.Uuid
+  type         MessageThreadType @default(general)
+  subject      String?
+  lastMessageAt DateTime?        @map("last_message_at") @db.Timestamptz
+  isArchived   Boolean           @default(false) @map("is_archived")
+  createdAt    DateTime          @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  tenant       Tenant?           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  messages     Message[]
+  participants MessageParticipant[]
+
+  @@index([tenantId])
+  @@index([type])
+  @@index([lastMessageAt])
+  @@map("message_threads")
+}
+
+model MessageParticipant {
+  id           String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  threadId     String        @map("thread_id") @db.Uuid
+  userId       String        @map("user_id") @db.Uuid
+  lastReadAt   DateTime?     @map("last_read_at") @db.Timestamptz
+  isActive     Boolean       @default(true) @map("is_active")
+  createdAt    DateTime      @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relations
+  thread       MessageThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  user         Profile       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([threadId, userId])
+  @@index([threadId])
+  @@index([userId])
+  @@map("message_participants")
+}
+
+model Message {
+  id          String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  threadId    String        @map("thread_id") @db.Uuid
+  fromUserId  String        @map("from_user_id") @db.Uuid
+  body        String        @db.Text
+  isDeleted   Boolean       @default(false) @map("is_deleted")
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relations
+  thread      MessageThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  fromUser    Profile       @relation(fields: [fromUserId], references: [id], onDelete: Cascade)
+
+  @@index([threadId])
+  @@index([fromUserId])
+  @@index([createdAt])
+  @@map("messages")
+}
+
+// SHELL: Revenue snapshots for historical tracking and trends
+model RevenueSnapshot {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId            String   @map("tenant_id") @db.Uuid
+  periodStart         DateTime @map("period_start") @db.Date
+  periodEnd           DateTime @map("period_end") @db.Date
+
+  // Revenue metrics (in cents)
+  grossRevenueCents   Int      @map("gross_revenue_cents")
+  netRevenueCents     Int      @map("net_revenue_cents")
+  refundsCents        Int      @default(0) @map("refunds_cents")
+
+  // Camper metrics
+  totalCampers        Int      @default(0) @map("total_campers")
+  arpcCents           Int      @default(0) @map("arpc_cents") // Average Revenue Per Camper
+
+  // Session metrics
+  sessionsHeld        Int      @default(0) @map("sessions_held")
+
+  // Additional metrics (JSON for flexibility)
+  metadata            Json?
+
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relations
+  tenant              Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, periodStart, periodEnd])
+  @@index([tenantId])
+  @@index([periodStart])
+  @@index([periodEnd])
+  @@map("revenue_snapshots")
+}
+
+// SHELL: Curriculum submissions for admin review
+enum CurriculumSubmissionStatus {
+  draft
+  submitted
+  under_review
+  approved
+  rejected
+  revision_requested
+}
+
+model CurriculumSubmission {
+  id               String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId         String                     @map("tenant_id") @db.Uuid
+  submittedByUserId String                    @map("submitted_by_user_id") @db.Uuid
+
+  // Content
+  title            String
+  description      String                     @db.Text
+  sport            String?
+  level            Int                        @default(1)
+  videoUrl         String?                    @map("video_url")
+  attachmentUrl    String?                    @map("attachment_url")
+
+  // Review
+  status           CurriculumSubmissionStatus @default(draft)
+  adminNotes       String?                    @map("admin_notes") @db.Text
+  reviewedByUserId String?                    @map("reviewed_by_user_id") @db.Uuid
+  reviewedAt       DateTime?                  @map("reviewed_at") @db.Timestamptz
+
+  // If approved, link to created curriculum block
+  approvedBlockId  String?                    @map("approved_block_id") @db.Uuid
+
+  createdAt        DateTime                   @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime                   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  tenant           Tenant                     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  submittedBy      Profile                    @relation("SubmittedCurriculums", fields: [submittedByUserId], references: [id], onDelete: Cascade)
+  reviewedBy       Profile?                   @relation("ReviewedCurriculums", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  approvedBlock    CurriculumBlock?           @relation(fields: [approvedBlockId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([submittedByUserId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("curriculum_submissions")
 }

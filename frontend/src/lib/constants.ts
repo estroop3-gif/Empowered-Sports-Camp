@@ -4,6 +4,7 @@ export const SITE_DESCRIPTION = 'Empowering girls through sports, leadership, an
 export const NAV_LINKS = [
   { label: 'Camps', href: '/camps' },
   { label: 'Programs', href: '/programs' },
+  { label: 'Shop', href: '/shop' },
   { label: 'About', href: '/about' },
   { label: 'FAQ', href: '/faq' },
   { label: 'Contact', href: '/contact' },

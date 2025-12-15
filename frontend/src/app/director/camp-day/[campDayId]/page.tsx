@@ -5,11 +5,36 @@
  *
  * Director's main interface for managing a camp day.
  * Tabs: Check-In, Groups, Live Day, Dismissal, Recap
+ *
+ * Styled consistently with the Empowered Sports Camp brand.
  */
 
 import { useState, useEffect, use } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { QRCodeSVG } from 'qrcode.react'
+import { PortalPageHeader, PortalCard, LmsGate } from '@/components/portal'
+import { cn } from '@/lib/utils'
+import {
+  Loader2,
+  CheckCircle,
+  XCircle,
+  Clock,
+  Users,
+  UsersRound,
+  Calendar,
+  QrCode,
+  AlertTriangle,
+  ChevronRight,
+  Play,
+  Square,
+  Send,
+  FileText,
+  Mic,
+  MessageSquare,
+  ArrowLeft,
+  RefreshCw,
+} from 'lucide-react'
 
 type TabId = 'checkin' | 'groups' | 'liveday' | 'dismissal' | 'recap'
 
@@ -60,6 +85,11 @@ interface CampDayDetails {
     color: string
     athlete_count: number
   }>
+  // Recap fields
+  sport_played?: string
+  guest_speaker?: string
+  word_of_the_day?: string
+  recap_notes?: string
 }
 
 interface PickupTokenInfo {
@@ -77,7 +107,10 @@ export default function CampDayControlPanel({
   params: Promise<{ campDayId: string }>
 }) {
   const { campDayId } = use(params)
-  const [activeTab, setActiveTab] = useState<TabId>('checkin')
+  const searchParams = useSearchParams()
+  const initialTab = (searchParams.get('tab') as TabId) || 'checkin'
+
+  const [activeTab, setActiveTab] = useState<TabId>(initialTab)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [campDay, setCampDay] = useState<CampDayDetails | null>(null)
@@ -87,6 +120,16 @@ export default function CampDayControlPanel({
   const [searchTerm, setSearchTerm] = useState('')
   const [manualCheckoutReason, setManualCheckoutReason] = useState('')
   const [showManualCheckout, setShowManualCheckout] = useState<string | null>(null)
+
+  // Recap form state
+  const [sportPlayed, setSportPlayed] = useState('')
+  const [guestSpeaker, setGuestSpeaker] = useState('')
+  const [wordOfTheDay, setWordOfTheDay] = useState('')
+  const [recapNotes, setRecapNotes] = useState('')
+  const [savingRecap, setSavingRecap] = useState(false)
+  const [recapSaved, setRecapSaved] = useState(false)
+  const [sendingEmail, setSendingEmail] = useState<string | null>(null)
+  const [emailSent, setEmailSent] = useState<string | null>(null)
 
   // Fetch camp day details
   useEffect(() => {
@@ -100,6 +143,14 @@ export default function CampDayControlPanel({
         }
 
         setCampDay(json.data)
+
+        // Populate recap form
+        if (json.data) {
+          setSportPlayed(json.data.sport_played || '')
+          setGuestSpeaker(json.data.guest_speaker || '')
+          setWordOfTheDay(json.data.word_of_the_day || '')
+          setRecapNotes(json.data.recap_notes || json.data.notes || '')
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Something went wrong')
       } finally {
@@ -273,6 +324,74 @@ export default function CampDayControlPanel({
     }
   }
 
+  const handleSaveRecap = async () => {
+    setSavingRecap(true)
+    setRecapSaved(false)
+
+    try {
+      const res = await fetch(`/api/camp-days/${campDayId}/recap`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sport_played: sportPlayed,
+          guest_speaker: guestSpeaker,
+          word_of_the_day: wordOfTheDay,
+          notes: recapNotes,
+        }),
+      })
+
+      if (!res.ok) {
+        const json = await res.json()
+        throw new Error(json.error || 'Failed to save recap')
+      }
+
+      setRecapSaved(true)
+      setTimeout(() => setRecapSaved(false), 3000)
+
+      // Refresh
+      const refresh = await fetch(`/api/camp-days/${campDayId}`)
+      const json = await refresh.json()
+      if (refresh.ok) setCampDay(json.data)
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to save recap')
+    } finally {
+      setSavingRecap(false)
+    }
+  }
+
+  const handleSendEmail = async (emailType: 'daily_recap' | 'post_camp') => {
+    setSendingEmail(emailType)
+    setEmailSent(null)
+
+    try {
+      const res = await fetch(`/api/camp-days/${campDayId}/communications`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: emailType,
+          recap_data: {
+            sport_played: sportPlayed,
+            guest_speaker: guestSpeaker,
+            word_of_the_day: wordOfTheDay,
+            notes: recapNotes,
+          },
+        }),
+      })
+
+      if (!res.ok) {
+        const json = await res.json()
+        throw new Error(json.error || 'Failed to send email')
+      }
+
+      setEmailSent(emailType)
+      setTimeout(() => setEmailSent(null), 5000)
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to send email')
+    } finally {
+      setSendingEmail(null)
+    }
+  }
+
   const checkInQRUrl =
     typeof window !== 'undefined'
       ? `${window.location.origin}/camp-checkin?campId=${campDay?.camp_id}`
@@ -284,591 +403,581 @@ export default function CampDayControlPanel({
     return name.includes(searchTerm.toLowerCase())
   })
 
-  const tabs: { id: TabId; label: string; icon: React.ReactNode }[] = [
-    {
-      id: 'checkin',
-      label: 'Check-In',
-      icon: (
-        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-      ),
-    },
-    {
-      id: 'groups',
-      label: 'Groups',
-      icon: (
-        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-        </svg>
-      ),
-    },
-    {
-      id: 'liveday',
-      label: 'Live Day',
-      icon: (
-        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-        </svg>
-      ),
-    },
-    {
-      id: 'dismissal',
-      label: 'Dismissal',
-      icon: (
-        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
-        </svg>
-      ),
-    },
-    {
-      id: 'recap',
-      label: 'Recap',
-      icon: (
-        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-        </svg>
-      ),
-    },
+  const tabs: { id: TabId; label: string; icon: typeof CheckCircle }[] = [
+    { id: 'checkin', label: 'Check-In', icon: CheckCircle },
+    { id: 'groups', label: 'Groups', icon: UsersRound },
+    { id: 'liveday', label: 'Live Day', icon: Play },
+    { id: 'dismissal', label: 'Dismissal', icon: XCircle },
+    { id: 'recap', label: 'Recap', icon: FileText },
   ]
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading camp day...</p>
+      <LmsGate featureName="camp day management">
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <Loader2 className="h-12 w-12 text-neon animate-spin" />
         </div>
-      </div>
+      </LmsGate>
     )
   }
 
   if (error || !campDay) {
     return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
-        <div className="bg-white rounded-lg shadow p-6 max-w-md w-full text-center">
-          <div className="text-red-600 mb-4">
-            <svg className="h-12 w-12 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
+      <LmsGate featureName="camp day management">
+        <PortalCard>
+          <div className="text-center py-12">
+            <AlertTriangle className="h-12 w-12 text-magenta mx-auto mb-4" />
+            <h3 className="text-lg font-bold text-white mb-2">Error Loading Camp Day</h3>
+            <p className="text-white/50 mb-6">{error || 'Camp day not found'}</p>
+            <Link
+              href="/director/today"
+              className="inline-flex items-center gap-2 px-6 py-3 bg-neon text-black font-bold uppercase tracking-wider hover:bg-neon/90 transition-colors"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to Today's Camps
+            </Link>
           </div>
-          <h1 className="text-xl font-bold text-gray-900 mb-2">Error</h1>
-          <p className="text-gray-600 mb-6">{error || 'Camp day not found'}</p>
-          <Link
-            href="/director/today"
-            className="inline-block bg-orange-600 text-white px-6 py-2 rounded-lg hover:bg-orange-700"
-          >
-            Back to Today&apos;s Camps
-          </Link>
-        </div>
-      </div>
+        </PortalCard>
+      </LmsGate>
     )
   }
 
+  const statusConfig = {
+    not_started: { label: 'Not Started', color: 'bg-white/10 text-white/50' },
+    check_in: { label: 'Check-In', color: 'bg-blue-500/20 text-blue-400' },
+    in_progress: { label: 'In Progress', color: 'bg-neon/20 text-neon' },
+    dismissal: { label: 'Dismissal', color: 'bg-orange-500/20 text-orange-400' },
+    completed: { label: 'Completed', color: 'bg-purple/20 text-purple' },
+  }
+
+  const status = statusConfig[campDay.status]
+
   return (
-    <div className="min-h-screen bg-gray-100">
-      {/* Header */}
-      <div className="bg-white shadow">
-        <div className="max-w-6xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Link
-                href="/director/today"
-                className="p-2 hover:bg-gray-100 rounded-lg"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-              </Link>
-              <div>
-                <h1 className="text-xl font-bold text-gray-900">{campDay.camp_name}</h1>
-                <p className="text-sm text-gray-500">
-                  Day {campDay.day_number} - {new Date(campDay.date).toLocaleDateString()}
-                </p>
-              </div>
+    <LmsGate featureName="camp day management">
+      <div>
+        {/* Header */}
+        <div className="mb-6">
+          <div className="flex items-center gap-4 mb-4">
+            <Link
+              href="/director/today"
+              className="p-2 bg-white/10 text-white hover:bg-white/20 transition-colors"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </Link>
+            <div className="flex-1">
+              <h1 className="text-2xl font-bold text-white uppercase tracking-wider">
+                {campDay.camp_name}
+              </h1>
+              <p className="text-white/50">
+                Day {campDay.day_number} - {new Date(campDay.date).toLocaleDateString('en-US', {
+                  weekday: 'long',
+                  month: 'long',
+                  day: 'numeric',
+                })}
+              </p>
             </div>
-
-            {/* Status Badge & Actions */}
-            <div className="flex items-center gap-4">
-              <div className="text-right">
-                <span
-                  className={`inline-block text-sm font-medium px-3 py-1 rounded-full ${
-                    campDay.status === 'not_started'
-                      ? 'bg-gray-100 text-gray-800'
-                      : campDay.status === 'check_in'
-                      ? 'bg-blue-100 text-blue-800'
-                      : campDay.status === 'in_progress'
-                      ? 'bg-green-100 text-green-800'
-                      : campDay.status === 'dismissal'
-                      ? 'bg-orange-100 text-orange-800'
-                      : 'bg-purple-100 text-purple-800'
-                  }`}
-                >
-                  {campDay.status.replace('_', ' ').replace(/\b\w/g, (l) => l.toUpperCase())}
-                </span>
-              </div>
-
-              {campDay.status === 'not_started' && (
-                <button
-                  onClick={() => updateStatus('check_in')}
-                  disabled={actionLoading === 'status'}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-                >
-                  Start Check-In
-                </button>
-              )}
-              {campDay.status === 'check_in' && (
-                <button
-                  onClick={() => updateStatus('in_progress')}
-                  disabled={actionLoading === 'status'}
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
-                >
-                  Start Camp Day
-                </button>
-              )}
-              {campDay.status === 'in_progress' && (
-                <button
-                  onClick={() => updateStatus('dismissal')}
-                  disabled={actionLoading === 'status'}
-                  className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50"
-                >
-                  Begin Dismissal
-                </button>
-              )}
-            </div>
+            <span className={cn('px-3 py-1 text-sm font-bold uppercase', status.color)}>
+              {status.label}
+            </span>
           </div>
 
           {/* Stats Row */}
-          <div className="grid grid-cols-4 gap-4 mt-4">
-            <div className="bg-gray-50 rounded-lg p-3 text-center">
-              <p className="text-2xl font-bold text-gray-900">{campDay.stats.registered}</p>
-              <p className="text-xs text-gray-500">Registered</p>
+          <div className="grid grid-cols-4 gap-4">
+            <div className="p-4 bg-white/5 border border-white/10 text-center">
+              <p className="text-2xl font-bold text-white">{campDay.stats.registered}</p>
+              <p className="text-xs text-white/50 uppercase">Registered</p>
             </div>
-            <div className="bg-green-50 rounded-lg p-3 text-center">
-              <p className="text-2xl font-bold text-green-600">{campDay.stats.checked_in}</p>
-              <p className="text-xs text-gray-500">Checked In</p>
+            <div className="p-4 bg-neon/5 border border-neon/30 text-center">
+              <p className="text-2xl font-bold text-neon">{campDay.stats.checked_in}</p>
+              <p className="text-xs text-white/50 uppercase">Checked In</p>
             </div>
-            <div className="bg-red-50 rounded-lg p-3 text-center">
-              <p className="text-2xl font-bold text-red-600">{campDay.stats.absent}</p>
-              <p className="text-xs text-gray-500">Absent</p>
+            <div className="p-4 bg-magenta/5 border border-magenta/30 text-center">
+              <p className="text-2xl font-bold text-magenta">{campDay.stats.absent}</p>
+              <p className="text-xs text-white/50 uppercase">Absent</p>
             </div>
-            <div className="bg-purple-50 rounded-lg p-3 text-center">
-              <p className="text-2xl font-bold text-purple-600">{campDay.stats.checked_out}</p>
-              <p className="text-xs text-gray-500">Picked Up</p>
+            <div className="p-4 bg-purple/5 border border-purple/30 text-center">
+              <p className="text-2xl font-bold text-purple">{campDay.stats.checked_out}</p>
+              <p className="text-xs text-white/50 uppercase">Picked Up</p>
             </div>
           </div>
+        </div>
 
-          {/* Tabs */}
-          <div className="flex gap-1 mt-4 border-b border-gray-200 -mb-px">
-            {tabs.map((tab) => (
+        {/* Status Actions */}
+        <div className="mb-6 flex items-center gap-4">
+          {campDay.status === 'not_started' && (
+            <button
+              onClick={() => updateStatus('check_in')}
+              disabled={actionLoading === 'status'}
+              className="px-6 py-3 bg-blue-500 text-white font-bold uppercase tracking-wider hover:bg-blue-600 disabled:opacity-50 transition-colors"
+            >
+              {actionLoading === 'status' ? 'Starting...' : 'Start Check-In'}
+            </button>
+          )}
+          {campDay.status === 'check_in' && (
+            <button
+              onClick={() => updateStatus('in_progress')}
+              disabled={actionLoading === 'status'}
+              className="px-6 py-3 bg-neon text-black font-bold uppercase tracking-wider hover:bg-neon/90 disabled:opacity-50 transition-colors"
+            >
+              {actionLoading === 'status' ? 'Starting...' : 'Start Camp Day'}
+            </button>
+          )}
+          {campDay.status === 'in_progress' && (
+            <button
+              onClick={() => updateStatus('dismissal')}
+              disabled={actionLoading === 'status'}
+              className="px-6 py-3 bg-orange-500 text-white font-bold uppercase tracking-wider hover:bg-orange-600 disabled:opacity-50 transition-colors"
+            >
+              {actionLoading === 'status' ? 'Starting...' : 'Begin Dismissal'}
+            </button>
+          )}
+          {campDay.status === 'dismissal' && (
+            <button
+              onClick={() => updateStatus('completed')}
+              disabled={actionLoading === 'status'}
+              className="px-6 py-3 bg-purple text-white font-bold uppercase tracking-wider hover:bg-purple/90 disabled:opacity-50 transition-colors"
+            >
+              {actionLoading === 'status' ? 'Completing...' : 'Complete Day'}
+            </button>
+          )}
+
+          <Link
+            href={`/director/camps/${campDay.camp_id}/hq`}
+            className="px-4 py-3 bg-white/10 text-white font-bold uppercase tracking-wider hover:bg-white/20 transition-colors"
+          >
+            Open Camp HQ
+          </Link>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex gap-1 mb-6 border-b border-white/10">
+          {tabs.map((tab) => {
+            const Icon = tab.icon
+            return (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-4 py-3 border-b-2 transition-colors ${
+                className={cn(
+                  'flex items-center gap-2 px-4 py-3 border-b-2 transition-colors font-bold uppercase tracking-wider text-sm',
                   activeTab === tab.id
-                    ? 'border-orange-600 text-orange-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
+                    ? 'border-neon text-neon'
+                    : 'border-transparent text-white/50 hover:text-white'
+                )}
               >
-                {tab.icon}
-                <span className="font-medium">{tab.label}</span>
+                <Icon className="h-4 w-4" />
+                {tab.label}
               </button>
-            ))}
-          </div>
+            )
+          })}
         </div>
-      </div>
 
-      {/* Tab Content */}
-      <div className="max-w-6xl mx-auto px-4 py-6">
-        {/* Check-In Tab */}
+        {/* Tab Content */}
         {activeTab === 'checkin' && (
-          <div>
-            {/* QR Code Button */}
-            <div className="bg-white rounded-lg shadow p-4 mb-4 flex items-center justify-between">
-              <div>
-                <h3 className="font-semibold text-gray-900">Check-In QR Code</h3>
-                <p className="text-sm text-gray-500">
-                  Display this QR code for parents to scan
-                </p>
-              </div>
-              <button
-                onClick={() => setShowQRModal(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
-                </svg>
-                Show QR Code
-              </button>
-            </div>
-
-            {/* Search */}
-            <div className="mb-4">
-              <input
-                type="text"
-                placeholder="Search athletes..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-              />
-            </div>
-
-            {/* Attendance List */}
-            <div className="bg-white rounded-lg shadow overflow-hidden">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Athlete
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Parent
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Status
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Time
-                    </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {filteredAttendance?.map((att) => (
-                    <tr key={att.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center gap-3">
-                          {att.athlete.photo_url ? (
-                            <img
-                              src={att.athlete.photo_url}
-                              alt=""
-                              className="w-10 h-10 rounded-full object-cover"
-                            />
-                          ) : (
-                            <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center">
-                              <span className="text-gray-600 font-medium">
-                                {att.athlete.first_name[0]}{att.athlete.last_name[0]}
-                              </span>
-                            </div>
-                          )}
-                          <div>
-                            <p className="font-medium text-gray-900">
-                              {att.athlete.first_name} {att.athlete.last_name}
-                            </p>
-                            {att.group_name && (
-                              <p className="text-sm text-gray-500">{att.group_name}</p>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {att.parent ? (
-                          <div>
-                            <p className="text-sm text-gray-900">
-                              {att.parent.first_name} {att.parent.last_name}
-                            </p>
-                            {att.parent.phone && (
-                              <p className="text-sm text-gray-500">{att.parent.phone}</p>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-gray-400">-</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                            att.status === 'checked_in'
-                              ? 'bg-green-100 text-green-800'
-                              : att.status === 'absent'
-                              ? 'bg-red-100 text-red-800'
-                              : att.status === 'checked_out'
-                              ? 'bg-purple-100 text-purple-800'
-                              : 'bg-yellow-100 text-yellow-800'
-                          }`}
-                        >
-                          {att.status.replace('_', ' ')}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {att.check_in_time
-                          ? new Date(att.check_in_time).toLocaleTimeString([], {
-                              hour: 'numeric',
-                              minute: '2-digit',
-                            })
-                          : '-'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right">
-                        {att.status === 'pending' && (
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              onClick={() => handleManualCheckIn(att.athlete_id)}
-                              disabled={actionLoading === att.athlete_id}
-                              className="text-sm text-green-600 hover:text-green-800 disabled:opacity-50"
-                            >
-                              Check In
-                            </button>
-                            <button
-                              onClick={() => handleMarkAbsent(att.athlete_id)}
-                              disabled={actionLoading === att.athlete_id}
-                              className="text-sm text-red-600 hover:text-red-800 disabled:opacity-50"
-                            >
-                              Mark Absent
-                            </button>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <CheckInTab
+            campDay={campDay}
+            filteredAttendance={filteredAttendance || []}
+            searchTerm={searchTerm}
+            setSearchTerm={setSearchTerm}
+            actionLoading={actionLoading}
+            handleManualCheckIn={handleManualCheckIn}
+            handleMarkAbsent={handleMarkAbsent}
+            showQRModal={showQRModal}
+            setShowQRModal={setShowQRModal}
+            checkInQRUrl={checkInQRUrl}
+          />
         )}
 
-        {/* Groups Tab */}
         {activeTab === 'groups' && (
-          <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Camp Groups</h3>
-            {campDay.groups && campDay.groups.length > 0 ? (
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {campDay.groups.map((group) => (
-                  <div
-                    key={group.id}
-                    className="border border-gray-200 rounded-lg p-4"
-                    style={{ borderLeftColor: group.color, borderLeftWidth: 4 }}
-                  >
-                    <h4 className="font-medium text-gray-900">{group.name}</h4>
-                    <p className="text-sm text-gray-500">{group.athlete_count} athletes</p>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-gray-500">No groups configured for this camp.</p>
-            )}
-          </div>
+          <GroupsTab campDay={campDay} />
         )}
 
-        {/* Live Day Tab */}
         {activeTab === 'liveday' && (
-          <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Live Day View</h3>
-            <p className="text-gray-500 mb-6">
-              Track schedule progress, incidents, and notes throughout the day.
-            </p>
-            {/* Placeholder - would include schedule blocks, incident logging, etc. */}
-            <div className="border-2 border-dashed border-gray-200 rounded-lg p-8 text-center">
-              <p className="text-gray-400">Schedule tracking and incident logging coming soon</p>
-            </div>
-          </div>
+          <LiveDayTab campDay={campDay} />
         )}
 
-        {/* Dismissal Tab */}
         {activeTab === 'dismissal' && (
-          <div>
-            {/* Generate Codes Button */}
-            {campDay.status === 'dismissal' && (
-              <div className="bg-white rounded-lg shadow p-4 mb-4 flex items-center justify-between">
-                <div>
-                  <h3 className="font-semibold text-gray-900">Pickup Codes</h3>
-                  <p className="text-sm text-gray-500">
-                    Generate pickup codes for checked-in athletes
-                  </p>
-                </div>
-                <button
-                  onClick={generatePickupCodes}
-                  disabled={actionLoading === 'generate'}
-                  className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50"
-                >
-                  {actionLoading === 'generate' ? 'Generating...' : 'Generate Codes'}
-                </button>
-              </div>
-            )}
-
-            {/* Athletes pending pickup */}
-            <div className="bg-white rounded-lg shadow overflow-hidden">
-              <div className="px-6 py-4 border-b border-gray-200">
-                <h3 className="font-semibold text-gray-900">Pending Pickup</h3>
-              </div>
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Athlete
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Parent
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Code Status
-                    </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {campDay.attendance
-                    .filter((a) => a.status === 'checked_in')
-                    .map((att) => {
-                      const token = pickupTokens.find((t) => t.athlete_id === att.athlete_id)
-                      return (
-                        <tr key={att.id} className="hover:bg-gray-50">
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center gap-3">
-                              {att.athlete.photo_url ? (
-                                <img
-                                  src={att.athlete.photo_url}
-                                  alt=""
-                                  className="w-10 h-10 rounded-full object-cover"
-                                />
-                              ) : (
-                                <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center">
-                                  <span className="text-gray-600 font-medium">
-                                    {att.athlete.first_name[0]}{att.athlete.last_name[0]}
-                                  </span>
-                                </div>
-                              )}
-                              <p className="font-medium text-gray-900">
-                                {att.athlete.first_name} {att.athlete.last_name}
-                              </p>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            {att.parent ? (
-                              <p className="text-sm text-gray-900">
-                                {att.parent.first_name} {att.parent.last_name}
-                              </p>
-                            ) : (
-                              <span className="text-gray-400">-</span>
-                            )}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            {token ? (
-                              <span className="text-green-600 text-sm">Code generated</span>
-                            ) : (
-                              <span className="text-yellow-600 text-sm">Pending</span>
-                            )}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-right">
-                            <button
-                              onClick={() => setShowManualCheckout(att.athlete_id)}
-                              className="text-sm text-orange-600 hover:text-orange-800"
-                            >
-                              Manual Checkout
-                            </button>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <DismissalTab
+            campDay={campDay}
+            filteredAttendance={filteredAttendance || []}
+            pickupTokens={pickupTokens}
+            actionLoading={actionLoading}
+            generatePickupCodes={generatePickupCodes}
+            showManualCheckout={showManualCheckout}
+            setShowManualCheckout={setShowManualCheckout}
+            manualCheckoutReason={manualCheckoutReason}
+            setManualCheckoutReason={setManualCheckoutReason}
+            handleManualCheckout={handleManualCheckout}
+          />
         )}
 
-        {/* Recap Tab */}
         {activeTab === 'recap' && (
-          <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Day Recap</h3>
-            <div className="grid gap-6 md:grid-cols-2">
-              <div>
-                <h4 className="font-medium text-gray-700 mb-2">Attendance Summary</h4>
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <div className="flex justify-between py-2 border-b border-gray-200">
-                    <span className="text-gray-600">Total Registered</span>
-                    <span className="font-medium">{campDay.stats.registered}</span>
-                  </div>
-                  <div className="flex justify-between py-2 border-b border-gray-200">
-                    <span className="text-gray-600">Attended</span>
-                    <span className="font-medium text-green-600">{campDay.stats.checked_in + campDay.stats.checked_out}</span>
-                  </div>
-                  <div className="flex justify-between py-2 border-b border-gray-200">
-                    <span className="text-gray-600">Absent</span>
-                    <span className="font-medium text-red-600">{campDay.stats.absent}</span>
-                  </div>
-                  <div className="flex justify-between py-2">
-                    <span className="text-gray-600">Picked Up</span>
-                    <span className="font-medium text-purple-600">{campDay.stats.checked_out}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <h4 className="font-medium text-gray-700 mb-2">Notes</h4>
-                <textarea
-                  className="w-full h-32 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                  placeholder="Add day notes..."
-                  defaultValue={campDay.notes || ''}
-                />
-              </div>
-            </div>
-
-            {campDay.status !== 'completed' && (
-              <div className="mt-6 pt-6 border-t border-gray-200">
-                <button
-                  onClick={() => updateStatus('completed')}
-                  disabled={actionLoading === 'status'}
-                  className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
-                >
-                  Mark Day Complete
-                </button>
-              </div>
-            )}
-          </div>
+          <RecapTab
+            campDay={campDay}
+            sportPlayed={sportPlayed}
+            setSportPlayed={setSportPlayed}
+            guestSpeaker={guestSpeaker}
+            setGuestSpeaker={setGuestSpeaker}
+            wordOfTheDay={wordOfTheDay}
+            setWordOfTheDay={setWordOfTheDay}
+            recapNotes={recapNotes}
+            setRecapNotes={setRecapNotes}
+            savingRecap={savingRecap}
+            recapSaved={recapSaved}
+            handleSaveRecap={handleSaveRecap}
+            sendingEmail={sendingEmail}
+            emailSent={emailSent}
+            handleSendEmail={handleSendEmail}
+          />
         )}
       </div>
+    </LmsGate>
+  )
+}
 
-      {/* QR Code Modal */}
+// =============================================================================
+// Tab Components
+// =============================================================================
+
+function CheckInTab({
+  campDay,
+  filteredAttendance,
+  searchTerm,
+  setSearchTerm,
+  actionLoading,
+  handleManualCheckIn,
+  handleMarkAbsent,
+  showQRModal,
+  setShowQRModal,
+  checkInQRUrl,
+}: {
+  campDay: CampDayDetails
+  filteredAttendance: AthleteAttendance[]
+  searchTerm: string
+  setSearchTerm: (v: string) => void
+  actionLoading: string | null
+  handleManualCheckIn: (id: string) => void
+  handleMarkAbsent: (id: string) => void
+  showQRModal: boolean
+  setShowQRModal: (v: boolean) => void
+  checkInQRUrl: string
+}) {
+  return (
+    <div className="space-y-4">
+      {/* QR Code Button */}
+      <PortalCard>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="h-12 w-12 bg-neon/20 flex items-center justify-center">
+              <QrCode className="h-6 w-6 text-neon" />
+            </div>
+            <div>
+              <h3 className="font-bold text-white">Check-In QR Code</h3>
+              <p className="text-sm text-white/50">Display for parents to scan</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowQRModal(true)}
+            className="px-4 py-2 bg-neon text-black font-bold uppercase tracking-wider hover:bg-neon/90 transition-colors"
+          >
+            Show QR Code
+          </button>
+        </div>
+      </PortalCard>
+
+      {/* Search */}
+      <div className="relative">
+        <input
+          type="text"
+          placeholder="Search athletes..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="w-full px-4 py-3 bg-black border border-white/20 text-white placeholder:text-white/30 focus:border-neon focus:outline-none"
+        />
+      </div>
+
+      {/* Attendance List */}
+      <PortalCard>
+        <div className="divide-y divide-white/10">
+          {filteredAttendance.map((att) => (
+            <div key={att.id} className="py-4 first:pt-0 last:pb-0 flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                {att.athlete.photo_url ? (
+                  <img
+                    src={att.athlete.photo_url}
+                    alt=""
+                    className="w-10 h-10 object-cover"
+                  />
+                ) : (
+                  <div className="w-10 h-10 bg-white/10 flex items-center justify-center text-white font-bold">
+                    {att.athlete.first_name[0]}{att.athlete.last_name[0]}
+                  </div>
+                )}
+                <div>
+                  <p className="font-bold text-white">
+                    {att.athlete.first_name} {att.athlete.last_name}
+                  </p>
+                  {att.group_name && (
+                    <p className="text-sm text-white/50">{att.group_name}</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-4">
+                {att.check_in_time && (
+                  <span className="text-sm text-white/50">
+                    {new Date(att.check_in_time).toLocaleTimeString([], {
+                      hour: 'numeric',
+                      minute: '2-digit',
+                    })}
+                  </span>
+                )}
+
+                <span
+                  className={cn(
+                    'px-2 py-1 text-xs font-bold uppercase',
+                    att.status === 'checked_in'
+                      ? 'bg-neon/20 text-neon'
+                      : att.status === 'absent'
+                      ? 'bg-magenta/20 text-magenta'
+                      : att.status === 'checked_out'
+                      ? 'bg-purple/20 text-purple'
+                      : 'bg-yellow-500/20 text-yellow-400'
+                  )}
+                >
+                  {att.status.replace('_', ' ')}
+                </span>
+
+                {att.status === 'pending' && (
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleManualCheckIn(att.athlete_id)}
+                      disabled={actionLoading === att.athlete_id}
+                      className="px-3 py-1 bg-neon text-black text-xs font-bold uppercase hover:bg-neon/90 disabled:opacity-50 transition-colors"
+                    >
+                      Check In
+                    </button>
+                    <button
+                      onClick={() => handleMarkAbsent(att.athlete_id)}
+                      disabled={actionLoading === att.athlete_id}
+                      className="px-3 py-1 bg-magenta/20 text-magenta text-xs font-bold uppercase hover:bg-magenta/30 disabled:opacity-50 transition-colors"
+                    >
+                      Absent
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </PortalCard>
+
+      {/* QR Modal */}
       {showQRModal && (
         <div
-          className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50"
+          className="fixed inset-0 bg-black/90 flex items-center justify-center p-4 z-50"
           onClick={() => setShowQRModal(false)}
         >
           <div
-            className="bg-white rounded-2xl p-8 max-w-md w-full text-center"
+            className="bg-dark-100 border border-white/10 p-8 max-w-md w-full text-center"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="text-xl font-bold text-gray-900 mb-2">Check-In QR Code</h2>
-            <p className="text-gray-500 mb-6">{campDay.camp_name}</p>
+            <h2 className="text-xl font-bold text-white mb-2 uppercase tracking-wider">
+              Check-In QR Code
+            </h2>
+            <p className="text-white/50 mb-6">{campDay.camp_name}</p>
 
-            <div className="bg-white p-4 rounded-xl border-2 border-gray-100 inline-block mb-4">
-              <QRCodeSVG value={checkInQRUrl} size={250} level="H" includeMargin />
+            <div className="bg-white p-4 inline-block mb-6">
+              <QRCodeSVG value={checkInQRUrl} size={250} level="H" />
             </div>
 
-            <p className="text-sm text-gray-500 mb-4">
+            <p className="text-sm text-white/50 mb-6">
               Parents scan this code to check in their athletes
             </p>
 
             <button
               onClick={() => setShowQRModal(false)}
-              className="w-full py-3 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200"
+              className="w-full py-3 bg-white/10 text-white font-bold uppercase tracking-wider hover:bg-white/20 transition-colors"
             >
               Close
             </button>
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+function GroupsTab({ campDay }: { campDay: CampDayDetails }) {
+  return (
+    <PortalCard title="Camp Groups">
+      {campDay.groups && campDay.groups.length > 0 ? (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {campDay.groups.map((group) => (
+            <div
+              key={group.id}
+              className="p-4 bg-white/5 border border-white/10"
+              style={{ borderLeftColor: group.color, borderLeftWidth: 4 }}
+            >
+              <h4 className="font-bold text-white">{group.name}</h4>
+              <p className="text-sm text-white/50">{group.athlete_count} athletes</p>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="text-center py-8">
+          <UsersRound className="h-12 w-12 text-white/20 mx-auto mb-4" />
+          <p className="text-white/50">No groups configured for this camp.</p>
+          <Link
+            href={`/director/camps/${campDay.camp_id}/grouping`}
+            className="inline-flex items-center gap-2 mt-4 px-4 py-2 bg-neon text-black font-bold uppercase tracking-wider hover:bg-neon/90 transition-colors"
+          >
+            Open Grouping Tool
+          </Link>
+        </div>
+      )}
+    </PortalCard>
+  )
+}
+
+function LiveDayTab({ campDay }: { campDay: CampDayDetails }) {
+  return (
+    <PortalCard title="Live Day View">
+      <div className="text-center py-12">
+        <Play className="h-12 w-12 text-white/20 mx-auto mb-4" />
+        <h3 className="text-lg font-bold text-white mb-2">Schedule Progress</h3>
+        <p className="text-white/50 mb-6">
+          Track schedule progress, incidents, and notes throughout the day.
+        </p>
+        <Link
+          href={`/director/camps/${campDay.camp_id}/hq?tab=schedule`}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-white/10 text-white font-bold uppercase tracking-wider hover:bg-white/20 transition-colors"
+        >
+          View Schedule in Camp HQ
+          <ChevronRight className="h-4 w-4" />
+        </Link>
+      </div>
+    </PortalCard>
+  )
+}
+
+function DismissalTab({
+  campDay,
+  filteredAttendance,
+  pickupTokens,
+  actionLoading,
+  generatePickupCodes,
+  showManualCheckout,
+  setShowManualCheckout,
+  manualCheckoutReason,
+  setManualCheckoutReason,
+  handleManualCheckout,
+}: {
+  campDay: CampDayDetails
+  filteredAttendance: AthleteAttendance[]
+  pickupTokens: PickupTokenInfo[]
+  actionLoading: string | null
+  generatePickupCodes: () => void
+  showManualCheckout: string | null
+  setShowManualCheckout: (v: string | null) => void
+  manualCheckoutReason: string
+  setManualCheckoutReason: (v: string) => void
+  handleManualCheckout: (id: string) => void
+}) {
+  const pendingPickup = filteredAttendance.filter((a) => a.status === 'checked_in')
+
+  return (
+    <div className="space-y-4">
+      {/* Generate Codes */}
+      {campDay.status === 'dismissal' && (
+        <PortalCard>
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-bold text-white">Pickup Codes</h3>
+              <p className="text-sm text-white/50">Generate QR pickup codes for parents</p>
+            </div>
+            <button
+              onClick={generatePickupCodes}
+              disabled={actionLoading === 'generate'}
+              className="px-4 py-2 bg-neon text-black font-bold uppercase tracking-wider hover:bg-neon/90 disabled:opacity-50 transition-colors"
+            >
+              {actionLoading === 'generate' ? 'Generating...' : 'Generate Codes'}
+            </button>
+          </div>
+        </PortalCard>
+      )}
+
+      {/* Pending Pickup */}
+      <PortalCard title={`Pending Pickup (${pendingPickup.length})`}>
+        <div className="divide-y divide-white/10">
+          {pendingPickup.map((att) => {
+            const token = pickupTokens.find((t) => t.athlete_id === att.athlete_id)
+            return (
+              <div key={att.id} className="py-4 first:pt-0 last:pb-0 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 bg-white/10 flex items-center justify-center text-white font-bold">
+                    {att.athlete.first_name[0]}{att.athlete.last_name[0]}
+                  </div>
+                  <div>
+                    <p className="font-bold text-white">
+                      {att.athlete.first_name} {att.athlete.last_name}
+                    </p>
+                    {att.parent && (
+                      <p className="text-sm text-white/50">
+                        Parent: {att.parent.first_name} {att.parent.last_name}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-4">
+                  {token ? (
+                    <span className="px-2 py-1 text-xs font-bold uppercase bg-neon/20 text-neon">
+                      Code Ready
+                    </span>
+                  ) : (
+                    <span className="px-2 py-1 text-xs font-bold uppercase bg-yellow-500/20 text-yellow-400">
+                      Pending
+                    </span>
+                  )}
+
+                  <button
+                    onClick={() => setShowManualCheckout(att.athlete_id)}
+                    className="px-3 py-1 bg-orange-500/20 text-orange-400 text-xs font-bold uppercase hover:bg-orange-500/30 transition-colors"
+                  >
+                    Manual Checkout
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+
+          {pendingPickup.length === 0 && (
+            <div className="py-8 text-center">
+              <CheckCircle className="h-12 w-12 text-neon mx-auto mb-4" />
+              <p className="text-white/50">All campers have been picked up!</p>
+            </div>
+          )}
+        </div>
+      </PortalCard>
 
       {/* Manual Checkout Modal */}
       {showManualCheckout && (
         <div
-          className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50"
+          className="fixed inset-0 bg-black/90 flex items-center justify-center p-4 z-50"
           onClick={() => setShowManualCheckout(null)}
         >
           <div
-            className="bg-white rounded-lg p-6 max-w-md w-full"
+            className="bg-dark-100 border border-white/10 p-6 max-w-md w-full"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-lg font-bold text-gray-900 mb-4">Manual Checkout</h3>
-            <p className="text-gray-600 mb-4">
-              Please provide a reason for manual checkout (e.g., parent verified by ID,
-              authorized pickup person, etc.)
+            <h3 className="text-lg font-bold text-white mb-4 uppercase tracking-wider">
+              Manual Checkout
+            </h3>
+            <p className="text-white/60 mb-4">
+              Please provide a reason for manual checkout (e.g., parent verified by ID).
             </p>
             <textarea
-              className="w-full h-24 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 mb-4"
+              className="w-full h-24 px-4 py-3 bg-black border border-white/20 text-white placeholder:text-white/30 focus:border-neon focus:outline-none mb-4"
               placeholder="Reason for manual checkout..."
               value={manualCheckoutReason}
               onChange={(e) => setManualCheckoutReason(e.target.value)}
@@ -879,21 +988,246 @@ export default function CampDayControlPanel({
                   setShowManualCheckout(null)
                   setManualCheckoutReason('')
                 }}
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+                className="flex-1 px-4 py-2 bg-white/10 text-white font-bold uppercase tracking-wider hover:bg-white/20 transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={() => handleManualCheckout(showManualCheckout)}
                 disabled={!manualCheckoutReason.trim() || actionLoading === showManualCheckout}
-                className="flex-1 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50"
+                className="flex-1 px-4 py-2 bg-orange-500 text-white font-bold uppercase tracking-wider hover:bg-orange-600 disabled:opacity-50 transition-colors"
               >
-                {actionLoading === showManualCheckout ? 'Processing...' : 'Confirm Checkout'}
+                {actionLoading === showManualCheckout ? 'Processing...' : 'Confirm'}
               </button>
             </div>
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+function RecapTab({
+  campDay,
+  sportPlayed,
+  setSportPlayed,
+  guestSpeaker,
+  setGuestSpeaker,
+  wordOfTheDay,
+  setWordOfTheDay,
+  recapNotes,
+  setRecapNotes,
+  savingRecap,
+  recapSaved,
+  handleSaveRecap,
+  sendingEmail,
+  emailSent,
+  handleSendEmail,
+}: {
+  campDay: CampDayDetails
+  sportPlayed: string
+  setSportPlayed: (v: string) => void
+  guestSpeaker: string
+  setGuestSpeaker: (v: string) => void
+  wordOfTheDay: string
+  setWordOfTheDay: (v: string) => void
+  recapNotes: string
+  setRecapNotes: (v: string) => void
+  savingRecap: boolean
+  recapSaved: boolean
+  handleSaveRecap: () => void
+  sendingEmail: string | null
+  emailSent: string | null
+  handleSendEmail: (type: 'daily_recap' | 'post_camp') => void
+}) {
+  return (
+    <div className="space-y-6">
+      {/* Attendance Summary */}
+      <PortalCard title="Attendance Summary">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="p-4 bg-white/5 text-center">
+            <p className="text-2xl font-bold text-white">{campDay.stats.registered}</p>
+            <p className="text-xs text-white/50 uppercase">Registered</p>
+          </div>
+          <div className="p-4 bg-neon/5 text-center">
+            <p className="text-2xl font-bold text-neon">
+              {campDay.stats.checked_in + campDay.stats.checked_out}
+            </p>
+            <p className="text-xs text-white/50 uppercase">Attended</p>
+          </div>
+          <div className="p-4 bg-magenta/5 text-center">
+            <p className="text-2xl font-bold text-magenta">{campDay.stats.absent}</p>
+            <p className="text-xs text-white/50 uppercase">Absent</p>
+          </div>
+          <div className="p-4 bg-purple/5 text-center">
+            <p className="text-2xl font-bold text-purple">{campDay.stats.checked_out}</p>
+            <p className="text-xs text-white/50 uppercase">Picked Up</p>
+          </div>
+        </div>
+      </PortalCard>
+
+      {/* Daily Recap Form */}
+      <PortalCard title="Daily Recap" accent="neon">
+        <div className="space-y-4">
+          {/* Sport Played */}
+          <div>
+            <label className="block text-xs text-white/40 uppercase tracking-wider mb-2">
+              Sport Played
+            </label>
+            <input
+              type="text"
+              value={sportPlayed}
+              onChange={(e) => setSportPlayed(e.target.value)}
+              placeholder="e.g., Basketball, Soccer, Flag Football..."
+              className="w-full px-4 py-3 bg-black border border-white/20 text-white placeholder:text-white/30 focus:border-neon focus:outline-none"
+            />
+          </div>
+
+          {/* Guest Speaker */}
+          <div>
+            <label className="block text-xs text-white/40 uppercase tracking-wider mb-2">
+              Guest Speaker (Optional)
+            </label>
+            <input
+              type="text"
+              value={guestSpeaker}
+              onChange={(e) => setGuestSpeaker(e.target.value)}
+              placeholder="e.g., Coach John Smith, Local Athlete..."
+              className="w-full px-4 py-3 bg-black border border-white/20 text-white placeholder:text-white/30 focus:border-neon focus:outline-none"
+            />
+          </div>
+
+          {/* Word of the Day */}
+          <div>
+            <label className="block text-xs text-white/40 uppercase tracking-wider mb-2">
+              Word of the Day
+            </label>
+            <input
+              type="text"
+              value={wordOfTheDay}
+              onChange={(e) => setWordOfTheDay(e.target.value)}
+              placeholder="e.g., Perseverance, Teamwork, Integrity..."
+              className="w-full px-4 py-3 bg-black border border-white/20 text-white placeholder:text-white/30 focus:border-neon focus:outline-none"
+            />
+          </div>
+
+          {/* Notes */}
+          <div>
+            <label className="block text-xs text-white/40 uppercase tracking-wider mb-2">
+              Additional Notes
+            </label>
+            <textarea
+              value={recapNotes}
+              onChange={(e) => setRecapNotes(e.target.value)}
+              placeholder="Highlights, notable moments, incidents to mention..."
+              rows={4}
+              className="w-full px-4 py-3 bg-black border border-white/20 text-white placeholder:text-white/30 focus:border-neon focus:outline-none resize-none"
+            />
+          </div>
+
+          {/* Save Button */}
+          {recapSaved && (
+            <div className="p-3 bg-neon/10 border border-neon/30 flex items-center gap-2">
+              <CheckCircle className="h-4 w-4 text-neon" />
+              <span className="text-neon text-sm font-bold">Recap saved successfully!</span>
+            </div>
+          )}
+
+          <button
+            onClick={handleSaveRecap}
+            disabled={savingRecap}
+            className="w-full py-3 bg-neon text-black font-bold uppercase tracking-wider hover:bg-neon/90 disabled:opacity-50 transition-colors"
+          >
+            {savingRecap ? (
+              <span className="flex items-center justify-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Saving...
+              </span>
+            ) : (
+              'Save Recap'
+            )}
+          </button>
+        </div>
+      </PortalCard>
+
+      {/* Communication Triggers */}
+      <PortalCard title="Send Communications" accent="purple">
+        <p className="text-white/50 text-sm mb-4">
+          Send emails to all parents for this camp session. Make sure to save your recap first.
+        </p>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          {/* Daily Recap Email */}
+          <div className="p-4 bg-white/5 border border-white/10">
+            <div className="flex items-center gap-3 mb-3">
+              <MessageSquare className="h-6 w-6 text-purple" />
+              <h4 className="font-bold text-white">Daily Recap Email</h4>
+            </div>
+            <p className="text-sm text-white/50 mb-4">
+              Send today's recap including sport, word of the day, and notes to all parents.
+            </p>
+            {emailSent === 'daily_recap' && (
+              <div className="p-2 bg-neon/10 border border-neon/30 text-neon text-xs mb-4 flex items-center gap-2">
+                <CheckCircle className="h-3 w-3" />
+                Email queued for delivery!
+              </div>
+            )}
+            <button
+              onClick={() => handleSendEmail('daily_recap')}
+              disabled={sendingEmail !== null}
+              className="w-full py-2 bg-purple text-white font-bold uppercase tracking-wider text-sm hover:bg-purple/90 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+            >
+              {sendingEmail === 'daily_recap' ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                <>
+                  <Send className="h-4 w-4" />
+                  Send Daily Recap
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* Post-Camp Email (only show on last day or completed) */}
+          {(campDay.status === 'completed') && (
+            <div className="p-4 bg-white/5 border border-white/10">
+              <div className="flex items-center gap-3 mb-3">
+                <Mic className="h-6 w-6 text-magenta" />
+                <h4 className="font-bold text-white">Post-Camp Email</h4>
+              </div>
+              <p className="text-sm text-white/50 mb-4">
+                Send thank-you message with survey link to all parents (use for final day).
+              </p>
+              {emailSent === 'post_camp' && (
+                <div className="p-2 bg-neon/10 border border-neon/30 text-neon text-xs mb-4 flex items-center gap-2">
+                  <CheckCircle className="h-3 w-3" />
+                  Email queued for delivery!
+                </div>
+              )}
+              <button
+                onClick={() => handleSendEmail('post_camp')}
+                disabled={sendingEmail !== null}
+                className="w-full py-2 bg-magenta text-white font-bold uppercase tracking-wider text-sm hover:bg-magenta/90 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+              >
+                {sendingEmail === 'post_camp' ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    <Send className="h-4 w-4" />
+                    Send Post-Camp Email
+                  </>
+                )}
+              </button>
+            </div>
+          )}
+        </div>
+      </PortalCard>
     </div>
   )
 }

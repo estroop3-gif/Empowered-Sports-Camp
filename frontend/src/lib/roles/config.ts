@@ -41,6 +41,9 @@ import {
   Inbox,
   ShoppingBag,
   Briefcase,
+  UserPlus,
+  Star,
+  Percent,
 } from 'lucide-react'
 
 export type UserRole = 'parent' | 'coach' | 'director' | 'licensee_owner' | 'hq_admin' | 'cit_volunteer'
@@ -66,10 +69,10 @@ export const ROLE_HIERARCHY: UserRole[] = [
  */
 export const ROLE_HOME_ROUTES: Record<UserRole, string> = {
   parent: '/dashboard',
-  cit_volunteer: '/volunteer',
+  cit_volunteer: '/cit/dashboard',
   coach: '/portal',
   director: '/director',
-  licensee_owner: '/portal',
+  licensee_owner: '/licensee/dashboard',
   hq_admin: '/admin',
 }
 
@@ -174,27 +177,27 @@ export const ROLE_NAV_ITEMS: Record<UserRole, NavItem[]> = {
     { label: 'Settings', href: '/admin/settings', icon: Settings },
   ],
   licensee_owner: [
-    { label: 'Dashboard', href: '/portal', icon: LayoutDashboard },
-    { label: 'Camps', href: '/portal/camps', icon: Calendar },
-    { label: 'Registrations', href: '/portal/registrations', icon: Clipboard },
-    { label: 'Athletes', href: '/portal/athletes', icon: Crown },
-    { label: 'Locations', href: '/portal/locations', icon: MapPin },
-    { label: 'Staff', href: '/portal/staff', icon: UserCircle },
+    { label: 'Dashboard', href: '/licensee/dashboard', icon: LayoutDashboard },
+    { label: 'My Camps', href: '/licensee/camps', icon: Calendar },
+    { label: 'Royalties', href: '/licensee/reports/royalties', icon: Percent },
+    { label: 'Quality', href: '/licensee/reports/quality', icon: Star },
+    { label: 'Staff', href: '/licensee/staff', icon: UserCircle },
+    { label: 'Incentives', href: '/licensee/incentives', icon: Trophy },
     { label: 'EmpowerU', href: '/licensee/empoweru', icon: GraduationCap },
-    { label: 'Scorecards', href: '/licensee/scorecards', icon: Trophy },
-    { label: 'Financials', href: '/portal/financials', icon: DollarSign },
-    { label: 'Reports', href: '/portal/reports', icon: BarChart3 },
-    { label: 'Settings', href: '/portal/settings', icon: Settings },
+    { label: 'CIT Applications', href: '/licensee/cit-applications', icon: UserPlus },
+    { label: 'Job Board', href: '/licensee/jobs', icon: Briefcase },
+    { label: 'Shop', href: '/licensee/shop', icon: ShoppingBag },
+    { label: 'Settings', href: '/licensee/settings', icon: Settings },
   ],
   director: [
     { label: 'Dashboard', href: '/director', icon: LayoutDashboard },
-    { label: 'Camps', href: '/director/camps', icon: Calendar },
+    { label: 'Today\'s Camps', href: '/director/today', icon: Calendar },
+    { label: 'My Camps', href: '/director/camps', icon: Calendar },
     { label: 'EmpowerU', href: '/director/empoweru', icon: GraduationCap },
     { label: 'Curriculum', href: '/director/curriculum', icon: FileText },
     { label: 'Communications', href: '/director/communications', icon: Users },
     { label: 'Daily Recaps', href: '/director/daily-recaps', icon: Clipboard },
-    { label: 'Scorecards', href: '/director/scorecards', icon: Trophy },
-    { label: 'Reports', href: '/portal/reports', icon: BarChart3 },
+    { label: 'Scorecards', href: '/director/incentives', icon: Trophy },
   ],
   coach: [
     { label: 'Dashboard', href: '/coach', icon: LayoutDashboard },
@@ -210,11 +213,12 @@ export const ROLE_NAV_ITEMS: Record<UserRole, NavItem[]> = {
     { label: 'Shop', href: '/shop', icon: ShoppingBag },
   ],
   cit_volunteer: [
-    { label: 'Dashboard', href: '/volunteer', icon: LayoutDashboard },
+    { label: 'Dashboard', href: '/cit/dashboard', icon: LayoutDashboard },
+    { label: 'My Camps', href: '/cit/camps', icon: Calendar },
+    { label: 'Today', href: '/cit/today', icon: Clipboard },
     { label: 'EmpowerU', href: '/cit/empoweru', icon: GraduationCap },
-    { label: 'Certifications', href: '/volunteer/certifications', icon: Upload },
-    { label: 'Curriculum', href: '/volunteer/curriculum', icon: BookOpen },
-    { label: 'Guest Speakers', href: '/volunteer/guest-speakers', icon: Users },
+    { label: 'Curriculum', href: '/cit/curriculum', icon: BookOpen },
+    { label: 'Certifications', href: '/cit/certifications', icon: Upload },
   ],
 }
 
