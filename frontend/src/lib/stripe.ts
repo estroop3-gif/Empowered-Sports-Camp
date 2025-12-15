@@ -1,17 +1,15 @@
 /**
  * Stripe Utilities
  *
- * Helper functions for Stripe integration with the Empowered Locker.
- * Currently stubbed out - the structure is ready for real Stripe calls.
+ * Helper functions for Stripe integration with the Empowered Locker (shop).
  *
  * Environment variables needed:
  *   STRIPE_SECRET_KEY        - Server-side secret key
- *   STRIPE_PUBLISHABLE_KEY   - Client-side publishable key
+ *   STRIPE_PUBLISHABLE_KEY   - Client-side publishable key (NEXT_PUBLIC_)
  *   STRIPE_WEBHOOK_SECRET    - Webhook signature verification
- *
- * TODO: Install stripe package: npm install stripe
  */
 
+import Stripe from 'stripe'
 import { getProductsByIds, type ShopProduct, type ShopProductVariant, type CartItem } from '@/lib/services/shop'
 
 // ============================================================================
@@ -41,38 +39,34 @@ export interface StripeLineItem {
 // CONFIGURATION
 // ============================================================================
 
+const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || ''
+const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || ''
+
+let stripeInstance: Stripe | null = null
+
 /**
  * Check if Stripe is configured
  */
 export function isStripeConfigured(): boolean {
-  return !!(
-    process.env.STRIPE_SECRET_KEY &&
-    process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
-  )
+  return !!STRIPE_SECRET_KEY && STRIPE_SECRET_KEY.startsWith('sk_')
 }
 
 /**
  * Get Stripe client (server-side only)
- *
- * TODO: When ready to integrate Stripe:
- * 1. npm install stripe
- * 2. Uncomment the Stripe import and client creation
  */
-export function getStripeClient() {
-  const secretKey = process.env.STRIPE_SECRET_KEY
-
-  if (!secretKey) {
+export function getStripeClient(): Stripe | null {
+  if (!isStripeConfigured()) {
     console.warn('[Stripe] STRIPE_SECRET_KEY not set - running in stub mode')
     return null
   }
 
-  // TODO: Uncomment when ready to integrate Stripe
-  // import Stripe from 'stripe'
-  // return new Stripe(secretKey, { apiVersion: '2023-10-16' })
+  if (!stripeInstance) {
+    stripeInstance = new Stripe(STRIPE_SECRET_KEY, {
+      apiVersion: '2025-11-17.clover',
+    })
+  }
 
-  // For now, return null to indicate stub mode
-  console.log('[Stripe] Would initialize Stripe client here')
-  return null
+  return stripeInstance
 }
 
 // ============================================================================
@@ -81,16 +75,6 @@ export function getStripeClient() {
 
 /**
  * Create a Stripe Checkout Session from cart items
- *
- * This function:
- * 1. Fetches product details from database
- * 2. Builds Stripe line_items
- * 3. Creates a Checkout Session (or returns a stub URL)
- *
- * @param cartItems - Array of { product_id, variant_id, quantity }
- * @param profileId - Optional user profile ID for order tracking
- * @param successUrl - URL to redirect after successful payment
- * @param cancelUrl - URL to redirect if checkout is cancelled
  */
 export async function createCheckoutSessionFromCart(
   cartItems: CartItem[],
@@ -116,7 +100,7 @@ export async function createCheckoutSessionFromCart(
     }
 
     // Build line items for Stripe
-    const lineItems: StripeLineItem[] = []
+    const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = []
 
     for (const cartItem of cartItems) {
       const product = products.find((p) => p.id === cartItem.product_id)
@@ -152,52 +136,35 @@ export async function createCheckoutSessionFromCart(
       })
     }
 
-    // Log what would be sent to Stripe
-    console.log('[Stripe] Checkout session line items:', JSON.stringify(lineItems, null, 2))
-    console.log('[Stripe] Success URL:', options.successUrl)
-    console.log('[Stripe] Cancel URL:', options.cancelUrl)
-    console.log('[Stripe] Profile ID:', options.profileId)
-    console.log('[Stripe] Licensee ID:', options.licenseeId)
-
     // Check if Stripe is configured
     const stripe = getStripeClient()
 
     if (!stripe) {
       // Return stub response for development
       console.log('[Stripe] Running in stub mode - returning placeholder session')
-
       return {
         sessionId: `stub_session_${Date.now()}`,
-        sessionUrl: null, // Will be handled by the API route
+        sessionUrl: `${options.successUrl}?session_id=stub_session_${Date.now()}&demo=true`,
         error: null,
       }
     }
 
-    // TODO: When Stripe is configured, create real checkout session:
-    /*
+    // Create real Stripe checkout session
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       line_items: lineItems,
-      success_url: options.successUrl,
+      success_url: options.successUrl + '?session_id={CHECKOUT_SESSION_ID}',
       cancel_url: options.cancelUrl,
       metadata: {
         profile_id: options.profileId || '',
         licensee_id: options.licenseeId || '',
+        type: 'shop_order',
       },
-      // Enable automatic tax calculation if configured
-      // automatic_tax: { enabled: true },
     })
 
     return {
       sessionId: session.id,
       sessionUrl: session.url,
-      error: null,
-    }
-    */
-
-    return {
-      sessionId: `stub_session_${Date.now()}`,
-      sessionUrl: null,
       error: null,
     }
   } catch (error) {
@@ -216,21 +183,67 @@ export async function createCheckoutSessionFromCart(
 
 /**
  * Sync a product to Stripe (create or update)
- *
- * TODO: Implement when ready to auto-create Stripe products
  */
 export async function syncProductToStripe(product: ShopProduct): Promise<{
   stripeProductId: string | null
   stripePriceId: string | null
   error: string | null
 }> {
-  console.log('[Stripe] Would sync product to Stripe:', product.name)
+  const stripe = getStripeClient()
 
-  // Stub implementation
-  return {
-    stripeProductId: null,
-    stripePriceId: null,
-    error: 'Stripe integration not yet configured',
+  if (!stripe) {
+    return {
+      stripeProductId: null,
+      stripePriceId: null,
+      error: 'Stripe not configured',
+    }
+  }
+
+  try {
+    // Create or update product in Stripe
+    let stripeProduct: Stripe.Product
+
+    if (product.stripe_product_id) {
+      // Update existing product
+      stripeProduct = await stripe.products.update(product.stripe_product_id, {
+        name: product.name,
+        description: product.description || undefined,
+        images: product.image_url ? [product.image_url] : undefined,
+        active: product.is_active,
+      })
+    } else {
+      // Create new product
+      stripeProduct = await stripe.products.create({
+        name: product.name,
+        description: product.description || undefined,
+        images: product.image_url ? [product.image_url] : undefined,
+        active: product.is_active,
+        metadata: {
+          product_id: product.id,
+          licensee_id: product.licensee_id || '',
+        },
+      })
+    }
+
+    // Create price for the product
+    const stripePrice = await stripe.prices.create({
+      product: stripeProduct.id,
+      unit_amount: product.price_cents,
+      currency: product.currency || 'usd',
+    })
+
+    return {
+      stripeProductId: stripeProduct.id,
+      stripePriceId: stripePrice.id,
+      error: null,
+    }
+  } catch (error) {
+    console.error('[Stripe] Error syncing product:', error)
+    return {
+      stripeProductId: null,
+      stripePriceId: null,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    }
   }
 }
 
@@ -240,45 +253,59 @@ export async function syncProductToStripe(product: ShopProduct): Promise<{
 
 /**
  * Verify Stripe webhook signature
- *
- * TODO: Implement when setting up webhooks
  */
 export function verifyWebhookSignature(
   payload: string | Buffer,
   signature: string
-): { valid: boolean; error: string | null } {
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET
+): { event: Stripe.Event | null; error: string | null } {
+  const stripe = getStripeClient()
 
-  if (!webhookSecret) {
-    return { valid: false, error: 'STRIPE_WEBHOOK_SECRET not configured' }
+  if (!stripe) {
+    return { event: null, error: 'Stripe not configured' }
   }
 
-  // TODO: Implement actual signature verification
-  // const stripe = getStripeClient()
-  // const event = stripe.webhooks.constructEvent(payload, signature, webhookSecret)
+  if (!STRIPE_WEBHOOK_SECRET) {
+    return { event: null, error: 'STRIPE_WEBHOOK_SECRET not configured' }
+  }
 
-  console.log('[Stripe] Would verify webhook signature')
-  return { valid: true, error: null }
+  try {
+    const event = stripe.webhooks.constructEvent(payload, signature, STRIPE_WEBHOOK_SECRET)
+    return { event, error: null }
+  } catch (err) {
+    console.error('[Stripe] Webhook signature verification failed:', err)
+    return { event: null, error: 'Webhook signature verification failed' }
+  }
 }
 
 /**
  * Handle checkout.session.completed webhook event
- *
- * TODO: Implement when webhooks are set up
  */
-export async function handleCheckoutCompleted(sessionId: string): Promise<{
+export async function handleCheckoutCompleted(session: Stripe.Checkout.Session): Promise<{
   success: boolean
   error: string | null
 }> {
-  console.log('[Stripe] Would handle checkout completed:', sessionId)
+  console.log('[Stripe] Processing checkout completed:', session.id)
 
-  // TODO: Implement:
-  // 1. Fetch session from Stripe
-  // 2. Update order status in database
-  // 3. Decrement inventory
-  // 4. Send confirmation email
+  try {
+    // Extract metadata
+    const metadata = session.metadata || {}
+    const profileId = metadata.profile_id
+    const licenseeId = metadata.licensee_id
+    const type = metadata.type // 'shop_order' or 'registration'
 
-  return { success: true, error: null }
+    console.log('[Stripe] Checkout metadata:', { profileId, licenseeId, type })
+
+    // The actual order/registration update is handled in payments.ts
+    // This function is for any additional shop-specific logic
+
+    return { success: true, error: null }
+  } catch (error) {
+    console.error('[Stripe] Error handling checkout completed:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    }
+  }
 }
 
 // ============================================================================
@@ -301,10 +328,8 @@ export function calculateOrderTotals(
 } {
   const subtotal = items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0)
 
-  // TODO: Implement tax calculation based on location
+  // Tax and shipping would be calculated based on location/settings
   const tax = 0
-
-  // TODO: Implement shipping calculation
   const shipping = 0
 
   return {
@@ -312,5 +337,36 @@ export function calculateOrderTotals(
     tax,
     shipping,
     total: subtotal + tax + shipping,
+  }
+}
+
+/**
+ * Get Stripe session status
+ */
+export async function getSessionStatus(sessionId: string): Promise<{
+  status: string
+  paymentStatus: string
+  error: string | null
+}> {
+  const stripe = getStripeClient()
+
+  if (!stripe) {
+    return { status: 'unknown', paymentStatus: 'unknown', error: 'Stripe not configured' }
+  }
+
+  try {
+    const session = await stripe.checkout.sessions.retrieve(sessionId)
+    return {
+      status: session.status || 'unknown',
+      paymentStatus: session.payment_status || 'unknown',
+      error: null,
+    }
+  } catch (error) {
+    console.error('[Stripe] Error retrieving session:', error)
+    return {
+      status: 'error',
+      paymentStatus: 'error',
+      error: error instanceof Error ? error.message : 'Unknown error',
+    }
   }
 }
