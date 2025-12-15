@@ -1,13 +1,13 @@
 /**
- * SHELL: List Curriculum Submissions API
+ * List Reports API
  *
- * GET /api/curriculum/submissions
- * Lists curriculum submissions for review (admin) or own submissions (user).
+ * GET /api/reports/list
+ * Lists generated PDF reports for the current tenant.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUser } from '@/lib/auth/server'
-import { listCurriculumSubmissionsForReview } from '@/lib/services/curriculum-submissions'
+import { listReports, type ReportType } from '@/lib/services/reports'
 
 export async function GET(request: NextRequest) {
   try {
@@ -17,22 +17,18 @@ export async function GET(request: NextRequest) {
     }
 
     const searchParams = request.nextUrl.searchParams
-    const status = searchParams.get('status')
+    const type = searchParams.get('type') as ReportType | null
     const limit = parseInt(searchParams.get('limit') || '50')
-    const offset = parseInt(searchParams.get('offset') || '0')
 
-    // SHELL: Admins see all, others see their own
-    const allowedRoles = ['hq_admin', 'licensee_owner', 'director', 'cit_volunteer']
+    const allowedRoles = ['hq_admin', 'licensee_owner', 'director']
     if (!allowedRoles.includes(user.role)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const { data, error } = await listCurriculumSubmissionsForReview({
+    const { data, error } = await listReports({
       tenantId: user.tenantId || '',
-      role: user.role,
-      status: status?.toLowerCase() as 'draft' | 'submitted' | 'under_review' | 'approved' | 'rejected' | 'revision_requested' | undefined,
+      type: type || undefined,
       limit,
-      offset,
     })
 
     if (error) {
@@ -41,7 +37,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ data })
   } catch (error) {
-    console.error('[API] List curriculum submissions error:', error)
+    console.error('[API] List reports error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

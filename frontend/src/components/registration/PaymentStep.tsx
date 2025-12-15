@@ -42,7 +42,18 @@ interface PromoCodeInputProps {
   appliedPromo: AppliedPromoCode | null
 }
 
-function PromoCodeInput({ onApply, onRemove, appliedPromo }: PromoCodeInputProps) {
+interface PromoCodeInputExtendedProps extends PromoCodeInputProps {
+  tenantId: string
+  subtotalCents: number
+}
+
+function PromoCodeInput({
+  onApply,
+  onRemove,
+  appliedPromo,
+  tenantId,
+  subtotalCents,
+}: PromoCodeInputExtendedProps) {
   const [code, setCode] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -54,32 +65,31 @@ function PromoCodeInput({ onApply, onRemove, appliedPromo }: PromoCodeInputProps
     setError(null)
 
     try {
-      // TODO: Implement actual promo code validation via API
-      // For now, simulate a successful promo
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+      const response = await fetch('/api/promo-codes/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: code.toUpperCase(),
+          tenantId,
+          subtotalCents,
+        }),
+      })
 
-      // Mock response - replace with actual API call
-      if (code.toUpperCase() === 'FIERCE20') {
-        onApply({
-          id: 'promo-1',
-          code: code.toUpperCase(),
-          discountType: 'percent',
-          discountValue: 20,
-          discountAmount: 0, // Calculated by context
-        })
-        setCode('')
-      } else if (code.toUpperCase() === 'SAVE50') {
-        onApply({
-          id: 'promo-2',
-          code: code.toUpperCase(),
-          discountType: 'fixed',
-          discountValue: 5000, // $50
-          discountAmount: 0,
-        })
-        setCode('')
-      } else {
-        setError('Invalid promo code')
+      const result = await response.json()
+
+      if (!response.ok) {
+        setError(result.error || 'Invalid promo code')
+        return
       }
+
+      onApply({
+        id: result.data.id,
+        code: result.data.code,
+        discountType: result.data.discountType,
+        discountValue: result.data.discountValue,
+        discountAmount: result.data.discountAmount,
+      })
+      setCode('')
     } catch {
       setError('Failed to validate code')
     } finally {
@@ -142,44 +152,30 @@ function PromoCodeInput({ onApply, onRemove, appliedPromo }: PromoCodeInputProps
   )
 }
 
-// Mock Stripe Card Input (replace with actual Stripe Elements)
-function CardInput() {
+// Stripe Checkout info panel
+function StripeCheckoutInfo() {
   return (
-    <div className="space-y-4">
-      <div className="space-y-1.5">
-        <label className="text-xs font-semibold uppercase tracking-wider text-white/60">
-          Card Number
-        </label>
-        <div className="relative">
-          <CreditCard className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
-          <input
-            type="text"
-            placeholder="1234 5678 9012 3456"
-            className="w-full pl-10 pr-4 py-3 bg-white/5 border border-white/10 text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-neon/50 focus:border-neon transition-all"
-          />
-        </div>
+    <div className="bg-white/5 border border-white/10 p-4 space-y-3">
+      <div className="flex items-center gap-2 text-white/80">
+        <Shield className="h-5 w-5 text-neon" />
+        <span className="text-sm font-medium">Secure Stripe Checkout</span>
       </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-1.5">
-          <label className="text-xs font-semibold uppercase tracking-wider text-white/60">
-            Expiry
-          </label>
-          <input
-            type="text"
-            placeholder="MM / YY"
-            className="w-full px-4 py-3 bg-white/5 border border-white/10 text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-neon/50 focus:border-neon transition-all"
-          />
+      <p className="text-xs text-white/50">
+        You'll be redirected to Stripe's secure checkout page to complete your payment.
+        All major credit cards are accepted.
+      </p>
+      <div className="flex items-center gap-4">
+        <div className="flex items-center gap-1">
+          <CreditCard className="h-4 w-4 text-white/40" />
+          <span className="text-xs text-white/40">Visa</span>
         </div>
-        <div className="space-y-1.5">
-          <label className="text-xs font-semibold uppercase tracking-wider text-white/60">
-            CVC
-          </label>
-          <input
-            type="text"
-            placeholder="123"
-            className="w-full px-4 py-3 bg-white/5 border border-white/10 text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-neon/50 focus:border-neon transition-all"
-          />
+        <div className="flex items-center gap-1">
+          <CreditCard className="h-4 w-4 text-white/40" />
+          <span className="text-xs text-white/40">Mastercard</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <CreditCard className="h-4 w-4 text-white/40" />
+          <span className="text-xs text-white/40">Amex</span>
         </div>
       </div>
     </div>
@@ -198,23 +194,49 @@ export function PaymentStep({ onComplete, onBack }: PaymentStepProps) {
       return
     }
 
+    if (!state.campSession) {
+      setError('No camp selected')
+      return
+    }
+
     setIsProcessing(true)
     setError(null)
 
     try {
-      // TODO: Implement actual Stripe payment processing
-      // 1. Create PaymentIntent on server
-      // 2. Confirm payment with Stripe.js
-      // 3. Handle result
+      // Build registration payload
+      const payload = {
+        campId: state.campSession.id,
+        tenantId: state.campSession.tenantId,
+        parent: state.parentInfo,
+        campers: state.campers,
+        addOns: state.selectedAddOns,
+        promoCode: state.promoCode?.code || null,
+        totals,
+      }
 
-      // Mock payment processing
-      await new Promise((resolve) => setTimeout(resolve, 2000))
+      // Call checkout API
+      const response = await fetch('/api/registrations/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
 
-      // Mock successful payment
-      const mockPaymentIntentId = `pi_${Date.now()}_mock`
-      onComplete(mockPaymentIntentId)
-    } catch {
-      setError('Payment failed. Please try again.')
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to create registration')
+      }
+
+      // Redirect to Stripe Checkout (or demo checkout)
+      if (result.data?.checkoutUrl) {
+        window.location.href = result.data.checkoutUrl
+      } else {
+        // For demo mode without redirect
+        onComplete(result.data?.sessionId || `demo_${Date.now()}`)
+      }
+    } catch (err) {
+      console.error('[PaymentStep] Checkout error:', err)
+      setError(err instanceof Error ? err.message : 'Payment failed. Please try again.')
       setIsProcessing(false)
     }
   }
@@ -282,10 +304,12 @@ export function PaymentStep({ onComplete, onBack }: PaymentStepProps) {
           onApply={applyPromo}
           onRemove={removePromo}
           appliedPromo={state.promoCode}
+          tenantId={state.campSession?.tenantId || ''}
+          subtotalCents={totals.campSubtotal - totals.siblingDiscount + totals.addOnsSubtotal}
         />
       </div>
 
-      {/* Payment Form */}
+      {/* Payment Info */}
       <div className="space-y-4">
         <div className="flex items-center gap-2">
           <CreditCard className="h-5 w-5 text-neon" />
@@ -294,15 +318,7 @@ export function PaymentStep({ onComplete, onBack }: PaymentStepProps) {
           </h2>
         </div>
 
-        <div className="bg-white/5 border border-white/10 p-4">
-          <CardInput />
-
-          {/* Security Note */}
-          <div className="mt-4 flex items-center gap-2 text-xs text-white/40">
-            <Lock className="h-3 w-3" />
-            <span>Your payment info is encrypted and secure</span>
-          </div>
-        </div>
+        <StripeCheckoutInfo />
       </div>
 
       {/* Terms */}
@@ -353,12 +369,12 @@ export function PaymentStep({ onComplete, onBack }: PaymentStepProps) {
           {isProcessing ? (
             <>
               <Loader2 className="h-5 w-5 animate-spin mr-2" />
-              Processing...
+              Creating Registration...
             </>
           ) : (
             <>
               <Lock className="h-5 w-5 mr-2" />
-              Pay {formatCents(totals.total)}
+              Continue to Payment ({formatCents(totals.total)})
             </>
           )}
         </Button>

@@ -1,7 +1,7 @@
 /**
  * Revenue Service
  *
- * SHELL: Real-time revenue dashboard and royalty automation
+ * Real-time revenue dashboard and royalty automation for Empowered Sports Camp.
  *
  * Handles:
  * - Session-level revenue dashboards
@@ -11,6 +11,7 @@
  */
 
 import { prisma } from '@/lib/db/client'
+import type { Prisma } from '@/generated/prisma'
 
 // =============================================================================
 // Types
@@ -87,7 +88,7 @@ export interface RevenueSnapshot {
 // =============================================================================
 
 /**
- * SHELL: Get real-time revenue dashboard for a camp session
+ * Get real-time revenue dashboard for a camp session
  */
 export async function getSessionRevenueDashboard(params: {
   campSessionId: string
@@ -95,9 +96,9 @@ export async function getSessionRevenueDashboard(params: {
   role: string
 }): Promise<{ data: SessionRevenueDashboard | null; error: Error | null }> {
   try {
-    const { campSessionId, tenantId, role } = params
+    const { campSessionId, tenantId } = params
 
-    // SHELL: Fetch camp session data
+    // Fetch camp session data with tenant
     const camp = await prisma.camp.findFirst({
       where: {
         id: campSessionId,
@@ -113,38 +114,79 @@ export async function getSessionRevenueDashboard(params: {
       return { data: null, error: new Error('Camp session not found') }
     }
 
-    // SHELL: Calculate revenue metrics
-    // TODO: Implement full revenue calculation
+    // Calculate revenue metrics
     const confirmedRegistrations = camp.registrations.filter(
       (r) => r.status === 'confirmed'
     )
+    const refundedRegistrations = camp.registrations.filter(
+      (r) => r.status === 'refunded'
+    )
 
-    // SHELL: Calculate totals (amounts are in cents)
-    const registrationRevenue = confirmedRegistrations.reduce(
+    // Calculate totals (amounts are in cents, convert to dollars)
+    const registrationRevenueCents = confirmedRegistrations.reduce(
       (sum, r) => sum + (r.totalPriceCents || 0),
       0
-    ) / 100 // Convert cents to dollars
+    )
+    const registrationRevenue = registrationRevenueCents / 100
 
-    // SHELL: Get upsell revenue from shop orders
-    // TODO: Query shop_orders related to this camp session
+    // Get upsell revenue from shop orders for this tenant during the camp period
+    const shopOrders = await prisma.shopOrder.findMany({
+      where: {
+        licenseeId: tenantId,
+        status: { in: ['processing', 'shipped', 'delivered'] },
+        createdAt: {
+          gte: camp.startDate,
+          lte: camp.endDate,
+        },
+      },
+      select: { totalCents: true },
+    })
+    const upsellRevenueCents = shopOrders.reduce((sum, o) => sum + (o.totalCents || 0), 0)
+    const upsellRevenue = upsellRevenueCents / 100
 
-    // SHELL: Calculate refunds
-    // TODO: Query refund records
+    // Calculate refunds from refunded registrations
+    const refundsCents = refundedRegistrations.reduce(
+      (sum, r) => sum + (r.totalPriceCents || 0),
+      0
+    )
+    const refunds = refundsCents / 100
 
-    const grossRevenue = registrationRevenue // + upsellRevenue
-    const netRevenue = grossRevenue // - refunds
+    const grossRevenue = registrationRevenue + upsellRevenue
+    const netRevenue = grossRevenue - refunds
 
-    // SHELL: Calculate ARPC
+    // Calculate ARPC (Average Revenue Per Camper)
     const arpc = confirmedRegistrations.length > 0
       ? netRevenue / confirmedRegistrations.length
       : 0
 
-    // SHELL: Get royalty info
-    // TODO: Query royalties table after it's created
-    const royaltyRate = 0.05 // Default 5% - TODO: get from tenant settings
+    // Get royalty rate from tenant settings (default 8%)
+    const royaltyRate = camp.tenant.royaltyRate
+      ? Number(camp.tenant.royaltyRate)
+      : 0.08
     const estimatedRoyalty = grossRevenue * royaltyRate
 
-    console.log('[Revenue] SHELL: Would return revenue dashboard for session:', campSessionId)
+    // Check for existing royalty invoice for this camp
+    const existingInvoice = await prisma.royaltyInvoice.findFirst({
+      where: {
+        tenantId,
+        campId: campSessionId,
+      },
+      select: { status: true },
+    })
+
+    // Map database status to our RoyaltyStatus type
+    let royaltyStatus: RoyaltyStatus = 'PENDING'
+    if (existingInvoice) {
+      const statusMap: Record<string, RoyaltyStatus> = {
+        pending: 'CALCULATED',
+        invoiced: 'INVOICED',
+        paid: 'PAID',
+        overdue: 'INVOICED',
+        disputed: 'INVOICED',
+        waived: 'PAID',
+      }
+      royaltyStatus = statusMap[existingInvoice.status] || 'PENDING'
+    }
 
     return {
       data: {
@@ -159,8 +201,8 @@ export async function getSessionRevenueDashboard(params: {
         revenue: {
           grossRevenue,
           registrationRevenue,
-          upsellRevenue: 0, // SHELL: Calculate from shop orders
-          refunds: 0, // SHELL: Calculate from refund records
+          upsellRevenue,
+          refunds,
           netRevenue,
         },
         metrics: {
@@ -174,7 +216,7 @@ export async function getSessionRevenueDashboard(params: {
         royalty: {
           rate: royaltyRate,
           estimatedAmount: estimatedRoyalty,
-          status: 'PENDING', // SHELL: Get actual status
+          status: royaltyStatus,
         },
       },
       error: null,
@@ -186,7 +228,8 @@ export async function getSessionRevenueDashboard(params: {
 }
 
 /**
- * SHELL: Get revenue trends for a tenant over time
+ * Get revenue trends for a tenant over time
+ * Uses revenue snapshots for historical data.
  */
 export async function getSessionRevenueTrends(params: {
   tenantId: string
@@ -196,16 +239,16 @@ export async function getSessionRevenueTrends(params: {
   endDate?: string
 }): Promise<{ data: { trends: RevenueTrendData[] } | null; error: Error | null }> {
   try {
-    const { tenantId, role, range, startDate, endDate } = params
+    const { tenantId, range, startDate, endDate } = params
 
-    // SHELL: Calculate date range based on range parameter
+    // Calculate date range based on range parameter
     const now = new Date()
     let rangeStart: Date
     let rangeEnd: Date = now
 
     switch (range) {
       case 'season':
-        // SHELL: Current season (e.g., summer camps May-August)
+        // Current season (e.g., summer camps May-August)
         rangeStart = new Date(now.getFullYear(), 4, 1) // May 1
         rangeEnd = new Date(now.getFullYear(), 7, 31) // August 31
         break
@@ -220,9 +263,7 @@ export async function getSessionRevenueTrends(params: {
         rangeStart = new Date(now.getFullYear(), 0, 1)
     }
 
-    // SHELL: Query revenue snapshots or calculate from registrations
-    // TODO: Implement after revenue_snapshots table is created
-    /*
+    // Query revenue snapshots for the period
     const snapshots = await prisma.revenueSnapshot.findMany({
       where: {
         tenantId,
@@ -231,24 +272,65 @@ export async function getSessionRevenueTrends(params: {
       },
       orderBy: { periodStart: 'asc' },
     })
-    */
 
-    console.log('[Revenue] SHELL: Would return revenue trends for tenant:', {
-      tenantId,
-      range,
-      rangeStart,
-      rangeEnd,
+    // Convert snapshots to trend data
+    const trends: RevenueTrendData[] = snapshots.map((s) => {
+      // Format period as YYYY-MM from periodStart
+      const period = s.periodStart.toISOString().substring(0, 7)
+      return {
+        period,
+        grossRevenue: s.grossRevenueCents / 100,
+        netRevenue: s.netRevenueCents / 100,
+        registrations: s.totalCampers,
+        arpc: s.arpcCents / 100,
+      }
     })
 
-    // SHELL: Return mock trend data
-    const mockTrends: RevenueTrendData[] = [
-      { period: '2024-06', grossRevenue: 45000, netRevenue: 42000, registrations: 120, arpc: 350 },
-      { period: '2024-07', grossRevenue: 62000, netRevenue: 58000, registrations: 165, arpc: 352 },
-      { period: '2024-08', grossRevenue: 38000, netRevenue: 35500, registrations: 98, arpc: 362 },
-    ]
+    // If no snapshots exist, calculate from registrations directly
+    if (trends.length === 0) {
+      const registrations = await prisma.registration.findMany({
+        where: {
+          tenantId,
+          status: 'confirmed',
+          createdAt: {
+            gte: rangeStart,
+            lte: rangeEnd,
+          },
+        },
+        select: {
+          totalPriceCents: true,
+          createdAt: true,
+        },
+      })
+
+      // Group by month
+      const monthlyData = new Map<string, { gross: number; count: number }>()
+
+      for (const reg of registrations) {
+        const period = reg.createdAt.toISOString().substring(0, 7)
+        const current = monthlyData.get(period) || { gross: 0, count: 0 }
+        current.gross += reg.totalPriceCents || 0
+        current.count += 1
+        monthlyData.set(period, current)
+      }
+
+      // Convert to trend data
+      for (const [period, data] of monthlyData) {
+        trends.push({
+          period,
+          grossRevenue: data.gross / 100,
+          netRevenue: data.gross / 100, // No refund data available in this query
+          registrations: data.count,
+          arpc: data.count > 0 ? (data.gross / 100) / data.count : 0,
+        })
+      }
+
+      // Sort by period
+      trends.sort((a, b) => a.period.localeCompare(b.period))
+    }
 
     return {
-      data: { trends: mockTrends },
+      data: { trends },
       error: null,
     }
   } catch (error) {
@@ -258,7 +340,7 @@ export async function getSessionRevenueTrends(params: {
 }
 
 /**
- * SHELL: Run royalty automation for a camp session
+ * Run royalty automation for a camp session
  *
  * Calculates royalty based on gross revenue and creates/updates royalty records.
  */
@@ -269,7 +351,7 @@ export async function runRoyaltyAutomationForSession(params: {
   try {
     const { campSessionId, tenantId } = params
 
-    // SHELL: Get session revenue
+    // Get session revenue
     const { data: revenueDashboard, error: revenueError } = await getSessionRevenueDashboard({
       campSessionId,
       tenantId,
@@ -280,70 +362,92 @@ export async function runRoyaltyAutomationForSession(params: {
       return { data: null, error: revenueError || new Error('Failed to get revenue data') }
     }
 
-    // SHELL: Get royalty rate from tenant settings or franchise agreement
-    // TODO: Query tenant settings for custom royalty rate
-    const royaltyRate = 0.05 // Default 5%
+    // Get royalty rate from revenue dashboard (already includes tenant settings)
+    const royaltyRate = revenueDashboard.royalty.rate
 
-    // SHELL: Calculate royalty amount
-    // TODO: Implement royalty formula using camp_session_compensation + gross revenue
-    const grossRevenue = revenueDashboard.revenue.grossRevenue
-    const royaltyAmount = grossRevenue * royaltyRate
+    // Calculate amounts in cents
+    const grossRevenueCents = Math.round(revenueDashboard.revenue.grossRevenue * 100)
+    const registrationRevenueCents = Math.round(revenueDashboard.revenue.registrationRevenue * 100)
+    const addonRevenueCents = Math.round(revenueDashboard.revenue.upsellRevenue * 100)
+    const refundsCents = Math.round(revenueDashboard.revenue.refunds * 100)
+    const netRevenueCents = grossRevenueCents - refundsCents
 
-    // SHELL: Create or update royalty record
-    // TODO: Implement after royalties table is created
-    /*
-    const royalty = await prisma.royalty.upsert({
+    // Calculate royalty in basis points and cents
+    const royaltyRateBps = Math.round(royaltyRate * 10000) // Convert to basis points
+    const royaltyDueCents = Math.round(grossRevenueCents * royaltyRate)
+
+    // Generate invoice number
+    const invoiceNumber = `ROY-${tenantId.substring(0, 8)}-${Date.now()}`
+
+    // Check for existing invoice for this camp
+    const existingInvoice = await prisma.royaltyInvoice.findFirst({
       where: {
-        campSessionId_tenantId: {
-          campSessionId,
-          tenantId,
-        },
-      },
-      update: {
-        grossRevenue,
-        royaltyRate,
-        royaltyAmount,
-        status: 'CALCULATED',
-        calculatedAt: new Date(),
-      },
-      create: {
-        campSessionId,
         tenantId,
-        grossRevenue,
-        royaltyRate,
-        royaltyAmount,
-        status: 'CALCULATED',
-        calculatedAt: new Date(),
+        campId: campSessionId,
       },
     })
-    */
 
-    console.log('[Revenue] SHELL: Would run royalty automation:', {
-      campSessionId,
-      grossRevenue,
-      royaltyRate,
-      royaltyAmount,
-    })
+    let invoice
+    if (existingInvoice) {
+      // Update existing invoice
+      invoice = await prisma.royaltyInvoice.update({
+        where: { id: existingInvoice.id },
+        data: {
+          grossRevenueCents,
+          registrationRevenueCents,
+          addonRevenueCents,
+          refundsTotalCents: refundsCents,
+          netRevenueCents,
+          royaltyRateBps,
+          royaltyDueCents,
+          totalDueCents: royaltyDueCents,
+          periodStart: new Date(revenueDashboard.period.startDate),
+          periodEnd: new Date(revenueDashboard.period.endDate),
+        },
+      })
+    } else {
+      // Create new invoice with due date 30 days from now
+      const dueDate = new Date()
+      dueDate.setDate(dueDate.getDate() + 30)
 
-    // SHELL: Notify licensee of calculated royalty
-    // TODO: Call createNotification
+      invoice = await prisma.royaltyInvoice.create({
+        data: {
+          tenantId,
+          campId: campSessionId,
+          invoiceNumber,
+          periodType: 'camp_session',
+          periodStart: new Date(revenueDashboard.period.startDate),
+          periodEnd: new Date(revenueDashboard.period.endDate),
+          grossRevenueCents,
+          registrationRevenueCents,
+          addonRevenueCents,
+          refundsTotalCents: refundsCents,
+          netRevenueCents,
+          royaltyRateBps,
+          royaltyDueCents,
+          totalDueCents: royaltyDueCents,
+          status: 'pending',
+          dueDate,
+        },
+      })
+    }
 
-    const mockRoyalty: RoyaltyRecord = {
-      id: `royalty_${Date.now()}`,
+    const royaltyRecord: RoyaltyRecord = {
+      id: invoice.id,
       campSessionId,
       tenantId,
-      grossRevenue,
+      grossRevenue: grossRevenueCents / 100,
       royaltyRate,
-      royaltyAmount,
+      royaltyAmount: royaltyDueCents / 100,
       status: 'CALCULATED',
-      calculatedAt: new Date().toISOString(),
-      invoicedAt: null,
-      paidAt: null,
-      notes: null,
+      calculatedAt: invoice.createdAt.toISOString(),
+      invoicedAt: invoice.generatedAt?.toISOString() || null,
+      paidAt: invoice.paidAt?.toISOString() || null,
+      notes: invoice.adjustmentNotes,
     }
 
     return {
-      data: mockRoyalty,
+      data: royaltyRecord,
       error: null,
     }
   } catch (error) {
@@ -353,7 +457,7 @@ export async function runRoyaltyAutomationForSession(params: {
 }
 
 /**
- * SHELL: Get royalty status for a licensee
+ * Get royalty status for a licensee
  */
 export async function getRoyaltyStatusForLicensee(params: {
   tenantId: string
@@ -372,79 +476,54 @@ export async function getRoyaltyStatusForLicensee(params: {
   try {
     const { tenantId, range } = params
 
-    // SHELL: Query royalties from database
-    // TODO: Implement after royalties table is created
-    /*
-    const royalties = await prisma.royalty.findMany({
+    // Query royalty invoices from database
+    const invoices = await prisma.royaltyInvoice.findMany({
       where: {
         tenantId,
-        ...(range ? { calculatedAt: { gte: new Date(range) } } : {}),
+        ...(range ? { createdAt: { gte: new Date(range) } } : {}),
       },
-      orderBy: { calculatedAt: 'desc' },
-      include: {
-        campSession: true,
-      },
+      orderBy: { createdAt: 'desc' },
     })
-    */
 
-    console.log('[Revenue] SHELL: Would get royalty status for tenant:', tenantId)
+    // Map database status to RoyaltyStatus
+    const statusMap: Record<string, RoyaltyStatus> = {
+      pending: 'CALCULATED',
+      invoiced: 'INVOICED',
+      paid: 'PAID',
+      overdue: 'INVOICED',
+      disputed: 'INVOICED',
+      waived: 'PAID',
+    }
 
-    // SHELL: Return mock data
-    const mockRoyalties: RoyaltyRecord[] = [
-      {
-        id: 'royalty_1',
-        campSessionId: 'session_1',
-        tenantId,
-        grossRevenue: 45000,
-        royaltyRate: 0.05,
-        royaltyAmount: 2250,
-        status: 'PAID',
-        calculatedAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-        invoicedAt: new Date(Date.now() - 25 * 24 * 60 * 60 * 1000).toISOString(),
-        paidAt: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(),
-        notes: null,
-      },
-      {
-        id: 'royalty_2',
-        campSessionId: 'session_2',
-        tenantId,
-        grossRevenue: 62000,
-        royaltyRate: 0.05,
-        royaltyAmount: 3100,
-        status: 'INVOICED',
-        calculatedAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
-        invoicedAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-        paidAt: null,
-        notes: null,
-      },
-      {
-        id: 'royalty_3',
-        campSessionId: 'session_3',
-        tenantId,
-        grossRevenue: 38000,
-        royaltyRate: 0.05,
-        royaltyAmount: 1900,
-        status: 'CALCULATED',
-        calculatedAt: new Date().toISOString(),
-        invoicedAt: null,
-        paidAt: null,
-        notes: null,
-      },
-    ]
+    // Convert to RoyaltyRecord format
+    const royalties: RoyaltyRecord[] = invoices.map((inv) => ({
+      id: inv.id,
+      campSessionId: inv.campId || '',
+      tenantId: inv.tenantId,
+      grossRevenue: inv.grossRevenueCents / 100,
+      royaltyRate: inv.royaltyRateBps / 10000, // Convert basis points to decimal
+      royaltyAmount: inv.totalDueCents / 100,
+      status: statusMap[inv.status] || 'PENDING',
+      calculatedAt: inv.createdAt.toISOString(),
+      invoicedAt: inv.generatedAt?.toISOString() || null,
+      paidAt: inv.paidAt?.toISOString() || null,
+      notes: inv.adjustmentNotes,
+    }))
 
-    const totalDue = mockRoyalties
+    // Calculate summary
+    const totalDue = royalties
       .filter((r) => r.status !== 'PAID')
       .reduce((sum, r) => sum + r.royaltyAmount, 0)
 
-    const totalPaid = mockRoyalties
+    const totalPaid = royalties
       .filter((r) => r.status === 'PAID')
       .reduce((sum, r) => sum + r.royaltyAmount, 0)
 
-    const pending = mockRoyalties.filter((r) => r.status === 'CALCULATED').length
+    const pending = royalties.filter((r) => r.status === 'CALCULATED').length
 
     return {
       data: {
-        royalties: mockRoyalties,
+        royalties,
         summary: {
           totalDue,
           totalPaid,
@@ -460,7 +539,7 @@ export async function getRoyaltyStatusForLicensee(params: {
 }
 
 /**
- * SHELL: Mark royalty as invoiced
+ * Mark royalty as invoiced
  */
 export async function markRoyaltyInvoiced(params: {
   royaltyId: string
@@ -468,18 +547,36 @@ export async function markRoyaltyInvoiced(params: {
   invoiceNumber?: string
 }): Promise<{ data: RoyaltyRecord | null; error: Error | null }> {
   try {
-    const { royaltyId, tenantId, invoiceNumber } = params
+    const { royaltyId, tenantId } = params
 
-    // SHELL: Update royalty record
-    // TODO: Implement after royalties table is created
-
-    console.log('[Revenue] SHELL: Would mark royalty as invoiced:', {
-      royaltyId,
-      invoiceNumber,
+    // Update royalty invoice status to invoiced
+    const invoice = await prisma.royaltyInvoice.update({
+      where: {
+        id: royaltyId,
+        tenantId,
+      },
+      data: {
+        status: 'invoiced',
+      },
     })
 
+    // Map to RoyaltyRecord format
+    const royaltyRecord: RoyaltyRecord = {
+      id: invoice.id,
+      campSessionId: invoice.campId || '',
+      tenantId: invoice.tenantId,
+      grossRevenue: invoice.grossRevenueCents / 100,
+      royaltyRate: invoice.royaltyRateBps / 10000,
+      royaltyAmount: invoice.totalDueCents / 100,
+      status: 'INVOICED',
+      calculatedAt: invoice.createdAt.toISOString(),
+      invoicedAt: invoice.generatedAt?.toISOString() || null,
+      paidAt: invoice.paidAt?.toISOString() || null,
+      notes: invoice.adjustmentNotes,
+    }
+
     return {
-      data: null, // SHELL: Return updated royalty
+      data: royaltyRecord,
       error: null,
     }
   } catch (error) {
@@ -489,7 +586,7 @@ export async function markRoyaltyInvoiced(params: {
 }
 
 /**
- * SHELL: Mark royalty as paid
+ * Mark royalty as paid
  */
 export async function markRoyaltyPaid(params: {
   royaltyId: string
@@ -499,16 +596,36 @@ export async function markRoyaltyPaid(params: {
   try {
     const { royaltyId, tenantId, paymentReference } = params
 
-    // SHELL: Update royalty record
-    // TODO: Implement after royalties table is created
-
-    console.log('[Revenue] SHELL: Would mark royalty as paid:', {
-      royaltyId,
-      paymentReference,
+    // Update royalty invoice status to paid
+    const invoice = await prisma.royaltyInvoice.update({
+      where: {
+        id: royaltyId,
+        tenantId,
+      },
+      data: {
+        status: 'paid',
+        paidAt: new Date(),
+        ...(paymentReference ? { paymentReference } : {}),
+      },
     })
 
+    // Map to RoyaltyRecord format
+    const royaltyRecord: RoyaltyRecord = {
+      id: invoice.id,
+      campSessionId: invoice.campId || '',
+      tenantId: invoice.tenantId,
+      grossRevenue: invoice.grossRevenueCents / 100,
+      royaltyRate: invoice.royaltyRateBps / 10000,
+      royaltyAmount: invoice.totalDueCents / 100,
+      status: 'PAID',
+      calculatedAt: invoice.createdAt.toISOString(),
+      invoicedAt: invoice.generatedAt?.toISOString() || null,
+      paidAt: invoice.paidAt?.toISOString() || null,
+      notes: invoice.adjustmentNotes,
+    }
+
     return {
-      data: null, // SHELL: Return updated royalty
+      data: royaltyRecord,
       error: null,
     }
   } catch (error) {
@@ -518,7 +635,8 @@ export async function markRoyaltyPaid(params: {
 }
 
 /**
- * SHELL: Create a revenue snapshot for reporting
+ * Create a revenue snapshot for a specific period
+ * Calculates and stores aggregated revenue metrics.
  */
 export async function createRevenueSnapshot(params: {
   tenantId: string
@@ -527,25 +645,146 @@ export async function createRevenueSnapshot(params: {
 }): Promise<{ data: RevenueSnapshot | null; error: Error | null }> {
   try {
     const { tenantId, periodStart, periodEnd } = params
+    const startDate = new Date(periodStart)
+    const endDate = new Date(periodEnd)
 
-    // SHELL: Calculate metrics for the period
-    // TODO: Aggregate from registrations, orders, refunds
+    // Get all camps within this period
+    const camps = await prisma.camp.findMany({
+      where: {
+        tenantId,
+        startDate: { gte: startDate },
+        endDate: { lte: endDate },
+      },
+      include: {
+        registrations: {
+          where: { status: 'confirmed' },
+        },
+      },
+    })
 
-    // SHELL: Create snapshot record
-    // TODO: Implement after revenue_snapshots table is created
+    // Calculate revenue from confirmed registrations (amounts in cents)
+    let grossRevenueCents = 0
+    let totalCampers = 0
 
-    console.log('[Revenue] SHELL: Would create revenue snapshot:', {
-      tenantId,
-      periodStart,
-      periodEnd,
+    for (const camp of camps) {
+      for (const reg of camp.registrations) {
+        grossRevenueCents += reg.totalPriceCents || 0
+        totalCampers += 1
+      }
+    }
+
+    // Get refunded registrations for this period
+    const refundedRegistrations = await prisma.registration.findMany({
+      where: {
+        tenantId,
+        status: 'refunded',
+        updatedAt: {
+          gte: startDate,
+          lte: endDate,
+        },
+      },
+      select: {
+        totalPriceCents: true,
+      },
+    })
+
+    const refundsCents = refundedRegistrations.reduce((sum, r) => sum + (r.totalPriceCents || 0), 0)
+    const netRevenueCents = grossRevenueCents - refundsCents
+    const arpcCents = totalCampers > 0 ? Math.round(netRevenueCents / totalCampers) : 0
+    const sessionsHeld = camps.length
+
+    // Upsert the snapshot (update if exists for this period)
+    const snapshot = await prisma.revenueSnapshot.upsert({
+      where: {
+        tenantId_periodStart_periodEnd: {
+          tenantId,
+          periodStart: startDate,
+          periodEnd: endDate,
+        },
+      },
+      update: {
+        grossRevenueCents,
+        netRevenueCents,
+        refundsCents,
+        totalCampers,
+        arpcCents,
+        sessionsHeld,
+      },
+      create: {
+        tenantId,
+        periodStart: startDate,
+        periodEnd: endDate,
+        grossRevenueCents,
+        netRevenueCents,
+        refundsCents,
+        totalCampers,
+        arpcCents,
+        sessionsHeld,
+      },
     })
 
     return {
-      data: null, // SHELL: Return created snapshot
+      data: {
+        id: snapshot.id,
+        tenantId: snapshot.tenantId,
+        periodStart: snapshot.periodStart.toISOString(),
+        periodEnd: snapshot.periodEnd.toISOString(),
+        grossRevenue: snapshot.grossRevenueCents / 100,
+        netRevenue: snapshot.netRevenueCents / 100,
+        arpc: snapshot.arpcCents / 100,
+        sessionsHeld: snapshot.sessionsHeld,
+        totalCampers: snapshot.totalCampers,
+        createdAt: snapshot.createdAt.toISOString(),
+      },
       error: null,
     }
   } catch (error) {
     console.error('[Revenue] Failed to create revenue snapshot:', error)
+    return { data: null, error: error as Error }
+  }
+}
+
+/**
+ * Get revenue snapshots for a tenant (for charts/reporting)
+ */
+export async function getRevenueSnapshots(params: {
+  tenantId: string
+  startDate?: string
+  endDate?: string
+  limit?: number
+}): Promise<{ data: { snapshots: RevenueSnapshot[] } | null; error: Error | null }> {
+  try {
+    const { tenantId, startDate, endDate, limit = 12 } = params
+
+    const snapshots = await prisma.revenueSnapshot.findMany({
+      where: {
+        tenantId,
+        ...(startDate ? { periodStart: { gte: new Date(startDate) } } : {}),
+        ...(endDate ? { periodEnd: { lte: new Date(endDate) } } : {}),
+      },
+      orderBy: { periodStart: 'desc' },
+      take: limit,
+    })
+
+    return {
+      data: {
+        snapshots: snapshots.map((s) => ({
+          id: s.id,
+          tenantId: s.tenantId,
+          periodStart: s.periodStart.toISOString(),
+          periodEnd: s.periodEnd.toISOString(),
+          grossRevenue: s.grossRevenueCents / 100,
+          netRevenue: s.netRevenueCents / 100,
+          arpc: s.arpcCents / 100,
+          sessionsHeld: s.sessionsHeld,
+          totalCampers: s.totalCampers,
+          createdAt: s.createdAt.toISOString(),
+        })),
+      },
+      error: null,
+    }
+  } catch (error) {
+    console.error('[Revenue] Failed to get revenue snapshots:', error)
     return { data: null, error: error as Error }
   }
 }

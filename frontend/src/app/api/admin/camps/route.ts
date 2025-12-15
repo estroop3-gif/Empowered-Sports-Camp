@@ -15,9 +15,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // For now, allow any authenticated user accessing admin routes
-    // TODO: Add proper role-based access once Cognito roles are fully set up
-    const userRole = user.role?.toLowerCase() || 'hq_admin' // Default to hq_admin for admin routes
+    // Only HQ admins and licensee owners can access admin camps
+    const allowedRoles = ['hq_admin', 'licensee_owner', 'director']
+    const userRole = user.role?.toLowerCase() || ''
+
+    if (!allowedRoles.includes(userRole)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
 
     // If not HQ admin, scope to their tenant
     const scopedTenantId = userRole === 'hq_admin' ? undefined : user.tenantId

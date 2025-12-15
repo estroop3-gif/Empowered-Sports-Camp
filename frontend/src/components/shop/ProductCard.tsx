@@ -10,7 +10,7 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { ShoppingBag, Star, Sparkles, Heart } from 'lucide-react'
-import { type ShopProduct, CATEGORY_LABELS, formatPrice } from '@/lib/services/shop'
+import { type ShopProduct, CATEGORY_LABELS, formatPrice } from '@/lib/utils/shop-utils'
 
 interface ProductCardProps {
   product: ShopProduct

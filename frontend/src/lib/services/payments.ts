@@ -1,22 +1,37 @@
 /**
  * Payments Service
  *
- * SHELL: Stripe integration for camp registrations and shop orders
+ * Stripe integration for camp registrations and shop orders
+ *
+ * SETUP REQUIRED:
+ * 1. Create a Stripe account at https://dashboard.stripe.com
+ * 2. Get your API keys from https://dashboard.stripe.com/apikeys
+ * 3. Add to .env:
+ *    - STRIPE_SECRET_KEY=sk_live_xxx (or sk_test_xxx for testing)
+ *    - STRIPE_WEBHOOK_SECRET=whsec_xxx
+ *    - NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_xxx (or pk_test_xxx for testing)
+ * 4. Set up webhook endpoint in Stripe Dashboard:
+ *    - URL: https://yourdomain.com/api/stripe/webhook
+ *    - Events: checkout.session.completed, payment_intent.succeeded,
+ *              payment_intent.payment_failed, charge.refunded
  *
  * Handles:
- * - Checkout session creation
+ * - Checkout session creation for camp registrations
+ * - Checkout session creation for shop orders
  * - Webhook processing for payment events
  * - Payment status tracking
  * - Refund processing
+ * - Stripe Connect for licensee payouts (optional)
  */
 
+import Stripe from 'stripe'
 import { prisma } from '@/lib/db/client'
+import type { PaymentStatus, OrderStatus } from '@/generated/prisma'
+import { createNotification } from './notifications'
 
 // =============================================================================
 // Types
 // =============================================================================
-
-export type PaymentStatus = 'PENDING' | 'COMPLETED' | 'FAILED' | 'REFUNDED' | 'CANCELLED'
 
 export interface CheckoutSessionResult {
   checkoutUrl: string
@@ -44,17 +59,40 @@ export interface PaymentRecord {
 // Configuration
 // =============================================================================
 
-// SHELL: Stripe configuration from environment
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || ''
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || ''
-const STRIPE_PUBLISHABLE_KEY = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || ''
+
+/**
+ * Check if Stripe is properly configured
+ */
+export function isStripeConfigured(): boolean {
+  return !!STRIPE_SECRET_KEY && STRIPE_SECRET_KEY.startsWith('sk_')
+}
+
+// Initialize Stripe SDK (lazy initialization)
+let stripeInstance: Stripe | null = null
+
+function getStripe(): Stripe {
+  if (!stripeInstance) {
+    if (!isStripeConfigured()) {
+      throw new Error(
+        'Stripe is not configured. Please add STRIPE_SECRET_KEY to your environment variables. ' +
+        'See https://dashboard.stripe.com/apikeys to get your API keys.'
+      )
+    }
+    stripeInstance = new Stripe(STRIPE_SECRET_KEY, {
+      apiVersion: '2025-11-17.clover',
+    })
+  }
+  return stripeInstance
+}
 
 // =============================================================================
 // Service Functions
 // =============================================================================
 
 /**
- * SHELL: Create a Stripe Checkout session for camp registration
+ * Create a Stripe Checkout session for camp registration
  */
 export async function createStripeCheckoutSession(params: {
   campSessionId: string
@@ -66,7 +104,7 @@ export async function createStripeCheckoutSession(params: {
   try {
     const { campSessionId, registrationId, successUrl, cancelUrl, tenantId } = params
 
-    // SHELL: Fetch registration and camp details
+    // Fetch registration and camp details
     const registration = await prisma.registration.findFirst({
       where: {
         id: registrationId,
@@ -77,6 +115,12 @@ export async function createStripeCheckoutSession(params: {
         camp: true,
         athlete: true,
         parent: true,
+        registrationAddons: {
+          include: {
+            addon: true,
+            variant: true,
+          },
+        },
       },
     })
 
@@ -84,52 +128,115 @@ export async function createStripeCheckoutSession(params: {
       return { data: null, error: new Error('Registration not found') }
     }
 
-    // SHELL: Calculate total amount
-    // TODO: Include base price, add-ons, discounts, promo codes
+    // Calculate total amount
     const amountInCents = registration.totalPriceCents || registration.camp.priceCents || 0
 
-    // SHELL: Create Stripe Checkout Session
-    // TODO: Implement actual Stripe integration
-    /*
-    const stripe = new Stripe(STRIPE_SECRET_KEY)
+    if (amountInCents <= 0) {
+      // Free registration - mark as paid immediately
+      await prisma.registration.update({
+        where: { id: registrationId },
+        data: {
+          paymentStatus: 'paid',
+          status: 'confirmed',
+          paidAt: new Date(),
+        },
+      })
+
+      return {
+        data: {
+          checkoutUrl: `${successUrl}?free=true`,
+          sessionId: 'free_registration',
+        },
+        error: null,
+      }
+    }
+
+    // Check if Stripe is configured - use demo mode if not
+    if (!isStripeConfigured()) {
+      console.log('[Payments] Stripe not configured - using demo checkout')
+
+      // Create a demo session ID for tracking
+      const demoSessionId = `demo_${registrationId}_${Date.now()}`
+
+      // In demo mode, redirect to a simulated checkout page
+      // The success URL will include demo=true so the app knows to simulate success
+      return {
+        data: {
+          checkoutUrl: `${successUrl}?session_id=${demoSessionId}&demo=true`,
+          sessionId: demoSessionId,
+        },
+        error: null,
+      }
+    }
+
+    const stripe = getStripe()
+
+    // Build line items
+    const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = [
+      {
+        price_data: {
+          currency: 'usd',
+          product_data: {
+            name: registration.camp.name,
+            description: `Camp registration for ${registration.athlete?.firstName || 'Athlete'} ${registration.athlete?.lastName || ''}`.trim(),
+          },
+          unit_amount: registration.basePriceCents - registration.discountCents - registration.promoDiscountCents,
+        },
+        quantity: 1,
+      },
+    ]
+
+    // Add addon line items
+    for (const regAddon of registration.registrationAddons) {
+      lineItems.push({
+        price_data: {
+          currency: 'usd',
+          product_data: {
+            name: regAddon.addon.name,
+            description: regAddon.variant?.name || undefined,
+          },
+          unit_amount: regAddon.priceCents,
+        },
+        quantity: regAddon.quantity,
+      })
+    }
+
+    // Create Stripe Checkout Session
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
-      line_items: [
-        {
-          price_data: {
-            currency: 'usd',
-            product_data: {
-              name: registration.camp.name,
-              description: `Camp registration for ${registration.athlete?.firstName}`,
-            },
-            unit_amount: amountInCents,
-          },
-          quantity: 1,
-        },
-      ],
+      line_items: lineItems,
       mode: 'payment',
       success_url: `${successUrl}?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: cancelUrl,
+      customer_email: registration.parent?.email || undefined,
       metadata: {
+        type: 'registration',
         registrationId,
         campSessionId,
         tenantId,
+        athleteId: registration.athleteId,
+      },
+      payment_intent_data: {
+        metadata: {
+          type: 'registration',
+          registrationId,
+          tenantId,
+        },
       },
     })
-    */
 
-    console.log('[Payments] SHELL: Would create Stripe checkout session:', {
-      registrationId,
-      campSessionId,
-      amount: amountInCents / 100,
+    // Update registration with checkout session ID
+    await prisma.registration.update({
+      where: { id: registrationId },
+      data: {
+        paymentMethod: 'stripe',
+      },
     })
 
-    // SHELL: Return mock checkout URL
-    // TODO: Replace with actual Stripe session URL
     return {
       data: {
-        checkoutUrl: `https://checkout.stripe.com/placeholder?registration=${registrationId}`,
-        sessionId: `cs_test_${Date.now()}`,
+        checkoutUrl: session.url!,
+        sessionId: session.id,
       },
       error: null,
     }
@@ -140,7 +247,7 @@ export async function createStripeCheckoutSession(params: {
 }
 
 /**
- * SHELL: Create a Stripe Checkout session for shop order
+ * Create a Stripe Checkout session for shop order
  */
 export async function createShopCheckoutSession(params: {
   orderId: string
@@ -151,14 +258,20 @@ export async function createShopCheckoutSession(params: {
   try {
     const { orderId, successUrl, cancelUrl, tenantId } = params
 
-    // SHELL: Fetch order and items
+    // Fetch order and items
     const order = await prisma.shopOrder.findFirst({
       where: {
         id: orderId,
         licenseeId: tenantId,
       },
       include: {
-        items: true,
+        items: {
+          include: {
+            product: true,
+            variant: true,
+          },
+        },
+        profile: true,
       },
     })
 
@@ -166,27 +279,121 @@ export async function createShopCheckoutSession(params: {
       return { data: null, error: new Error('Order not found') }
     }
 
-    // SHELL: Build line items for Stripe
-    const lineItems = order.items.map((item) => ({
-      name: item.productName,
-      description: item.variantName,
+    if (order.totalCents <= 0) {
+      // Free order - mark as paid immediately
+      await prisma.shopOrder.update({
+        where: { id: orderId },
+        data: {
+          status: 'paid',
+        },
+      })
+
+      return {
+        data: {
+          checkoutUrl: `${successUrl}?free=true`,
+          sessionId: 'free_order',
+        },
+        error: null,
+      }
+    }
+
+    // Check if Stripe is configured - use demo mode if not
+    if (!isStripeConfigured()) {
+      console.log('[Payments] Stripe not configured - using demo checkout')
+
+      // Create a demo session ID for tracking
+      const demoSessionId = `demo_order_${orderId}_${Date.now()}`
+
+      // In demo mode, redirect to a simulated checkout page
+      return {
+        data: {
+          checkoutUrl: `${successUrl}?session_id=${demoSessionId}&demo=true`,
+          sessionId: demoSessionId,
+        },
+        error: null,
+      }
+    }
+
+    const stripe = getStripe()
+
+    // Build line items
+    const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = order.items.map((item) => ({
+      price_data: {
+        currency: order.currency || 'usd',
+        product_data: {
+          name: item.productName,
+          description: item.variantName || undefined,
+        },
+        unit_amount: item.unitPriceCents,
+      },
       quantity: item.quantity,
-      amount: item.unitPriceCents,
     }))
 
-    // SHELL: Create Stripe Checkout Session
-    // TODO: Implement actual Stripe integration
+    // Add shipping if applicable
+    if (order.shippingCents > 0) {
+      lineItems.push({
+        price_data: {
+          currency: order.currency || 'usd',
+          product_data: {
+            name: 'Shipping',
+          },
+          unit_amount: order.shippingCents,
+        },
+        quantity: 1,
+      })
+    }
 
-    console.log('[Payments] SHELL: Would create shop checkout session:', {
-      orderId,
-      lineItems,
-      total: order.totalCents,
+    // Add tax if applicable
+    if (order.taxCents > 0) {
+      lineItems.push({
+        price_data: {
+          currency: order.currency || 'usd',
+          product_data: {
+            name: 'Tax',
+          },
+          unit_amount: order.taxCents,
+        },
+        quantity: 1,
+      })
+    }
+
+    // Create Stripe Checkout Session
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ['card'],
+      line_items: lineItems,
+      mode: 'payment',
+      success_url: `${successUrl}?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: cancelUrl,
+      customer_email: order.customerEmail || order.profile?.email || undefined,
+      metadata: {
+        type: 'order',
+        orderId,
+        tenantId,
+      },
+      payment_intent_data: {
+        metadata: {
+          type: 'order',
+          orderId,
+          tenantId,
+        },
+      },
+      shipping_address_collection: {
+        allowed_countries: ['US', 'CA'],
+      },
+    })
+
+    // Update order with checkout session ID
+    await prisma.shopOrder.update({
+      where: { id: orderId },
+      data: {
+        stripeCheckoutSessionId: session.id,
+      },
     })
 
     return {
       data: {
-        checkoutUrl: `https://checkout.stripe.com/placeholder?order=${orderId}`,
-        sessionId: `cs_test_${Date.now()}`,
+        checkoutUrl: session.url!,
+        sessionId: session.id,
       },
       error: null,
     }
@@ -197,55 +404,65 @@ export async function createShopCheckoutSession(params: {
 }
 
 /**
- * SHELL: Handle Stripe webhook events
+ * Handle Stripe webhook events
  */
 export async function handleStripeWebhook(
   payload: string | Buffer,
   signature: string
 ): Promise<{ data: WebhookResult | null; error: Error | null }> {
   try {
-    // SHELL: Verify webhook signature
-    // TODO: Implement Stripe signature verification
-    /*
-    const stripe = new Stripe(STRIPE_SECRET_KEY)
-    const event = stripe.webhooks.constructEvent(payload, signature, STRIPE_WEBHOOK_SECRET)
-    */
-
-    // SHELL: Parse event (mock for now)
-    const event = {
-      type: 'checkout.session.completed',
-      data: {
-        object: {
-          id: 'cs_test_xxx',
-          metadata: {
-            registrationId: null,
-            orderId: null,
-            tenantId: null,
-          },
-          payment_status: 'paid',
-        },
-      },
+    if (!isStripeConfigured()) {
+      console.log('[Payments] Stripe not configured - ignoring webhook')
+      return {
+        data: { processed: false, eventType: 'unknown', resourceId: null },
+        error: null,
+      }
     }
 
-    console.log('[Payments] SHELL: Would process webhook event:', event.type)
+    const stripe = getStripe()
 
-    // SHELL: Handle different event types
+    // Verify webhook signature
+    let event: Stripe.Event
+    try {
+      event = stripe.webhooks.constructEvent(
+        payload,
+        signature,
+        STRIPE_WEBHOOK_SECRET
+      )
+    } catch (err) {
+      console.error('[Payments] Webhook signature verification failed:', err)
+      return { data: null, error: new Error('Webhook signature verification failed') }
+    }
+
+    console.log('[Payments] Processing webhook event:', event.type)
+
+    let resourceId: string | null = null
+
+    // Handle different event types
     switch (event.type) {
-      case 'checkout.session.completed':
-        await handleCheckoutComplete(event.data.object as any)
+      case 'checkout.session.completed': {
+        const session = event.data.object as Stripe.Checkout.Session
+        resourceId = await handleCheckoutComplete(session)
         break
+      }
 
-      case 'payment_intent.succeeded':
-        // SHELL: Update payment record
+      case 'payment_intent.succeeded': {
+        const paymentIntent = event.data.object as Stripe.PaymentIntent
+        resourceId = await handlePaymentIntentSucceeded(paymentIntent)
         break
+      }
 
-      case 'payment_intent.payment_failed':
-        // SHELL: Handle failed payment, notify user
+      case 'payment_intent.payment_failed': {
+        const paymentIntent = event.data.object as Stripe.PaymentIntent
+        resourceId = await handlePaymentIntentFailed(paymentIntent)
         break
+      }
 
-      case 'charge.refunded':
-        // SHELL: Process refund, update records
+      case 'charge.refunded': {
+        const charge = event.data.object as Stripe.Charge
+        resourceId = await handleChargeRefunded(charge)
         break
+      }
 
       default:
         console.log('[Payments] Unhandled webhook event type:', event.type)
@@ -255,7 +472,7 @@ export async function handleStripeWebhook(
       data: {
         processed: true,
         eventType: event.type,
-        resourceId: null,
+        resourceId,
       },
       error: null,
     }
@@ -266,40 +483,269 @@ export async function handleStripeWebhook(
 }
 
 /**
- * SHELL: Process successful checkout
+ * Process successful checkout
  */
-async function handleCheckoutComplete(session: {
-  id: string
-  metadata: { registrationId?: string; orderId?: string; tenantId?: string }
-  payment_status: string
-}): Promise<void> {
-  const { metadata } = session
+async function handleCheckoutComplete(session: Stripe.Checkout.Session): Promise<string | null> {
+  const metadata = session.metadata || {}
+  const paymentIntentId = typeof session.payment_intent === 'string'
+    ? session.payment_intent
+    : session.payment_intent?.id
 
-  if (metadata.registrationId) {
-    // SHELL: Update registration status
-    // TODO: Update camp_registrations.status = 'CONFIRMED'
-    // TODO: Update camp_registrations.payment_status = 'COMPLETED'
-    // TODO: Send confirmation email
+  if (metadata.type === 'registration' && metadata.registrationId) {
+    // Update registration status
+    await prisma.registration.update({
+      where: { id: metadata.registrationId },
+      data: {
+        paymentStatus: 'paid',
+        status: 'confirmed',
+        stripePaymentIntentId: paymentIntentId,
+        paidAt: new Date(),
+      },
+    })
 
-    console.log('[Payments] SHELL: Would confirm registration:', metadata.registrationId)
+    // Get registration details for notification
+    const registration = await prisma.registration.findUnique({
+      where: { id: metadata.registrationId },
+      include: {
+        camp: true,
+        parent: true,
+        athlete: true,
+      },
+    })
+
+    if (registration) {
+      // Send confirmation notification to parent
+      createNotification({
+        userId: registration.parentId,
+        tenantId: registration.tenantId,
+        type: 'payment_confirmed',
+        title: 'Registration Confirmed!',
+        body: `${registration.athlete?.firstName}'s registration for ${registration.camp.name} has been confirmed. See you at camp!`,
+        category: 'camp',
+        severity: 'success',
+      }).catch((err) => console.error('[Payments] Failed to send confirmation notification:', err))
+    }
+
+    console.log('[Payments] Registration confirmed:', metadata.registrationId)
+    return metadata.registrationId
   }
 
-  if (metadata.orderId) {
-    // SHELL: Update order status
-    // TODO: Update shop_orders.status = 'PAID'
-    // TODO: Send order confirmation email
+  if (metadata.type === 'order' && metadata.orderId) {
+    // Update order status
+    await prisma.shopOrder.update({
+      where: { id: metadata.orderId },
+      data: {
+        status: 'paid',
+        stripePaymentIntentId: paymentIntentId,
+      },
+    })
 
-    console.log('[Payments] SHELL: Would confirm order:', metadata.orderId)
+    // Get order details for notification
+    const order = await prisma.shopOrder.findUnique({
+      where: { id: metadata.orderId },
+      include: {
+        profile: true,
+      },
+    })
+
+    if (order && order.profileId) {
+      // Send confirmation notification
+      createNotification({
+        userId: order.profileId,
+        tenantId: order.licenseeId || undefined,
+        type: 'payment_confirmed',
+        title: 'Order Confirmed!',
+        body: `Your order #${order.id.slice(0, 8)} has been confirmed and is being processed.`,
+        category: 'camp',
+        severity: 'success',
+      }).catch((err) => console.error('[Payments] Failed to send order notification:', err))
+    }
+
+    console.log('[Payments] Order confirmed:', metadata.orderId)
+    return metadata.orderId
   }
+
+  return null
 }
 
 /**
- * SHELL: Process a refund for a registration or order
+ * Handle successful payment intent
+ */
+async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent): Promise<string | null> {
+  const metadata = paymentIntent.metadata || {}
+
+  // This is typically handled by checkout.session.completed
+  // But we update the payment intent ID if needed
+  if (metadata.type === 'registration' && metadata.registrationId) {
+    await prisma.registration.update({
+      where: { id: metadata.registrationId },
+      data: {
+        stripePaymentIntentId: paymentIntent.id,
+      },
+    })
+    return metadata.registrationId
+  }
+
+  if (metadata.type === 'order' && metadata.orderId) {
+    await prisma.shopOrder.update({
+      where: { id: metadata.orderId },
+      data: {
+        stripePaymentIntentId: paymentIntent.id,
+      },
+    })
+    return metadata.orderId
+  }
+
+  return null
+}
+
+/**
+ * Handle failed payment intent
+ */
+async function handlePaymentIntentFailed(paymentIntent: Stripe.PaymentIntent): Promise<string | null> {
+  const metadata = paymentIntent.metadata || {}
+
+  if (metadata.type === 'registration' && metadata.registrationId) {
+    await prisma.registration.update({
+      where: { id: metadata.registrationId },
+      data: {
+        paymentStatus: 'failed',
+      },
+    })
+
+    // Get registration for notification
+    const registration = await prisma.registration.findUnique({
+      where: { id: metadata.registrationId },
+      include: { camp: true },
+    })
+
+    if (registration) {
+      createNotification({
+        userId: registration.parentId,
+        tenantId: registration.tenantId,
+        type: 'system_alert',
+        title: 'Payment Failed',
+        body: `Payment for ${registration.camp.name} registration was not successful. Please try again.`,
+        category: 'camp',
+        severity: 'error',
+        actionUrl: `/camps/${registration.campId}/register`,
+      }).catch((err) => console.error('[Payments] Failed to send failure notification:', err))
+    }
+
+    return metadata.registrationId
+  }
+
+  if (metadata.type === 'order' && metadata.orderId) {
+    await prisma.shopOrder.update({
+      where: { id: metadata.orderId },
+      data: {
+        status: 'failed',
+      },
+    })
+
+    const order = await prisma.shopOrder.findUnique({
+      where: { id: metadata.orderId },
+    })
+
+    if (order && order.profileId) {
+      createNotification({
+        userId: order.profileId,
+        tenantId: order.licenseeId || undefined,
+        type: 'system_alert',
+        title: 'Payment Failed',
+        body: `Payment for order #${order.id.slice(0, 8)} was not successful. Please try again.`,
+        category: 'camp',
+        severity: 'error',
+        actionUrl: '/shop/cart',
+      }).catch((err) => console.error('[Payments] Failed to send order failure notification:', err))
+    }
+
+    return metadata.orderId
+  }
+
+  return null
+}
+
+/**
+ * Handle refunded charge
+ */
+async function handleChargeRefunded(charge: Stripe.Charge): Promise<string | null> {
+  const paymentIntentId = typeof charge.payment_intent === 'string'
+    ? charge.payment_intent
+    : charge.payment_intent?.id
+
+  if (!paymentIntentId) return null
+
+  // Find registration with this payment intent
+  const registration = await prisma.registration.findFirst({
+    where: { stripePaymentIntentId: paymentIntentId },
+    include: { camp: true },
+  })
+
+  if (registration) {
+    const isFullRefund = charge.amount_refunded === charge.amount
+
+    await prisma.registration.update({
+      where: { id: registration.id },
+      data: {
+        paymentStatus: isFullRefund ? 'refunded' : 'partial',
+        status: isFullRefund ? 'refunded' : registration.status,
+      },
+    })
+
+    createNotification({
+      userId: registration.parentId,
+      tenantId: registration.tenantId,
+      type: 'payment_confirmed',
+      title: isFullRefund ? 'Refund Processed' : 'Partial Refund Processed',
+      body: `A ${isFullRefund ? 'full' : 'partial'} refund of $${(charge.amount_refunded / 100).toFixed(2)} has been processed for ${registration.camp.name}.`,
+      category: 'camp',
+      severity: 'info',
+    }).catch((err) => console.error('[Payments] Failed to send refund notification:', err))
+
+    return registration.id
+  }
+
+  // Find order with this payment intent
+  const order = await prisma.shopOrder.findFirst({
+    where: { stripePaymentIntentId: paymentIntentId },
+  })
+
+  if (order) {
+    const isFullRefund = charge.amount_refunded === charge.amount
+
+    await prisma.shopOrder.update({
+      where: { id: order.id },
+      data: {
+        status: isFullRefund ? 'refunded' : order.status,
+      },
+    })
+
+    if (order.profileId) {
+      createNotification({
+        userId: order.profileId,
+        tenantId: order.licenseeId || undefined,
+        type: 'payment_confirmed',
+        title: isFullRefund ? 'Refund Processed' : 'Partial Refund Processed',
+        body: `A ${isFullRefund ? 'full' : 'partial'} refund of $${(charge.amount_refunded / 100).toFixed(2)} has been processed for order #${order.id.slice(0, 8)}.`,
+        category: 'camp',
+        severity: 'info',
+      }).catch((err) => console.error('[Payments] Failed to send order refund notification:', err))
+    }
+
+    return order.id
+  }
+
+  return null
+}
+
+/**
+ * Process a refund for a registration or order
  */
 export async function processRefund(params: {
   resourceType: 'REGISTRATION' | 'ORDER'
   resourceId: string
-  amount?: number // Partial refund amount, null for full refund
+  amount?: number // Partial refund amount in dollars, null for full refund
   reason?: string
   tenantId: string
   processedByUserId: string
@@ -307,36 +753,78 @@ export async function processRefund(params: {
   try {
     const { resourceType, resourceId, amount, reason, tenantId, processedByUserId } = params
 
-    // SHELL: Fetch the original payment
-    // TODO: Query payment records to get Stripe payment intent ID
+    if (!isStripeConfigured()) {
+      return {
+        data: null,
+        error: new Error('Stripe is not configured. Please set up Stripe to process refunds.'),
+      }
+    }
 
-    // SHELL: Create Stripe refund
-    // TODO: Implement actual Stripe refund
-    /*
-    const stripe = new Stripe(STRIPE_SECRET_KEY)
+    let paymentIntentId: string | null = null
+    let originalAmount: number = 0
+
+    // Fetch the original payment intent ID
+    if (resourceType === 'REGISTRATION') {
+      const registration = await prisma.registration.findFirst({
+        where: { id: resourceId, tenantId },
+      })
+
+      if (!registration) {
+        return { data: null, error: new Error('Registration not found') }
+      }
+
+      if (!registration.stripePaymentIntentId) {
+        return { data: null, error: new Error('No payment to refund') }
+      }
+
+      paymentIntentId = registration.stripePaymentIntentId
+      originalAmount = registration.totalPriceCents
+    } else {
+      const order = await prisma.shopOrder.findFirst({
+        where: { id: resourceId, licenseeId: tenantId },
+      })
+
+      if (!order) {
+        return { data: null, error: new Error('Order not found') }
+      }
+
+      if (!order.stripePaymentIntentId) {
+        return { data: null, error: new Error('No payment to refund') }
+      }
+
+      paymentIntentId = order.stripePaymentIntentId
+      originalAmount = order.totalCents
+    }
+
+    const stripe = getStripe()
+
+    // Create Stripe refund
+    const refundAmount = amount ? Math.round(amount * 100) : undefined // undefined for full refund
     const refund = await stripe.refunds.create({
       payment_intent: paymentIntentId,
-      amount: amount ? Math.round(amount * 100) : undefined, // undefined for full refund
+      amount: refundAmount,
       reason: 'requested_by_customer',
+      metadata: {
+        processedByUserId,
+        resourceType,
+        resourceId,
+        internalReason: reason || 'Refund requested',
+      },
     })
-    */
 
-    console.log('[Payments] SHELL: Would process refund:', {
+    const refundedAmount = refund.amount / 100
+
+    console.log('[Payments] Refund processed:', {
+      refundId: refund.id,
+      amount: refundedAmount,
       resourceType,
       resourceId,
-      amount,
-      reason,
     })
-
-    // SHELL: Update records
-    // TODO: Update registration/order status
-    // TODO: Create refund record
-    // TODO: Send refund notification email
 
     return {
       data: {
-        refundId: `re_test_${Date.now()}`,
-        amount: amount || 0,
+        refundId: refund.id,
+        amount: refundedAmount,
       },
       error: null,
     }
@@ -347,7 +835,7 @@ export async function processRefund(params: {
 }
 
 /**
- * SHELL: Get payment status for a registration or order
+ * Get payment status for a registration or order
  */
 export async function getPaymentStatus(params: {
   resourceType: 'REGISTRATION' | 'ORDER'
@@ -357,16 +845,61 @@ export async function getPaymentStatus(params: {
   try {
     const { resourceType, resourceId, tenantId } = params
 
-    // SHELL: Query payment records
-    // TODO: Implement after payment_records table is created
+    if (resourceType === 'REGISTRATION') {
+      const registration = await prisma.registration.findFirst({
+        where: { id: resourceId, tenantId },
+      })
 
-    console.log('[Payments] SHELL: Would get payment status:', {
-      resourceType,
-      resourceId,
+      if (!registration) {
+        return { data: null, error: new Error('Registration not found') }
+      }
+
+      return {
+        data: {
+          id: registration.id,
+          stripePaymentIntentId: registration.stripePaymentIntentId,
+          amount: registration.totalPriceCents / 100,
+          currency: 'usd',
+          status: registration.paymentStatus,
+          resourceType: 'REGISTRATION',
+          resourceId: registration.id,
+          createdAt: registration.createdAt.toISOString(),
+        },
+        error: null,
+      }
+    }
+
+    const order = await prisma.shopOrder.findFirst({
+      where: { id: resourceId, licenseeId: tenantId },
     })
 
+    if (!order) {
+      return { data: null, error: new Error('Order not found') }
+    }
+
+    // Map order status to payment status
+    const paymentStatusMap: Record<OrderStatus, PaymentStatus> = {
+      pending: 'pending',
+      paid: 'paid',
+      processing: 'paid',
+      shipped: 'paid',
+      delivered: 'paid',
+      failed: 'failed',
+      cancelled: 'failed',
+      refunded: 'refunded',
+    }
+
     return {
-      data: null, // SHELL: Return payment record
+      data: {
+        id: order.id,
+        stripePaymentIntentId: order.stripePaymentIntentId,
+        amount: order.totalCents / 100,
+        currency: order.currency,
+        status: paymentStatusMap[order.status],
+        resourceType: 'ORDER',
+        resourceId: order.id,
+        createdAt: order.createdAt.toISOString(),
+      },
       error: null,
     }
   } catch (error) {
@@ -376,7 +909,9 @@ export async function getPaymentStatus(params: {
 }
 
 /**
- * SHELL: Get Stripe connected account for a licensee (for payouts)
+ * Get Stripe connected account for a licensee (for payouts)
+ *
+ * TODO: Add stripeAccountId field to Tenant model to enable this feature
  */
 export async function getConnectedAccount(params: {
   tenantId: string
@@ -384,14 +919,248 @@ export async function getConnectedAccount(params: {
   try {
     const { tenantId } = params
 
-    // SHELL: Fetch tenant's Stripe connected account
-    // TODO: Add stripeAccountId and stripeAccountStatus fields to Tenant model
-    console.log('[Payments] SHELL: Would fetch Stripe connected account for tenant:', tenantId)
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: {
+        id: true,
+        name: true,
+      },
+    })
 
-    // SHELL: Return null - no connected account configured yet
+    if (!tenant) {
+      return { data: null, error: new Error('Tenant not found') }
+    }
+
+    // TODO: Once Tenant model has stripeAccountId field, return it here
+    // For now, return null indicating no connected account
     return { data: null, error: null }
   } catch (error) {
     console.error('[Payments] Failed to get connected account:', error)
+    return { data: null, error: error as Error }
+  }
+}
+
+/**
+ * Create a Stripe Connect onboarding link for a licensee
+ *
+ * This allows licensees to receive direct payouts from camp registrations.
+ * Requires Stripe Connect to be enabled on your Stripe account.
+ */
+export async function createConnectOnboardingLink(params: {
+  tenantId: string
+  refreshUrl: string
+  returnUrl: string
+}): Promise<{ data: { url: string; accountId: string } | null; error: Error | null }> {
+  try {
+    const { tenantId, refreshUrl, returnUrl } = params
+
+    if (!isStripeConfigured()) {
+      return {
+        data: null,
+        error: new Error('Stripe is not configured. Please set up Stripe first.'),
+      }
+    }
+
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+    })
+
+    if (!tenant) {
+      return { data: null, error: new Error('Tenant not found') }
+    }
+
+    const stripe = getStripe()
+
+    // Create a Connect Express account
+    const account = await stripe.accounts.create({
+      type: 'express',
+      country: 'US',
+      email: tenant.contactEmail || undefined,
+      business_type: 'company',
+      company: {
+        name: tenant.name,
+      },
+      metadata: {
+        tenantId,
+      },
+    })
+
+    // TODO: Save account.id to tenant record
+    // await prisma.tenant.update({
+    //   where: { id: tenantId },
+    //   data: { stripeAccountId: account.id },
+    // })
+
+    // Create onboarding link
+    const accountLink = await stripe.accountLinks.create({
+      account: account.id,
+      refresh_url: refreshUrl,
+      return_url: returnUrl,
+      type: 'account_onboarding',
+    })
+
+    return {
+      data: {
+        url: accountLink.url,
+        accountId: account.id,
+      },
+      error: null,
+    }
+  } catch (error) {
+    console.error('[Payments] Failed to create Connect onboarding link:', error)
+    return { data: null, error: error as Error }
+  }
+}
+
+/**
+ * Retrieve a Stripe checkout session (for verifying payment after redirect)
+ */
+export async function retrieveCheckoutSession(params: {
+  sessionId: string
+}): Promise<{ data: { status: string; paymentStatus: string; metadata: Record<string, string>; isDemo?: boolean } | null; error: Error | null }> {
+  try {
+    const { sessionId } = params
+
+    if (sessionId === 'free_registration' || sessionId === 'free_order') {
+      return {
+        data: {
+          status: 'complete',
+          paymentStatus: 'paid',
+          metadata: {},
+        },
+        error: null,
+      }
+    }
+
+    // Handle demo sessions
+    if (sessionId.startsWith('demo_')) {
+      return {
+        data: {
+          status: 'complete',
+          paymentStatus: 'paid',
+          metadata: {},
+          isDemo: true,
+        },
+        error: null,
+      }
+    }
+
+    if (!isStripeConfigured()) {
+      return {
+        data: null,
+        error: new Error('Stripe is not configured'),
+      }
+    }
+
+    const stripe = getStripe()
+    const session = await stripe.checkout.sessions.retrieve(sessionId)
+
+    return {
+      data: {
+        status: session.status || 'unknown',
+        paymentStatus: session.payment_status || 'unknown',
+        metadata: session.metadata || {},
+      },
+      error: null,
+    }
+  } catch (error) {
+    console.error('[Payments] Failed to retrieve checkout session:', error)
+    return { data: null, error: error as Error }
+  }
+}
+
+/**
+ * Confirm a demo payment (simulates Stripe checkout completion)
+ *
+ * Call this after the user "completes" a demo checkout to update the database
+ */
+export async function confirmDemoPayment(params: {
+  sessionId: string
+}): Promise<{ data: { success: boolean; resourceId: string | null } | null; error: Error | null }> {
+  try {
+    const { sessionId } = params
+
+    if (!sessionId.startsWith('demo_')) {
+      return { data: null, error: new Error('Not a demo session') }
+    }
+
+    // Parse the session ID to get resource info
+    // Format: demo_{registrationId}_{timestamp} or demo_order_{orderId}_{timestamp}
+    const parts = sessionId.split('_')
+
+    if (parts[1] === 'order' && parts[2]) {
+      // It's a shop order
+      const orderId = parts[2]
+
+      await prisma.shopOrder.update({
+        where: { id: orderId },
+        data: {
+          status: 'paid',
+          stripePaymentIntentId: `demo_pi_${Date.now()}`,
+        },
+      })
+
+      // Get order for notification
+      const order = await prisma.shopOrder.findUnique({
+        where: { id: orderId },
+      })
+
+      if (order && order.profileId) {
+        createNotification({
+          userId: order.profileId,
+          tenantId: order.licenseeId || undefined,
+          type: 'payment_confirmed',
+          title: 'Order Confirmed! (Demo)',
+          body: `Your order #${order.id.slice(0, 8)} has been confirmed. This was a demo payment.`,
+          category: 'camp',
+          severity: 'success',
+        }).catch((err) => console.error('[Payments] Failed to send demo order notification:', err))
+      }
+
+      console.log('[Payments] Demo order payment confirmed:', orderId)
+      return { data: { success: true, resourceId: orderId }, error: null }
+    } else if (parts[1]) {
+      // It's a registration
+      const registrationId = parts[1]
+
+      await prisma.registration.update({
+        where: { id: registrationId },
+        data: {
+          paymentStatus: 'paid',
+          status: 'confirmed',
+          stripePaymentIntentId: `demo_pi_${Date.now()}`,
+          paidAt: new Date(),
+        },
+      })
+
+      // Get registration for notification
+      const registration = await prisma.registration.findUnique({
+        where: { id: registrationId },
+        include: {
+          camp: true,
+          athlete: true,
+        },
+      })
+
+      if (registration) {
+        createNotification({
+          userId: registration.parentId,
+          tenantId: registration.tenantId,
+          type: 'payment_confirmed',
+          title: 'Registration Confirmed! (Demo)',
+          body: `${registration.athlete?.firstName}'s registration for ${registration.camp.name} has been confirmed. This was a demo payment.`,
+          category: 'camp',
+          severity: 'success',
+        }).catch((err) => console.error('[Payments] Failed to send demo registration notification:', err))
+      }
+
+      console.log('[Payments] Demo registration payment confirmed:', registrationId)
+      return { data: { success: true, resourceId: registrationId }, error: null }
+    }
+
+    return { data: null, error: new Error('Could not parse demo session ID') }
+  } catch (error) {
+    console.error('[Payments] Failed to confirm demo payment:', error)
     return { data: null, error: error as Error }
   }
 }

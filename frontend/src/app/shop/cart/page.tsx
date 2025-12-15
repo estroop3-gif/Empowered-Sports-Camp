@@ -14,7 +14,7 @@ import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { useShopCart, type CartItemWithProduct } from '@/lib/shop/cart-context'
 import { useAuth } from '@/lib/auth/context'
-import { formatPrice } from '@/lib/services/shop'
+import { formatPrice } from '@/lib/utils/shop-utils'
 import {
   ShoppingBag,
   Trash2,

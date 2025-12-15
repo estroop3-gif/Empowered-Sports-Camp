@@ -1,14 +1,18 @@
 /**
  * Incentive Email Helper
  *
- * Sends compensation report emails using Resend.
+ * Sends compensation report emails using the email service.
  */
 
 import prisma from '@/lib/db/client'
+import { Resend } from 'resend'
 import type { CompensationSummary } from '@/lib/services/incentives'
 
 // HQ email for licensor notifications
 const HQ_OPS_EMAIL = process.env.HQ_OPS_EMAIL || 'ops@empoweredathletes.com'
+const DEFAULT_FROM_EMAIL = process.env.FROM_EMAIL || 'Empowered Sports Camp <noreply@empoweredsportscamp.com>'
+const RESEND_API_KEY = process.env.RESEND_API_KEY || ''
+const IS_DEVELOPMENT = process.env.NODE_ENV !== 'production'
 
 interface SendReportResult {
   success: boolean
@@ -52,28 +56,35 @@ export async function sendCompensationReportEmail(params: {
     const emailHtml = buildCompensationReportHtml(summary, tenant.name)
     const subject = `Compensation Report: ${summary.camp.name} - ${summary.staff.name}`
 
-    // TODO: Implement actual Resend integration
-    // For now, log the email that would be sent
-    console.log('[Email] Would send compensation report:', {
-      to: recipients,
-      cc: summary.staff.email,
-      subject,
-      // htmlLength: emailHtml.length,
-    })
+    // In development without API key, just log
+    if (IS_DEVELOPMENT && !RESEND_API_KEY) {
+      console.log('[Email] Would send compensation report:', {
+        to: recipients,
+        cc: summary.staff.email,
+        subject,
+      })
 
-    // When Resend is configured, use this:
-    /*
-    const { Resend } = await import('resend')
-    const resend = new Resend(process.env.RESEND_API_KEY)
+      return {
+        data: {
+          success: true,
+          sent_to: recipients,
+        },
+        error: null,
+      }
+    }
 
-    await resend.emails.send({
-      from: 'Empowered Sports Camp <noreply@empoweredathletes.com>',
-      to: recipients,
-      cc: summary.staff.email,
-      subject,
-      html: emailHtml,
-    })
-    */
+    // Send via Resend
+    if (RESEND_API_KEY) {
+      const resend = new Resend(RESEND_API_KEY)
+
+      await resend.emails.send({
+        from: DEFAULT_FROM_EMAIL,
+        to: recipients,
+        cc: summary.staff.email,
+        subject,
+        html: emailHtml,
+      })
+    }
 
     return {
       data: {

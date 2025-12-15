@@ -98,9 +98,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized - Please log in' }, { status: 401 })
     }
 
-    // Allow authenticated users to view templates
-    // TODO: Restrict to admin roles in production: ['hq_admin', 'licensee_owner', 'director']
-    const allowedRoles = ['hq_admin', 'licensee_owner', 'director', 'coach', 'parent']
+    // Only admin roles can view email templates
+    const allowedRoles = ['hq_admin', 'licensee_owner', 'director']
     if (!allowedRoles.includes(user.role)) {
       console.log('[API] Email templates - User role not allowed:', user.role)
       return NextResponse.json({ error: `Forbidden - Role '${user.role}' cannot access email templates.` }, { status: 403 })

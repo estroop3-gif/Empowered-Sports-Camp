@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { jwtDecode } from 'jwt-decode'
 
 /**
- * Authentication Middleware (Cognito)
+ * Authentication Proxy (Cognito)
  *
  * Handles:
  * - Route protection based on authentication (via JWT cookies)
@@ -10,7 +10,7 @@ import { jwtDecode } from 'jwt-decode'
  * - Redirect authenticated users away from auth pages
  *
  * Note: Full role-based access control is handled client-side
- * in the auth context. Middleware does basic auth checks only.
+ * in the auth context. Proxy does basic auth checks only.
  */
 
 interface CognitoIdToken {
@@ -53,7 +53,7 @@ function getUserIdFromToken(token: string): string | null {
   }
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname
 
   // Get auth token from cookies

@@ -11,7 +11,7 @@
  */
 
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react'
-import { getProductsByIds, type ShopProduct, type ShopProductVariant } from '@/lib/services/shop'
+import { type ShopProduct, type ShopProductVariant } from '@/lib/utils/shop-utils'
 
 // ============================================================================
 // TYPES
@@ -107,34 +107,44 @@ export function ShopCartProvider({ children }: { children: ReactNode }) {
       setLoading(true)
 
       const productIds = [...new Set(cart.map((item) => item.productId))]
-      const { data: products, error } = await getProductsByIds(productIds)
 
-      if (error || !products) {
+      try {
+        const response = await fetch(`/api/shop/products?ids=${productIds.join(',')}`)
+        if (!response.ok) {
+          throw new Error('Failed to fetch products')
+        }
+        const products: ShopProduct[] = await response.json()
+
+        if (!products || products.length === 0) {
+          console.error('No products found for cart')
+          setLoading(false)
+          return
+        }
+
+        // Build cart with products
+        const cartItems: CartItemWithProduct[] = []
+
+        for (const item of cart) {
+          const product = products.find((p) => p.id === item.productId)
+          if (!product) continue
+
+          const variant = item.variantId
+            ? product.variants?.find((v) => v.id === item.variantId) || null
+            : null
+
+          cartItems.push({
+            ...item,
+            product,
+            variant,
+          })
+        }
+
+        setCartWithProducts(cartItems)
+        setLoading(false)
+      } catch (error) {
         console.error('Failed to fetch cart products:', error)
         setLoading(false)
-        return
       }
-
-      // Build cart with products
-      const cartItems: CartItemWithProduct[] = []
-
-      for (const item of cart) {
-        const product = products.find((p) => p.id === item.productId)
-        if (!product) continue
-
-        const variant = item.variantId
-          ? product.variants?.find((v) => v.id === item.variantId) || null
-          : null
-
-        cartItems.push({
-          ...item,
-          product,
-          variant,
-        })
-      }
-
-      setCartWithProducts(cartItems)
-      setLoading(false)
     }
 
     fetchProducts()

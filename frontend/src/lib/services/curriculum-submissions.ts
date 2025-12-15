@@ -1,9 +1,9 @@
 /**
  * Curriculum Submissions Service
  *
- * SHELL: Curriculum submission and admin review
+ * Handles curriculum submission and admin review for Empowered Sports Camp.
  *
- * Handles:
+ * Features:
  * - Submitting curriculum contributions (from licensees, CITs, etc.)
  * - Listing submissions for review
  * - Approving/rejecting/requesting revisions on submissions
@@ -17,18 +17,21 @@
  */
 
 import { prisma } from '@/lib/db/client'
+import type { CurriculumSubmissionStatus as PrismaStatus, Prisma } from '@/generated/prisma'
+import { createNotification } from './notifications'
 
 // =============================================================================
 // Types
 // =============================================================================
 
+// Map to Prisma enum values (lowercase)
 export type CurriculumSubmissionStatus =
-  | 'DRAFT'
-  | 'SUBMITTED'
-  | 'UNDER_REVIEW'
-  | 'APPROVED'
-  | 'REJECTED'
-  | 'REVISION_REQUESTED'
+  | 'draft'
+  | 'submitted'
+  | 'under_review'
+  | 'approved'
+  | 'rejected'
+  | 'revision_requested'
 
 export type CurriculumLevel = 1 | 2 | 3 | 4 | 5
 
@@ -48,6 +51,7 @@ export interface CurriculumSubmissionData {
   reviewedByUserId: string | null
   reviewedByName: string | null
   reviewedAt: string | null
+  approvedBlockId: string | null
   createdAt: string
   updatedAt: string
 }
@@ -62,14 +66,59 @@ export interface SubmitCurriculumParams {
   role: string
   attachmentUrl?: string
   videoUrl?: string
+  saveAsDraft?: boolean
 }
 
 export interface ReviewCurriculumParams {
   submissionId: string
-  action: 'APPROVE' | 'REJECT' | 'REQUEST_REVISION'
+  action: 'approve' | 'reject' | 'request_revision'
   notes?: string
   reviewerUserId: string
+}
+
+// Helper to convert DB model to service data
+function toSubmissionData(submission: {
+  id: string
   tenantId: string
+  submittedByUserId: string
+  submittedBy: { firstName: string | null; lastName: string | null }
+  title: string
+  description: string
+  sport: string | null
+  level: number
+  videoUrl: string | null
+  attachmentUrl: string | null
+  status: PrismaStatus
+  adminNotes: string | null
+  reviewedByUserId: string | null
+  reviewedBy: { firstName: string | null; lastName: string | null } | null
+  reviewedAt: Date | null
+  approvedBlockId: string | null
+  createdAt: Date
+  updatedAt: Date
+}): CurriculumSubmissionData {
+  return {
+    id: submission.id,
+    tenantId: submission.tenantId,
+    submittedByUserId: submission.submittedByUserId,
+    submittedByName: `${submission.submittedBy.firstName || ''} ${submission.submittedBy.lastName || ''}`.trim() || 'Unknown',
+    title: submission.title,
+    description: submission.description,
+    sport: submission.sport,
+    level: submission.level as CurriculumLevel,
+    videoUrl: submission.videoUrl,
+    attachmentUrl: submission.attachmentUrl,
+    status: submission.status as CurriculumSubmissionStatus,
+    adminNotes: submission.adminNotes,
+    reviewedByUserId: submission.reviewedByUserId,
+    reviewedByName: submission.reviewedBy
+      ? `${submission.reviewedBy.firstName || ''} ${submission.reviewedBy.lastName || ''}`.trim() || 'Unknown'
+      : null,
+    reviewedAt: submission.reviewedAt?.toISOString() || null,
+    approvedBlockId: submission.approvedBlockId,
+    createdAt: submission.createdAt.toISOString(),
+    updatedAt: submission.updatedAt.toISOString(),
+  }
 }
 
 // =============================================================================
@@ -77,7 +126,7 @@ export interface ReviewCurriculumParams {
 // =============================================================================
 
 /**
- * SHELL: Submit a curriculum contribution for review
+ * Submit a curriculum contribution for review
  *
  * Can be submitted by:
  * - Licensees (curriculum for their camps)
@@ -95,73 +144,62 @@ export async function submitCurriculumContribution(
       level = 1,
       tenantId,
       submittedByUserId,
-      role,
       attachmentUrl,
       videoUrl,
+      saveAsDraft = false,
     } = params
 
-    // SHELL: Verify user exists
-    const profile = await prisma.profile.findUnique({
-      where: { id: submittedByUserId },
-    })
-
-    if (!profile) {
-      return { data: null, error: new Error('User not found') }
-    }
-
-    // SHELL: Create submission record
-    // TODO: Implement after curriculum_submissions table is created
-    /*
+    // Create submission record
     const submission = await prisma.curriculumSubmission.create({
       data: {
         tenantId,
         submittedByUserId,
         title,
         description,
-        sport,
+        sport: sport || null,
         level,
-        videoUrl,
-        attachmentUrl,
-        status: 'SUBMITTED',
+        videoUrl: videoUrl || null,
+        attachmentUrl: attachmentUrl || null,
+        status: saveAsDraft ? 'draft' : 'submitted',
+      },
+      include: {
+        submittedBy: {
+          select: { firstName: true, lastName: true },
+        },
+        reviewedBy: {
+          select: { firstName: true, lastName: true },
+        },
       },
     })
-    */
 
-    console.log('[CurriculumSubmissions] SHELL: Would create submission:', {
-      title,
-      submittedByUserId,
-      tenantId,
-    })
+    // If submitted (not draft), notify HQ admins
+    if (!saveAsDraft) {
+      // Find HQ admin users to notify
+      const admins = await prisma.userRoleAssignment.findMany({
+        where: {
+          role: 'hq_admin',
+          isActive: true,
+        },
+        select: { userId: true },
+      })
 
-    // SHELL: Check if this overlaps with EmpowerU Contribution Center
-    // Note: This is separate from EmpowerU contributions (which are for training modules).
-    // This is for curriculum blocks/templates that can be used in camp schedules.
+      const submitterName = `${submission.submittedBy.firstName || ''} ${submission.submittedBy.lastName || ''}`.trim() || 'Someone'
 
-    const mockSubmission: CurriculumSubmissionData = {
-      id: `curriculum_sub_${Date.now()}`,
-      tenantId,
-      submittedByUserId,
-      submittedByName: `${profile.firstName} ${profile.lastName}`,
-      title,
-      description,
-      sport: sport || null,
-      level,
-      videoUrl: videoUrl || null,
-      attachmentUrl: attachmentUrl || null,
-      status: 'SUBMITTED',
-      adminNotes: null,
-      reviewedByUserId: null,
-      reviewedByName: null,
-      reviewedAt: null,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      for (const admin of admins) {
+        createNotification({
+          userId: admin.userId,
+          type: 'system_alert',
+          title: 'New Curriculum Submission',
+          body: `${submitterName} submitted "${title}" for review.`,
+          category: 'system',
+          severity: 'info',
+          actionUrl: `/admin/curriculum-submissions/${submission.id}`,
+        }).catch((err) => console.error('[CurriculumSubmissions] Failed to notify admin:', err))
+      }
     }
 
-    // SHELL: Notify admins of new submission
-    // TODO: Call createNotification for admin users
-
     return {
-      data: mockSubmission,
+      data: toSubmissionData(submission),
       error: null,
     }
   } catch (error) {
@@ -171,13 +209,13 @@ export async function submitCurriculumContribution(
 }
 
 /**
- * SHELL: List curriculum submissions for review
+ * List curriculum submissions for review
  *
  * - HQ admins can see all submissions
- * - Licensees can see their own submissions
+ * - Licensees can see their own tenant's submissions
  */
 export async function listCurriculumSubmissionsForReview(params: {
-  tenantId: string
+  tenantId?: string
   role: string
   status?: CurriculumSubmissionStatus
   limit?: number
@@ -189,80 +227,36 @@ export async function listCurriculumSubmissionsForReview(params: {
   try {
     const { tenantId, role, status, limit = 50, offset = 0 } = params
 
-    // SHELL: Build query based on role
     // HQ admins see all, licensees see their tenant's submissions
     const isHqAdmin = role === 'hq_admin'
 
-    // SHELL: Query submissions from database
-    // TODO: Implement after curriculum_submissions table is created
-    /*
-    const submissions = await prisma.curriculumSubmission.findMany({
-      where: {
-        ...(isHqAdmin ? {} : { tenantId }),
-        ...(status ? { status } : {}),
-      },
-      include: {
-        submittedBy: true,
-        reviewedBy: true,
-      },
-      orderBy: { createdAt: 'desc' },
-      take: limit,
-      skip: offset,
-    })
-    */
+    const where: Prisma.CurriculumSubmissionWhereInput = {
+      ...(isHqAdmin ? {} : { tenantId }),
+      ...(status ? { status: status as PrismaStatus } : {}),
+    }
 
-    console.log('[CurriculumSubmissions] SHELL: Would list submissions for review:', {
-      tenantId,
-      role,
-      status,
-    })
-
-    // SHELL: Return mock data
-    const mockSubmissions: CurriculumSubmissionData[] = [
-      {
-        id: 'curriculum_sub_1',
-        tenantId,
-        submittedByUserId: 'user_1',
-        submittedByName: 'Jane Director',
-        title: 'Dynamic Warm-Up Routine',
-        description: 'A 10-minute warm-up routine designed for ages 8-12 that focuses on mobility and activation.',
-        sport: 'General',
-        level: 2,
-        videoUrl: 'https://youtube.com/watch?v=example',
-        attachmentUrl: null,
-        status: 'SUBMITTED',
-        adminNotes: null,
-        reviewedByUserId: null,
-        reviewedByName: null,
-        reviewedAt: null,
-        createdAt: new Date(Date.now() - 86400000).toISOString(),
-        updatedAt: new Date(Date.now() - 86400000).toISOString(),
-      },
-      {
-        id: 'curriculum_sub_2',
-        tenantId,
-        submittedByUserId: 'user_2',
-        submittedByName: 'Mike CIT',
-        title: 'Basketball Dribbling Drills',
-        description: 'Three progressive dribbling drills that can be done in stations.',
-        sport: 'Basketball',
-        level: 3,
-        videoUrl: null,
-        attachmentUrl: null,
-        status: 'UNDER_REVIEW',
-        adminNotes: null,
-        reviewedByUserId: null,
-        reviewedByName: null,
-        reviewedAt: null,
-        createdAt: new Date(Date.now() - 172800000).toISOString(),
-        updatedAt: new Date(Date.now() - 86400000).toISOString(),
-      },
-    ]
+    const [submissions, totalCount] = await Promise.all([
+      prisma.curriculumSubmission.findMany({
+        where,
+        include: {
+          submittedBy: {
+            select: { firstName: true, lastName: true },
+          },
+          reviewedBy: {
+            select: { firstName: true, lastName: true },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        skip: offset,
+      }),
+      prisma.curriculumSubmission.count({ where }),
+    ])
 
     return {
       data: {
-        submissions: mockSubmissions,
-        totalCount: mockSubmissions.length,
+        submissions: submissions.map(toSubmissionData),
+        totalCount,
       },
       error: null,
     }
@@ -273,88 +267,77 @@ export async function listCurriculumSubmissionsForReview(params: {
 }
 
 /**
- * SHELL: Review a curriculum submission (approve, reject, or request revision)
+ * Review a curriculum submission (approve, reject, or request revision)
  */
 export async function reviewCurriculumSubmission(
   params: ReviewCurriculumParams
 ): Promise<{ data: CurriculumSubmissionData | null; error: Error | null }> {
   try {
-    const { submissionId, action, notes, reviewerUserId, tenantId } = params
+    const { submissionId, action, notes, reviewerUserId } = params
 
-    // SHELL: Verify reviewer exists and has permission
-    const reviewer = await prisma.profile.findUnique({
-      where: { id: reviewerUserId },
-    })
-
-    if (!reviewer) {
-      return { data: null, error: new Error('Reviewer not found') }
-    }
-
-    // SHELL: Map action to status
-    const statusMap: Record<string, CurriculumSubmissionStatus> = {
-      APPROVE: 'APPROVED',
-      REJECT: 'REJECTED',
-      REQUEST_REVISION: 'REVISION_REQUESTED',
+    // Map action to status
+    const statusMap: Record<string, PrismaStatus> = {
+      approve: 'approved',
+      reject: 'rejected',
+      request_revision: 'revision_requested',
     }
 
     const newStatus = statusMap[action]
 
-    // SHELL: Update submission in database
-    // TODO: Implement after curriculum_submissions table is created
-    /*
+    // Update submission in database
     const submission = await prisma.curriculumSubmission.update({
       where: { id: submissionId },
       data: {
         status: newStatus,
-        adminNotes: notes,
+        adminNotes: notes || null,
         reviewedByUserId: reviewerUserId,
         reviewedAt: new Date(),
       },
       include: {
-        submittedBy: true,
-        reviewedBy: true,
+        submittedBy: {
+          select: { firstName: true, lastName: true },
+        },
+        reviewedBy: {
+          select: { firstName: true, lastName: true },
+        },
       },
     })
-    */
 
-    console.log('[CurriculumSubmissions] SHELL: Would review submission:', {
-      submissionId,
-      action,
-      newStatus,
-      notes,
-    })
+    // Notify submitter of review result
+    const reviewerName = submission.reviewedBy
+      ? `${submission.reviewedBy.firstName || ''} ${submission.reviewedBy.lastName || ''}`.trim()
+      : 'Admin'
 
-    // SHELL: If approved, create curriculum block
-    if (action === 'APPROVE') {
-      // TODO: Create CurriculumBlock record using existing curriculum.ts service
-      // TODO: Add to curriculum library
+    let notificationTitle = ''
+    let notificationBody = ''
+
+    switch (action) {
+      case 'approve':
+        notificationTitle = 'Curriculum Approved!'
+        notificationBody = `Your submission "${submission.title}" has been approved and added to the curriculum library.`
+        break
+      case 'reject':
+        notificationTitle = 'Curriculum Submission Rejected'
+        notificationBody = `Your submission "${submission.title}" was not approved.${notes ? ` Feedback: ${notes}` : ''}`
+        break
+      case 'request_revision':
+        notificationTitle = 'Revision Requested'
+        notificationBody = `Please revise your submission "${submission.title}".${notes ? ` Feedback: ${notes}` : ''}`
+        break
     }
 
-    // SHELL: Notify submitter of review result
-    // TODO: Call createNotification
-
-    const mockSubmission: CurriculumSubmissionData = {
-      id: submissionId,
-      tenantId,
-      submittedByUserId: 'user_1',
-      submittedByName: 'Jane Director',
-      title: 'Dynamic Warm-Up Routine',
-      description: 'A 10-minute warm-up routine...',
-      sport: 'General',
-      level: 2,
-      videoUrl: null,
-      attachmentUrl: null,
-      status: newStatus,
-      adminNotes: notes || null,
-      reviewedByUserId: reviewerUserId,
-      reviewedByName: `${reviewer.firstName} ${reviewer.lastName}`,
-      reviewedAt: new Date().toISOString(),
-      createdAt: new Date(Date.now() - 86400000).toISOString(),
-      updatedAt: new Date().toISOString(),
-    }
+    createNotification({
+      userId: submission.submittedByUserId,
+      tenantId: submission.tenantId,
+      type: 'system_alert',
+      title: notificationTitle,
+      body: notificationBody,
+      category: 'system',
+      severity: action === 'approve' ? 'success' : action === 'reject' ? 'error' : 'warning',
+    }).catch((err) => console.error('[CurriculumSubmissions] Failed to notify submitter:', err))
 
     return {
-      data: mockSubmission,
+      data: toSubmissionData(submission),
       error: null,
     }
   } catch (error) {
@@ -364,24 +347,47 @@ export async function reviewCurriculumSubmission(
 }
 
 /**
- * SHELL: Get a specific curriculum submission
+ * Get a specific curriculum submission
  */
 export async function getCurriculumSubmission(params: {
   submissionId: string
   userId: string
-  tenantId: string
+  tenantId?: string
   role: string
 }): Promise<{ data: CurriculumSubmissionData | null; error: Error | null }> {
   try {
     const { submissionId, userId, tenantId, role } = params
+    const isHqAdmin = role === 'hq_admin'
 
-    // SHELL: Query submission from database
-    // TODO: Implement after curriculum_submissions table is created
+    const submission = await prisma.curriculumSubmission.findFirst({
+      where: {
+        id: submissionId,
+        // HQ admins can see all, others can only see their tenant's or their own
+        ...(isHqAdmin
+          ? {}
+          : {
+              OR: [
+                { tenantId },
+                { submittedByUserId: userId },
+              ],
+            }),
+      },
+      include: {
+        submittedBy: {
+          select: { firstName: true, lastName: true },
+        },
+        reviewedBy: {
+          select: { firstName: true, lastName: true },
+        },
+      },
+    })
 
-    console.log('[CurriculumSubmissions] SHELL: Would get submission:', submissionId)
+    if (!submission) {
+      return { data: null, error: new Error('Submission not found or access denied') }
+    }
 
     return {
-      data: null, // SHELL: Return actual submission
+      data: toSubmissionData(submission),
       error: null,
     }
   } catch (error) {
@@ -391,31 +397,86 @@ export async function getCurriculumSubmission(params: {
 }
 
 /**
- * SHELL: Update a draft submission before submitting for review
+ * Update a draft submission before submitting for review
  */
 export async function updateCurriculumSubmission(params: {
   submissionId: string
   updates: Partial<SubmitCurriculumParams>
   userId: string
-  tenantId: string
 }): Promise<{ data: CurriculumSubmissionData | null; error: Error | null }> {
   try {
-    const { submissionId, updates, userId, tenantId } = params
+    const { submissionId, updates, userId } = params
 
-    // SHELL: Verify user owns this submission and it's still a draft
-    // TODO: Implement after curriculum_submissions table is created
+    // Verify user owns this submission and it's still editable (draft or revision_requested)
+    const existing = await prisma.curriculumSubmission.findFirst({
+      where: {
+        id: submissionId,
+        submittedByUserId: userId,
+        status: { in: ['draft', 'revision_requested'] },
+      },
+    })
 
-    console.log('[CurriculumSubmissions] SHELL: Would update submission:', {
-      submissionId,
-      updates,
+    if (!existing) {
+      return { data: null, error: new Error('Submission not found or cannot be edited') }
+    }
+
+    const submission = await prisma.curriculumSubmission.update({
+      where: { id: submissionId },
+      data: {
+        ...(updates.title && { title: updates.title }),
+        ...(updates.description && { description: updates.description }),
+        ...(updates.sport !== undefined && { sport: updates.sport || null }),
+        ...(updates.level && { level: updates.level }),
+        ...(updates.videoUrl !== undefined && { videoUrl: updates.videoUrl || null }),
+        ...(updates.attachmentUrl !== undefined && { attachmentUrl: updates.attachmentUrl || null }),
+        // If was revision_requested and being updated, set back to submitted
+        ...(existing.status === 'revision_requested' && { status: 'submitted' as PrismaStatus }),
+      },
+      include: {
+        submittedBy: {
+          select: { firstName: true, lastName: true },
+        },
+        reviewedBy: {
+          select: { firstName: true, lastName: true },
+        },
+      },
     })
 
     return {
-      data: null, // SHELL: Return updated submission
+      data: toSubmissionData(submission),
       error: null,
     }
   } catch (error) {
     console.error('[CurriculumSubmissions] Failed to update submission:', error)
+    return { data: null, error: error as Error }
+  }
+}
+
+/**
+ * Delete a draft submission
+ */
+export async function deleteCurriculumSubmission(params: {
+  submissionId: string
+  userId: string
+}): Promise<{ data: { success: boolean } | null; error: Error | null }> {
+  try {
+    const { submissionId, userId } = params
+
+    // Only allow deleting own drafts
+    const result = await prisma.curriculumSubmission.deleteMany({
+      where: {
+        id: submissionId,
+        submittedByUserId: userId,
+        status: 'draft',
+      },
+    })
+
+    return {
+      data: { success: result.count > 0 },
+      error: null,
+    }
+  } catch (error) {
+    console.error('[CurriculumSubmissions] Failed to delete submission:', error)
     return { data: null, error: error as Error }
   }
 }

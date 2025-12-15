@@ -456,13 +456,43 @@ export async function getTenantsForAssignment(): Promise<{
 /**
  * Get territory metrics
  */
-export async function getTerritoryMetrics(_territoryId: string): Promise<{
+export async function getTerritoryMetrics(territoryId: string): Promise<{
   data: { camp_count: number; registration_count: number } | null
   error: Error | null
 }> {
-  // TODO: Implement actual metrics query
-  return {
-    data: { camp_count: 0, registration_count: 0 },
-    error: null,
+  try {
+    // Get the territory to find the tenant
+    const territory = await prisma.territory.findUnique({
+      where: { id: territoryId },
+      select: { tenantId: true },
+    })
+
+    if (!territory || !territory.tenantId) {
+      return {
+        data: { camp_count: 0, registration_count: 0 },
+        error: null,
+      }
+    }
+
+    // Get camp count and registration count for the tenant
+    const [campCount, registrationCount] = await Promise.all([
+      prisma.camp.count({
+        where: { tenantId: territory.tenantId },
+      }),
+      prisma.registration.count({
+        where: {
+          camp: { tenantId: territory.tenantId },
+          status: { not: 'cancelled' },
+        },
+      }),
+    ])
+
+    return {
+      data: { camp_count: campCount, registration_count: registrationCount },
+      error: null,
+    }
+  } catch (err) {
+    console.error('[Territories] Failed to get metrics:', err)
+    return { data: null, error: err as Error }
   }
 }

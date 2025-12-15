@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils'
 import { useAuth } from '@/lib/auth/context'
 import { UserMenu, LogoutButton } from './user-menu'
 import { NotificationBell } from '@/components/notifications'
+import { MessageBell } from '@/components/messaging'
 
 /**
  * Navbar - Empowered Athletes Brand
@@ -111,6 +112,7 @@ export function Navbar() {
               >
                 Dashboard
               </Link>
+              <MessageBell />
               <NotificationBell />
               <UserMenu variant="navbar" />
             </>

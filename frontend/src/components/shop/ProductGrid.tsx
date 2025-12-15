@@ -9,7 +9,7 @@
 
 import { useState } from 'react'
 import { ProductCard } from './ProductCard'
-import { type ShopProduct, CATEGORY_LABELS } from '@/lib/services/shop'
+import { type ShopProduct, CATEGORY_LABELS } from '@/lib/utils/shop-utils'
 import { useShopCart } from '@/lib/shop/cart-context'
 import { Filter, Grid, List, ShoppingBag } from 'lucide-react'
 

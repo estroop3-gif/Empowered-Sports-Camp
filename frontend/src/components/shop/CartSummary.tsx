@@ -10,7 +10,7 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { useShopCart, type CartItemWithProduct } from '@/lib/shop/cart-context'
-import { formatPrice } from '@/lib/services/shop'
+import { formatPrice } from '@/lib/utils/shop-utils'
 import {
   ShoppingBag,
   Trash2,

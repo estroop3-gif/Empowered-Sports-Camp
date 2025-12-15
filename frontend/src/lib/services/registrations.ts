@@ -266,6 +266,106 @@ export async function fetchRegistrationById(
 }
 
 /**
+ * Create a new registration
+ */
+export async function createRegistration(params: {
+  tenantId: string
+  campId: string
+  athleteId: string
+  parentId: string
+  basePriceCents: number
+  discountCents: number
+  promoDiscountCents: number
+  addonsTotalCents: number
+  promoCodeId?: string | null
+  shirtSize?: string | null
+  specialConsiderations?: string | null
+  friendRequests?: string[]
+}): Promise<{ data: { registrationId: string } | null; error: Error | null }> {
+  try {
+    const {
+      tenantId,
+      campId,
+      athleteId,
+      parentId,
+      basePriceCents,
+      discountCents,
+      promoDiscountCents,
+      addonsTotalCents,
+      promoCodeId,
+      shirtSize,
+      specialConsiderations,
+      friendRequests,
+    } = params
+
+    const totalPriceCents = basePriceCents - discountCents - promoDiscountCents + addonsTotalCents
+
+    const registration = await prisma.registration.create({
+      data: {
+        tenantId,
+        campId,
+        athleteId,
+        parentId,
+        basePriceCents,
+        discountCents,
+        promoDiscountCents,
+        addonsTotalCents,
+        totalPriceCents,
+        promoCodeId,
+        shirtSize,
+        specialConsiderations,
+        friendRequests: friendRequests || [],
+        status: 'pending',
+        paymentStatus: 'pending',
+      },
+    })
+
+    // Increment promo code usage if used
+    if (promoCodeId) {
+      await prisma.promoCode.update({
+        where: { id: promoCodeId },
+        data: { currentUses: { increment: 1 } },
+      })
+    }
+
+    return { data: { registrationId: registration.id }, error: null }
+  } catch (error) {
+    console.error('[Registrations] Failed to create registration:', error)
+    return { data: null, error: error as Error }
+  }
+}
+
+/**
+ * Add addon to registration
+ */
+export async function addRegistrationAddon(params: {
+  registrationId: string
+  addonId: string
+  variantId?: string | null
+  quantity: number
+  priceCents: number
+}): Promise<{ data: { id: string } | null; error: Error | null }> {
+  try {
+    const { registrationId, addonId, variantId, quantity, priceCents } = params
+
+    const regAddon = await prisma.registrationAddon.create({
+      data: {
+        registrationId,
+        addonId,
+        variantId,
+        quantity,
+        priceCents,
+      },
+    })
+
+    return { data: { id: regAddon.id }, error: null }
+  } catch (error) {
+    console.error('[Registrations] Failed to add registration addon:', error)
+    return { data: null, error: error as Error }
+  }
+}
+
+/**
  * Count registrations by athlete
  */
 export async function countRegistrationsByAthlete(

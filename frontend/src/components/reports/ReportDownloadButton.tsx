@@ -1,5 +1,5 @@
 /**
- * SHELL: Report Download Button Component
+ * Report Download Button Component
  *
  * Reusable button for downloading various PDF reports.
  */
@@ -46,7 +46,7 @@ export function ReportDownloadButton({
       case 'camp-day':
         return 'campDayId'
       case 'curriculum':
-        return 'templateId'
+        return 'curriculumId'
       default:
         return 'campSessionId'
     }
@@ -75,10 +75,17 @@ export function ReportDownloadButton({
         throw new Error(result.error || 'Failed to generate report')
       }
 
-      // SHELL: In real implementation, this would trigger download
-      // For now, just log the result
-      console.log('[ReportDownloadButton] SHELL: Would download report:', result.data)
-      alert('Report generation queued. Download link will be available shortly.')
+      // Trigger download using base64 data
+      if (result.data?.base64) {
+        const link = document.createElement('a')
+        link.href = result.data.base64
+        link.download = result.data.filename || `report-${Date.now()}.pdf`
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+      } else {
+        throw new Error('No report data returned')
+      }
     } catch (err) {
       console.error('[ReportDownloadButton] Error:', err)
       setError(err instanceof Error ? err.message : 'Failed to generate report')

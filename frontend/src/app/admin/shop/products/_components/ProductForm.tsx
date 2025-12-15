@@ -16,7 +16,7 @@ import { useAuth } from '@/lib/auth/context'
 import {
   generateSlug,
   type ShopProductVariant,
-} from '@/lib/services/shop'
+} from '@/lib/utils/shop-utils'
 import {
   ArrowLeft,
   Save,

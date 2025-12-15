@@ -6,6 +6,9 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createLicenseeApplication } from '@/lib/services/licensee-application'
+import { sendTransactionalEmail } from '@/lib/services/email'
+
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'ops@empoweredathletes.com'
 
 export async function POST(request: NextRequest) {
   try {
@@ -57,7 +60,33 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // TODO: Send email notification to admin and confirmation to applicant
+    // Send email notifications
+    try {
+      // Notify admin of new application
+      await sendTransactionalEmail({
+        templateCode: 'LICENSEE_APPLICATION',
+        to: ADMIN_EMAIL,
+        context: {
+          applicantName: `${body.first_name} ${body.last_name}`,
+          city: body.city || 'Not specified',
+          state: body.state || 'Not specified',
+          applicationId: data?.id,
+        },
+      })
+
+      // Send confirmation to applicant
+      await sendTransactionalEmail({
+        templateCode: 'LICENSEE_STATUS_UPDATE',
+        to: body.email,
+        context: {
+          applicantName: body.first_name,
+          status: 'received',
+        },
+      })
+    } catch (emailError) {
+      // Log but don't fail the request if email fails
+      console.error('Failed to send application notification emails:', emailError)
+    }
 
     return NextResponse.json({
       success: true,

@@ -17,9 +17,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Allow authenticated users to view logs
-    // TODO: Restrict to admin roles in production: ['hq_admin', 'licensee_owner', 'director']
-    const allowedRoles = ['hq_admin', 'licensee_owner', 'director', 'coach', 'parent']
+    // Only admin roles can view email logs
+    const allowedRoles = ['hq_admin', 'licensee_owner', 'director']
     if (!allowedRoles.includes(user.role)) {
       console.log('[API] Email logs - User role not allowed:', user.role)
       return NextResponse.json({ error: `Forbidden - Role '${user.role}' cannot access email logs.` }, { status: 403 })

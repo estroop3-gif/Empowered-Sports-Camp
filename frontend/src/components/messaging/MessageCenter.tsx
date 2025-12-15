@@ -1,24 +1,31 @@
 /**
- * SHELL: Message Center Component
+ * Message Center Component
  *
  * Main messaging interface with thread list and compose functionality.
  */
 
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 
 interface MessageThread {
   id: string
-  subject: string
-  participants: { id: string; name: string }[]
+  subject: string | null
+  participants: { id: string; userId: string; name: string }[]
   lastMessage: {
-    content: string
-    sentAt: string
-    senderName: string
-  }
+    body: string
+    createdAt: string
+    fromUserName: string
+  } | null
   unreadCount: number
   type: string
+}
+
+interface MessageableUser {
+  id: string
+  name: string
+  email: string
+  role: string
 }
 
 interface MessageCenterProps {
@@ -31,6 +38,15 @@ export function MessageCenter({ className = '' }: MessageCenterProps) {
   const [error, setError] = useState<string | null>(null)
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null)
   const [showCompose, setShowCompose] = useState(false)
+
+  // Compose state
+  const [composeRecipient, setComposeRecipient] = useState<MessageableUser | null>(null)
+  const [composeSubject, setComposeSubject] = useState('')
+  const [composeBody, setComposeBody] = useState('')
+  const [composeSending, setComposeSending] = useState(false)
+  const [recipientSearch, setRecipientSearch] = useState('')
+  const [recipientResults, setRecipientResults] = useState<MessageableUser[]>([])
+  const [searchingRecipients, setSearchingRecipients] = useState(false)
 
   useEffect(() => {
     loadThreads()
@@ -55,6 +71,87 @@ export function MessageCenter({ className = '' }: MessageCenterProps) {
     } finally {
       setLoading(false)
     }
+  }
+
+  // Search for messageable users
+  const searchRecipients = useCallback(async (search: string) => {
+    if (search.length < 2) {
+      setRecipientResults([])
+      return
+    }
+
+    setSearchingRecipients(true)
+    try {
+      const response = await fetch(`/api/messaging/users?search=${encodeURIComponent(search)}`)
+      const result = await response.json()
+      if (response.ok && result.data?.users) {
+        setRecipientResults(result.data.users)
+      }
+    } catch (err) {
+      console.error('[MessageCenter] Search error:', err)
+    } finally {
+      setSearchingRecipients(false)
+    }
+  }, [])
+
+  // Debounced search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (recipientSearch) {
+        searchRecipients(recipientSearch)
+      }
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [recipientSearch, searchRecipients])
+
+  // Send message
+  const handleSendMessage = async () => {
+    if (!composeRecipient || !composeBody.trim()) {
+      return
+    }
+
+    setComposeSending(true)
+    try {
+      const response = await fetch('/api/messaging/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          toUserId: composeRecipient.id,
+          subject: composeSubject || null,
+          body: composeBody,
+        }),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to send message')
+      }
+
+      // Reset compose form and reload threads
+      setShowCompose(false)
+      setComposeRecipient(null)
+      setComposeSubject('')
+      setComposeBody('')
+      setRecipientSearch('')
+      setRecipientResults([])
+      loadThreads()
+    } catch (err) {
+      console.error('[MessageCenter] Send error:', err)
+      alert(err instanceof Error ? err.message : 'Failed to send message')
+    } finally {
+      setComposeSending(false)
+    }
+  }
+
+  // Reset compose form when closing
+  const handleCloseCompose = () => {
+    setShowCompose(false)
+    setComposeRecipient(null)
+    setComposeSubject('')
+    setComposeBody('')
+    setRecipientSearch('')
+    setRecipientResults([])
   }
 
   const formatDate = (dateString: string) => {
@@ -147,15 +244,19 @@ export function MessageCenter({ className = '' }: MessageCenterProps) {
                   <p className="text-xs text-gray-500 truncate">
                     {thread.participants.map((p) => p.name).join(', ')}
                   </p>
-                  <p className="text-sm text-gray-600 truncate mt-1">
-                    <span className="font-medium">{thread.lastMessage.senderName}:</span>{' '}
-                    {thread.lastMessage.content}
-                  </p>
+                  {thread.lastMessage && (
+                    <p className="text-sm text-gray-600 truncate mt-1">
+                      <span className="font-medium">{thread.lastMessage.fromUserName}:</span>{' '}
+                      {thread.lastMessage.body}
+                    </p>
+                  )}
                 </div>
                 <div className="ml-2 flex flex-col items-end">
-                  <span className="text-xs text-gray-500">
-                    {formatDate(thread.lastMessage.sentAt)}
-                  </span>
+                  {thread.lastMessage && (
+                    <span className="text-xs text-gray-500">
+                      {formatDate(thread.lastMessage.createdAt)}
+                    </span>
+                  )}
                   {thread.unreadCount > 0 && (
                     <span className="mt-1 inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-600 text-white">
                       {thread.unreadCount}
@@ -168,14 +269,14 @@ export function MessageCenter({ className = '' }: MessageCenterProps) {
         )}
       </div>
 
-      {/* Compose Modal - SHELL */}
+      {/* Compose Modal */}
       {showCompose && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-xl max-w-lg w-full mx-4">
             <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
               <h4 className="text-lg font-medium">New Message</h4>
               <button
-                onClick={() => setShowCompose(false)}
+                onClick={handleCloseCompose}
                 className="text-gray-400 hover:text-gray-600"
               >
                 <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -189,18 +290,62 @@ export function MessageCenter({ className = '' }: MessageCenterProps) {
               </button>
             </div>
             <div className="p-4 space-y-4">
-              <div>
+              <div className="relative">
                 <label className="block text-sm font-medium text-gray-700">To</label>
-                <input
-                  type="text"
-                  placeholder="Search for a recipient..."
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                />
+                {composeRecipient ? (
+                  <div className="mt-1 flex items-center gap-2 p-2 bg-blue-50 rounded-md">
+                    <span className="text-sm font-medium text-blue-800">{composeRecipient.name}</span>
+                    <span className="text-xs text-blue-600">({composeRecipient.role})</span>
+                    <button
+                      onClick={() => setComposeRecipient(null)}
+                      className="ml-auto text-blue-600 hover:text-blue-800"
+                    >
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <input
+                      type="text"
+                      value={recipientSearch}
+                      onChange={(e) => setRecipientSearch(e.target.value)}
+                      placeholder="Search for a recipient..."
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    />
+                    {recipientResults.length > 0 && (
+                      <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-md shadow-lg max-h-48 overflow-y-auto">
+                        {recipientResults.map((user) => (
+                          <button
+                            key={user.id}
+                            onClick={() => {
+                              setComposeRecipient(user)
+                              setRecipientSearch('')
+                              setRecipientResults([])
+                            }}
+                            className="w-full px-3 py-2 text-left hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
+                          >
+                            <p className="text-sm font-medium text-gray-900">{user.name}</p>
+                            <p className="text-xs text-gray-500">{user.email} • {user.role}</p>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {searchingRecipients && (
+                      <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-md shadow-lg p-3 text-center text-sm text-gray-500">
+                        Searching...
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Subject</label>
+                <label className="block text-sm font-medium text-gray-700">Subject (optional)</label>
                 <input
                   type="text"
+                  value={composeSubject}
+                  onChange={(e) => setComposeSubject(e.target.value)}
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                 />
               </div>
@@ -208,27 +353,27 @@ export function MessageCenter({ className = '' }: MessageCenterProps) {
                 <label className="block text-sm font-medium text-gray-700">Message</label>
                 <textarea
                   rows={4}
+                  value={composeBody}
+                  onChange={(e) => setComposeBody(e.target.value)}
+                  placeholder="Type your message..."
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                 />
               </div>
             </div>
             <div className="px-4 py-3 bg-gray-50 flex justify-end gap-2 rounded-b-lg">
               <button
-                onClick={() => setShowCompose(false)}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                onClick={handleCloseCompose}
+                disabled={composeSending}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
-                onClick={() => {
-                  // SHELL: Would send message
-                  console.log('[MessageCenter] SHELL: Would send message')
-                  alert('Message sending coming soon!')
-                  setShowCompose(false)
-                }}
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700"
+                onClick={handleSendMessage}
+                disabled={composeSending || !composeRecipient || !composeBody.trim()}
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Send
+                {composeSending ? 'Sending...' : 'Send'}
               </button>
             </div>
           </div>

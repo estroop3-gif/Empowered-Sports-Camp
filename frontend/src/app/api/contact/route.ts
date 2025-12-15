@@ -2,11 +2,14 @@
  * Contact Form API Route
  *
  * Handles contact form submissions.
- * Saves to database and can send email notifications.
+ * Saves to database and sends email notifications.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createContactSubmission } from '@/lib/services/contact'
+import { sendTransactionalEmail } from '@/lib/services/email'
+
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'ops@empoweredathletes.com'
 
 interface ContactFormData {
   name: string
@@ -68,7 +71,21 @@ export async function POST(request: NextRequest) {
       inquiryType: data.inquiryType,
     })
 
-    // TODO: Add email notification to admin
+    // Send email notification to admin
+    try {
+      await sendTransactionalEmail({
+        templateCode: 'SYSTEM_ALERT',
+        to: ADMIN_EMAIL,
+        context: {
+          title: `New Contact Form Submission: ${data.inquiryType}`,
+          message: `New contact form submission from ${data.name} (${data.email}).\n\nInquiry Type: ${data.inquiryType}\n\nMessage: ${data.message}${data.phone ? `\n\nPhone: ${data.phone}` : ''}${data.organization ? `\n\nOrganization: ${data.organization}` : ''}${data.location ? `\n\nLocation: ${data.location}` : ''}`,
+          actionUrl: '/admin/contacts',
+        },
+      })
+    } catch (emailError) {
+      // Log but don't fail the request if email fails
+      console.error('Failed to send contact notification email:', emailError)
+    }
 
     return NextResponse.json({
       success: true,

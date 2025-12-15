@@ -38,12 +38,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
+    // Convert action to lowercase to match service types
+    const normalizedAction = action.toLowerCase().replace('_', '_') as 'approve' | 'reject' | 'request_revision'
+
     const { data, error } = await reviewCurriculumSubmission({
       submissionId,
-      action,
+      action: normalizedAction,
       notes,
       reviewerUserId: user.id,
-      tenantId: user.tenantId || '',
     })
 
     if (error) {
