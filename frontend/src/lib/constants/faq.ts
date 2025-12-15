@@ -113,7 +113,7 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
       {
         question: 'Are scholarships or financial assistance available?',
         answer:
-          "We never want finances to be the only barrier. Some locations offer scholarships or reduced tuition funded by partners and community supporters. If you need assistance, reach out through our contact form and select 'General Question' or 'Host a Camp' with a note about scholarship interest.",
+          "We never want finances to be the only barrier. Some locations offer scholarships or reduced tuition funded by partners and community supporters. If you need assistance, reach out through our contact form and select 'General Question' with a note about scholarship interest.",
       },
     ],
   },

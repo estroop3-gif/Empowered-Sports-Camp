@@ -7,7 +7,9 @@
  */
 
 import { useState } from 'react'
-import { Send, CheckCircle, AlertCircle, Loader2 } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { Send, CheckCircle, AlertCircle, Loader2, Building2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
@@ -27,13 +29,14 @@ interface FormData {
 const inquiryTypes = [
   { value: '', label: 'Select an inquiry type...' },
   { value: 'registration', label: 'Camp Registration' },
-  { value: 'host', label: 'Host a Camp' },
+  { value: 'host', label: 'Host a Camp / Become a Licensee →' },
   { value: 'partnership', label: 'Partnership Opportunity' },
   { value: 'coaching', label: 'Coaching Position' },
   { value: 'general', label: 'General Question' },
 ]
 
 export default function ContactForm() {
+  const router = useRouter()
   const [formData, setFormData] = useState<FormData>({
     name: '',
     email: '',
@@ -77,6 +80,13 @@ export default function ContactForm() {
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
   ) => {
     const { name, value } = e.target
+
+    // Redirect to host-a-camp page if they select that inquiry type
+    if (name === 'inquiryType' && value === 'host') {
+      router.push('/host-a-camp')
+      return
+    }
+
     setFormData((prev) => ({ ...prev, [name]: value }))
     // Clear error when user starts typing
     if (errors[name as keyof FormData]) {

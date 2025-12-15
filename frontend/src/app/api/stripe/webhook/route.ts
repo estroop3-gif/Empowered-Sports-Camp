@@ -1,6 +1,8 @@
 import { headers } from 'next/headers'
 import { NextResponse } from 'next/server'
 import Stripe from 'stripe'
+import { prisma } from '@/lib/db/client'
+import { sendRegistrationConfirmationEmail } from '@/lib/services/email'
 
 function getStripe() {
   return new Stripe(process.env.STRIPE_SECRET_KEY!)
@@ -41,16 +43,42 @@ export async function POST(req: Request) {
     case 'checkout.session.completed': {
       const session = event.data.object as Stripe.Checkout.Session
 
-      // Extract registration ID from metadata
+      // Extract registration ID and tenant ID from metadata
       const registrationId = session.metadata?.registration_id
+      const tenantId = session.metadata?.tenant_id
 
-      if (registrationId) {
-        // TODO: Update registration status to 'confirmed' in database
-        // TODO: Update payment record with stripe_charge_id
-        // TODO: Increment session enrolled_count
-        // TODO: Send confirmation email via Resend
+      if (registrationId && tenantId) {
+        try {
+          // Update registration status to 'confirmed' and payment status to 'paid'
+          await prisma.registration.update({
+            where: { id: registrationId },
+            data: {
+              status: 'confirmed',
+              paymentStatus: 'paid',
+              paidAt: new Date(),
+              stripePaymentIntentId: session.payment_intent as string,
+            },
+          })
 
-        console.log(`Payment completed for registration: ${registrationId}`)
+          console.log(`[Webhook] Registration ${registrationId} confirmed`)
+
+          // Send confirmation email via Resend
+          const { error: emailError } = await sendRegistrationConfirmationEmail({
+            registrationId,
+            tenantId,
+          })
+
+          if (emailError) {
+            console.error(`[Webhook] Failed to send confirmation email for registration ${registrationId}:`, emailError)
+          } else {
+            console.log(`[Webhook] Confirmation email sent for registration ${registrationId}`)
+          }
+        } catch (dbError) {
+          console.error(`[Webhook] Database error updating registration ${registrationId}:`, dbError)
+          // Don't fail the webhook - Stripe will retry
+        }
+      } else {
+        console.warn('[Webhook] checkout.session.completed missing registration_id or tenant_id in metadata')
       }
       break
     }
@@ -60,10 +88,19 @@ export async function POST(req: Request) {
       const registrationId = paymentIntent.metadata?.registration_id
 
       if (registrationId) {
-        // TODO: Update registration status to reflect failure
-        // TODO: Send failure notification email
+        try {
+          // Update payment status to 'failed'
+          await prisma.registration.update({
+            where: { id: registrationId },
+            data: {
+              paymentStatus: 'failed',
+            },
+          })
 
-        console.log(`Payment failed for registration: ${registrationId}`)
+          console.log(`[Webhook] Payment failed for registration: ${registrationId}`)
+        } catch (dbError) {
+          console.error(`[Webhook] Database error updating failed payment for registration ${registrationId}:`, dbError)
+        }
       }
       break
     }
@@ -73,13 +110,23 @@ export async function POST(req: Request) {
       const registrationId = charge.metadata?.registration_id
 
       if (registrationId) {
-        // TODO: Update payment record with refund info
-        // TODO: Update registration status to 'refunded'
-        // TODO: Decrement session enrolled_count
-        // TODO: Send refund confirmation email
-        // TODO: Process waitlist if applicable
+        try {
+          // Update registration status to 'refunded'
+          await prisma.registration.update({
+            where: { id: registrationId },
+            data: {
+              status: 'refunded',
+              paymentStatus: 'refunded',
+            },
+          })
 
-        console.log(`Refund processed for registration: ${registrationId}`)
+          console.log(`[Webhook] Refund processed for registration: ${registrationId}`)
+
+          // TODO: Send refund confirmation email
+          // TODO: Process waitlist if applicable
+        } catch (dbError) {
+          console.error(`[Webhook] Database error updating refund for registration ${registrationId}:`, dbError)
+        }
       }
       break
     }
@@ -88,12 +135,12 @@ export async function POST(req: Request) {
     case 'customer.subscription.updated':
     case 'customer.subscription.deleted': {
       // Handle subscription events if implementing recurring payments
-      console.log(`Subscription event: ${event.type}`)
+      console.log(`[Webhook] Subscription event: ${event.type}`)
       break
     }
 
     default:
-      console.log(`Unhandled event type: ${event.type}`)
+      console.log(`[Webhook] Unhandled event type: ${event.type}`)
   }
 
   return NextResponse.json({ received: true })

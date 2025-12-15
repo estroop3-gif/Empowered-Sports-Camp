@@ -4,17 +4,33 @@ import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { AdminLayout, PageHeader, ContentCard } from '@/components/admin/admin-layout'
-import {
-  getAllTerritories,
-  getTerritoryStats,
-  closeTerritory,
-  reopenTerritory,
-  unassignTerritory,
-  getTenantsForAssignment,
-  Territory,
-  TerritoryStatus,
-  TerritoryStats,
-} from '@/lib/services/territories'
+
+// Types (matching the service types)
+type TerritoryStatus = 'open' | 'reserved' | 'assigned' | 'closed'
+
+interface Territory {
+  id: string
+  name: string
+  description: string | null
+  country: string
+  state_region: string
+  city: string | null
+  postal_codes: string | null
+  tenant_id: string | null
+  status: TerritoryStatus
+  notes: string | null
+  created_at: string
+  updated_at: string
+  tenant_name?: string | null
+}
+
+interface TerritoryStats {
+  total: number
+  open: number
+  reserved: number
+  assigned: number
+  closed: number
+}
 import { cn } from '@/lib/utils'
 import {
   MapPin,
@@ -101,24 +117,19 @@ export default function TerritoriesPage() {
       setLoading(true)
       setError(null)
 
-      const [territoriesResult, statsResult, tenantsResult] = await Promise.all([
-        getAllTerritories(),
-        getTerritoryStats(),
-        getTenantsForAssignment(),
-      ])
+      try {
+        const response = await fetch('/api/admin/territories')
+        const result = await response.json()
 
-      if (territoriesResult.error) {
-        setError(territoriesResult.error.message || 'Failed to load territories')
-      } else {
-        setTerritories(territoriesResult.data || [])
-      }
-
-      if (statsResult.data) {
-        setStats(statsResult.data)
-      }
-
-      if (tenantsResult.data) {
-        setTenants(tenantsResult.data)
+        if (!response.ok) {
+          setError(result.error || 'Failed to load territories')
+        } else {
+          setTerritories(result.data?.territories || [])
+          setStats(result.data?.stats || null)
+          setTenants(result.data?.tenants || [])
+        }
+      } catch (err) {
+        setError('Failed to load territories')
       }
 
       setLoading(false)
@@ -169,23 +180,32 @@ export default function TerritoriesPage() {
     }
 
     setProcessingId(id)
-    const { success, error: closeError } = await closeTerritory(id)
+    try {
+      const response = await fetch(`/api/admin/territories/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'close' }),
+      })
 
-    if (success) {
-      setTerritories((prev) =>
-        prev.map((t) => (t.id === id ? { ...t, status: 'closed' as TerritoryStatus, tenant_id: null, tenant_name: null } : t))
-      )
-      // Update stats
-      if (stats) {
-        const oldStatus = territories.find((t) => t.id === id)?.status
-        setStats({
-          ...stats,
-          closed: stats.closed + 1,
-          [oldStatus as string]: stats[oldStatus as keyof TerritoryStats] as number - 1,
-        })
+      if (response.ok) {
+        setTerritories((prev) =>
+          prev.map((t) => (t.id === id ? { ...t, status: 'closed' as TerritoryStatus, tenant_id: null, tenant_name: null } : t))
+        )
+        // Update stats
+        if (stats) {
+          const oldStatus = territories.find((t) => t.id === id)?.status
+          setStats({
+            ...stats,
+            closed: stats.closed + 1,
+            [oldStatus as string]: stats[oldStatus as keyof TerritoryStats] as number - 1,
+          })
+        }
+      } else {
+        const result = await response.json()
+        alert(result.error || 'Failed to close territory')
       }
-    } else {
-      alert(closeError?.message || 'Failed to close territory')
+    } catch {
+      alert('Failed to close territory')
     }
 
     setProcessingId(null)
@@ -194,21 +214,30 @@ export default function TerritoriesPage() {
 
   const handleReopen = async (id: string) => {
     setProcessingId(id)
-    const { success, error: reopenError } = await reopenTerritory(id)
+    try {
+      const response = await fetch(`/api/admin/territories/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'reopen' }),
+      })
 
-    if (success) {
-      setTerritories((prev) =>
-        prev.map((t) => (t.id === id ? { ...t, status: 'open' as TerritoryStatus } : t))
-      )
-      if (stats) {
-        setStats({
-          ...stats,
-          closed: stats.closed - 1,
-          open: stats.open + 1,
-        })
+      if (response.ok) {
+        setTerritories((prev) =>
+          prev.map((t) => (t.id === id ? { ...t, status: 'open' as TerritoryStatus } : t))
+        )
+        if (stats) {
+          setStats({
+            ...stats,
+            closed: stats.closed - 1,
+            open: stats.open + 1,
+          })
+        }
+      } else {
+        const result = await response.json()
+        alert(result.error || 'Failed to reopen territory')
       }
-    } else {
-      alert(reopenError?.message || 'Failed to reopen territory')
+    } catch {
+      alert('Failed to reopen territory')
     }
 
     setProcessingId(null)
@@ -221,21 +250,30 @@ export default function TerritoriesPage() {
     }
 
     setProcessingId(id)
-    const { success, error: unassignError } = await unassignTerritory(id)
+    try {
+      const response = await fetch(`/api/admin/territories/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'unassign' }),
+      })
 
-    if (success) {
-      setTerritories((prev) =>
-        prev.map((t) => (t.id === id ? { ...t, status: 'open' as TerritoryStatus, tenant_id: null, tenant_name: null } : t))
-      )
-      if (stats) {
-        setStats({
-          ...stats,
-          assigned: stats.assigned - 1,
-          open: stats.open + 1,
-        })
+      if (response.ok) {
+        setTerritories((prev) =>
+          prev.map((t) => (t.id === id ? { ...t, status: 'open' as TerritoryStatus, tenant_id: null, tenant_name: null } : t))
+        )
+        if (stats) {
+          setStats({
+            ...stats,
+            assigned: stats.assigned - 1,
+            open: stats.open + 1,
+          })
+        }
+      } else {
+        const result = await response.json()
+        alert(result.error || 'Failed to unassign territory')
       }
-    } else {
-      alert(unassignError?.message || 'Failed to unassign territory')
+    } catch {
+      alert('Failed to unassign territory')
     }
 
     setProcessingId(null)

@@ -7,6 +7,7 @@
 
 import prisma from '@/lib/db/client'
 import { CampDayStatus, Prisma } from '@/generated/prisma'
+import { sendDailyRecapEmail, sendSessionRecapEmail } from '@/lib/services/email'
 
 // ============================================================================
 // TYPES
@@ -527,13 +528,54 @@ export async function updateCampDayStatus(
  * Mark camp day as complete
  * - Sets status to 'finished'
  * - Marks remaining not_arrived as 'absent'
+ * - Sends daily recap emails to parents
+ * - Sends session recap if this is the last day
  */
 export async function markCampDayComplete(
   campDayId: string,
   userId: string,
-  notes?: string
+  notes?: string,
+  recapData?: {
+    dayTheme?: string
+    wordOfTheDay?: string
+    wordOfTheDayExample?: string
+    primarySport?: string
+    primarySportFocus?: string
+    secondarySport?: string
+    secondarySportFocus?: string
+    guestSpeakerName?: string
+    guestSpeakerTitle?: string
+    guestSpeakerTopic?: string
+    pinkPointSkill?: string
+    purplePointSkill?: string
+    tomorrowSport1?: string
+    tomorrowSport2?: string
+    tomorrowWordOfTheDay?: string
+  }
 ): Promise<{ data: CampDay | null; error: Error | null }> {
   try {
+    // Fetch camp day with camp info to determine if last day
+    const existingCampDay = await prisma.campDay.findUnique({
+      where: { id: campDayId },
+      include: {
+        camp: {
+          select: {
+            id: true,
+            tenantId: true,
+            startDate: true,
+            endDate: true,
+          },
+        },
+        recap: true,
+      },
+    })
+
+    if (!existingCampDay) {
+      return { data: null, error: new Error('Camp day not found') }
+    }
+
+    const tenantId = existingCampDay.camp.tenantId
+
     // Mark remaining not_arrived as absent
     await prisma.campAttendance.updateMany({
       where: {
@@ -555,6 +597,58 @@ export async function markCampDayComplete(
         notes: notes || undefined,
       },
     })
+
+    // Save or update recap data if provided
+    if (recapData && Object.keys(recapData).length > 0) {
+      await prisma.campDayRecap.upsert({
+        where: { campDayId },
+        create: {
+          campDayId,
+          tenantId,
+          submittedByUserId: userId,
+          ...recapData,
+        },
+        update: {
+          submittedByUserId: userId,
+          ...recapData,
+        },
+      })
+    }
+
+    // Calculate if this is the last day of camp
+    const campStart = new Date(existingCampDay.camp.startDate)
+    const campEnd = new Date(existingCampDay.camp.endDate)
+    campStart.setHours(0, 0, 0, 0)
+    campEnd.setHours(0, 0, 0, 0)
+    const totalDays = Math.floor((campEnd.getTime() - campStart.getTime()) / (1000 * 60 * 60 * 24)) + 1
+    const isLastDay = existingCampDay.dayNumber === totalDays
+
+    // Send daily recap emails to parents (async - don't block completion)
+    sendDailyRecapEmail({
+      campDayId,
+      tenantId,
+      recapData: recapData || {},
+    }).then(({ error }) => {
+      if (error) {
+        console.error('[markCampDayComplete] Failed to send daily recap emails:', error)
+      } else {
+        console.log('[markCampDayComplete] Daily recap emails sent for camp day:', campDayId)
+      }
+    })
+
+    // If this is the last day, also send session recap emails
+    if (isLastDay) {
+      sendSessionRecapEmail({
+        campId: existingCampDay.camp.id,
+        tenantId,
+      }).then(({ error }) => {
+        if (error) {
+          console.error('[markCampDayComplete] Failed to send session recap emails:', error)
+        } else {
+          console.log('[markCampDayComplete] Session recap emails sent for camp:', existingCampDay.camp.id)
+        }
+      })
+    }
 
     return { data: transformCampDay(campDay), error: null }
   } catch (error) {

@@ -6,6 +6,7 @@
  */
 
 import prisma from '@/lib/db/client'
+import { notifyLmsModuleCompleted, notifyLmsQuizPassed } from './notifications'
 
 // =============================================================================
 // Types (snake_case for backward compatibility with pages)
@@ -267,6 +268,12 @@ export async function completeModule(
   quizPassed?: boolean
 ): Promise<{ data: LmsProgress | null; error: Error | null }> {
   try {
+    // Get the module name for notification
+    const module = await prisma.lmsModule.findUnique({
+      where: { id: moduleId },
+      select: { title: true },
+    })
+
     const progress = await prisma.lmsProgress.upsert({
       where: {
         profileId_moduleId: { profileId, moduleId },
@@ -287,6 +294,23 @@ export async function completeModule(
         ...(quizPassed !== undefined && { quizPassed }),
       },
     })
+
+    // Send notifications for module completion
+    if (module) {
+      notifyLmsModuleCompleted({
+        userId: profileId,
+        moduleName: module.title,
+      }).catch((err) => console.error('[LMS] Failed to send module completion notification:', err))
+
+      // If quiz was passed, send additional notification
+      if (quizPassed && quizScore !== undefined) {
+        notifyLmsQuizPassed({
+          userId: profileId,
+          moduleName: module.title,
+          score: quizScore,
+        }).catch((err) => console.error('[LMS] Failed to send quiz passed notification:', err))
+      }
+    }
 
     return {
       data: {

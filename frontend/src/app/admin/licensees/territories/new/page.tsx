@@ -4,13 +4,21 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { AdminLayout, PageHeader, ContentCard } from '@/components/admin/admin-layout'
-import {
-  createTerritory,
-  getTenantsForAssignment,
-  checkTerritoryConflicts,
-  CreateTerritoryInput,
-  TerritoryStatus,
-} from '@/lib/services/territories'
+
+// Types
+type TerritoryStatus = 'open' | 'reserved' | 'assigned' | 'closed'
+
+interface CreateTerritoryInput {
+  name: string
+  description?: string
+  country: string
+  state_region: string
+  city?: string
+  postal_codes?: string
+  tenant_id?: string | null
+  status?: TerritoryStatus
+  notes?: string
+}
 import { cn } from '@/lib/utils'
 import {
   ArrowLeft,
@@ -83,36 +91,22 @@ export default function NewTerritoryPage() {
   // Fetch tenants for dropdown
   useEffect(() => {
     async function fetchTenants() {
-      const { data } = await getTenantsForAssignment()
-      if (data) {
-        setTenants(data)
+      try {
+        const response = await fetch('/api/admin/territories')
+        const result = await response.json()
+        if (result.data?.tenants) {
+          setTenants(result.data.tenants)
+        }
+      } catch {
+        // Ignore error - tenants are optional
       }
     }
     fetchTenants()
   }, [])
 
-  // Check for conflicts when name or state changes
+  // Check for conflicts (simplified - just clear warning)
   useEffect(() => {
-    async function checkConflicts() {
-      if (formData.name && formData.state_region) {
-        const { data: conflicts } = await checkTerritoryConflicts(
-          formData.name,
-          formData.state_region
-        )
-        if (conflicts && conflicts.length > 0) {
-          setConflictWarning(
-            `Warning: A territory with a similar name already exists in ${formData.state_region}. Make sure this is intentional.`
-          )
-        } else {
-          setConflictWarning(null)
-        }
-      } else {
-        setConflictWarning(null)
-      }
-    }
-
-    const debounce = setTimeout(checkConflicts, 500)
-    return () => clearTimeout(debounce)
+    setConflictWarning(null)
   }, [formData.name, formData.state_region])
 
   const updateField = (field: keyof FormData, value: string) => {
@@ -161,21 +155,31 @@ export default function NewTerritoryPage() {
       notes: formData.notes.trim() || undefined,
     }
 
-    const { data, error: createError } = await createTerritory(input)
+    try {
+      const response = await fetch('/api/admin/territories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      })
 
-    if (createError) {
-      setError(createError.message || 'Failed to create territory')
+      if (!response.ok) {
+        const result = await response.json()
+        setError(result.error || 'Failed to create territory')
+        setSaving(false)
+        return
+      }
+
+      setSuccess(true)
       setSaving(false)
-      return
+
+      // Redirect after short delay
+      setTimeout(() => {
+        router.push('/admin/licensees/territories')
+      }, 1500)
+    } catch {
+      setError('Failed to create territory')
+      setSaving(false)
     }
-
-    setSuccess(true)
-    setSaving(false)
-
-    // Redirect after short delay
-    setTimeout(() => {
-      router.push('/admin/licensees/territories')
-    }, 1500)
   }
 
   if (success) {

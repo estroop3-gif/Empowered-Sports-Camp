@@ -1,107 +1,91 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import { AdminLayout, PageHeader, ContentCard } from '@/components/admin/admin-layout'
 import { StatCard, StatCardGrid } from '@/components/ui/stat-card'
 import { DataTable, TableBadge } from '@/components/ui/data-table'
+import { useAuth } from '@/lib/auth/context'
 import {
   Building2,
   Users,
   DollarSign,
   Calendar,
   TrendingUp,
-  TrendingDown,
   Crown,
-  MapPin,
   ArrowRight,
+  RefreshCw,
+  Loader2,
+  AlertCircle,
 } from 'lucide-react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 
 /**
  * Licensor Admin Dashboard
  *
- * DESIGN NOTES:
- * - Full aggregated view across all licensees
- * - Key metrics at top with brand accent colors
- * - Licensee performance table with drill-down
- * - Recent activity feed
- * - All styled to match fierce esports brand
- *
- * This is the "HQ command center" - should feel powerful
- * but still on-brand with the Empowered Athletes aesthetic
+ * Real-time data from the database across all licensees.
+ * Shows global metrics, licensee performance, and recent activity.
  */
 
-// Mock data - would come from API in production
-const globalStats = {
-  activeLicensees: 12,
-  totalRegistrations: 2847,
-  totalRevenue: 847500, // cents
-  activeAthletes: 1923,
-  revenueChange: 23.5,
-  registrationChange: 18.2,
+interface DashboardOverview {
+  activeLicensees: number
+  totalRegistrations: number
+  totalRevenue: number
+  activeAthletes: number
+  activeCamps: number
+  todayCampers: number
 }
 
-const licenseeData = [
-  {
-    id: '1',
-    name: 'Chicago North',
-    territory: 'Chicagoland North',
-    status: 'active',
-    registrations: 456,
-    revenue: 136800,
-    athletes: 312,
-    upcomingCamps: 8,
-  },
-  {
-    id: '2',
-    name: 'Chicago West',
-    territory: 'Chicagoland West',
-    status: 'active',
-    registrations: 389,
-    revenue: 116700,
-    athletes: 267,
-    upcomingCamps: 6,
-  },
-  {
-    id: '3',
-    name: 'Austin Metro',
-    territory: 'Austin Metro',
-    status: 'pending',
-    registrations: 0,
-    revenue: 0,
-    athletes: 0,
-    upcomingCamps: 0,
-  },
-  {
-    id: '4',
-    name: 'Denver',
-    territory: 'Denver Metro',
-    status: 'active',
-    registrations: 234,
-    revenue: 70200,
-    athletes: 156,
-    upcomingCamps: 4,
-  },
-  {
-    id: '5',
-    name: 'Seattle',
-    territory: 'Seattle-Tacoma',
-    status: 'active',
-    registrations: 567,
-    revenue: 170100,
-    athletes: 389,
-    upcomingCamps: 10,
-  },
-]
+interface LicenseeItem {
+  id: string
+  name: string
+  territory: string | null
+  status: 'active' | 'suspended' | 'terminated'
+  registrations: number
+  revenue: number
+  athletes: number
+  upcomingCamps: number
+  [key: string]: unknown
+}
 
-const recentActivity = [
-  { type: 'registration', message: 'New registration at Chicago North', time: '5 min ago' },
-  { type: 'payment', message: '$299 payment received - Seattle', time: '12 min ago' },
-  { type: 'licensee', message: 'Austin Metro completed onboarding', time: '1 hour ago' },
-  { type: 'registration', message: '3 registrations at Denver', time: '2 hours ago' },
-  { type: 'alert', message: 'Chicago West approaching capacity', time: '3 hours ago' },
-]
+interface ActivityItem {
+  type: 'registration' | 'payment' | 'licensee' | 'camp' | 'alert'
+  message: string
+  time: string
+}
+
+interface RevenueShare {
+  grossRevenue: number
+  licenseeShare: number
+  hqRevenue: number
+  royaltyRate: number
+}
+
+interface DashboardData {
+  overview: DashboardOverview
+  licensees: LicenseeItem[]
+  recentActivity: ActivityItem[]
+  revenueShare: RevenueShare
+  comparison: {
+    revenueChange: number
+    registrationChange: number
+  }
+}
+
+type TimeRange = '30d' | '90d' | 'ytd'
 
 export default function LicensorDashboard() {
+  const { user } = useAuth()
+  const router = useRouter()
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [data, setData] = useState<DashboardData | null>(null)
+  const [timeRange, setTimeRange] = useState<TimeRange>('30d')
+
+  const userName = user?.firstName || user?.email?.split('@')[0] || 'Admin'
+
   const formatCurrency = (cents: number) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -110,41 +94,198 @@ export default function LicensorDashboard() {
     }).format(cents / 100)
   }
 
+  const getDateRange = (range: TimeRange): { from: Date; to: Date } => {
+    const to = new Date()
+    let from: Date
+
+    switch (range) {
+      case '30d':
+        from = new Date(to.getTime() - 30 * 24 * 60 * 60 * 1000)
+        break
+      case '90d':
+        from = new Date(to.getTime() - 90 * 24 * 60 * 60 * 1000)
+        break
+      case 'ytd':
+        from = new Date(to.getFullYear(), 0, 1)
+        break
+      default:
+        from = new Date(to.getTime() - 30 * 24 * 60 * 60 * 1000)
+    }
+
+    return { from, to }
+  }
+
+  const fetchData = async () => {
+    setLoading(true)
+    setError(null)
+
+    const { from, to } = getDateRange(timeRange)
+    const params = new URLSearchParams({
+      from: from.toISOString(),
+      to: to.toISOString(),
+    })
+
+    try {
+      const response = await fetch(`/api/admin/dashboard?${params}`)
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch dashboard data')
+      }
+
+      const result = await response.json()
+      setData(result)
+    } catch (err) {
+      console.error('Dashboard fetch error:', err)
+      setError('Unable to load dashboard data. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchData()
+  }, [timeRange])
+
+  const handleLicenseeClick = (row: LicenseeItem) => {
+    router.push(`/admin/analytics/licensees/${row.id}`)
+  }
+
+  // Loading state
+  if (loading && !data) {
+    return (
+      <AdminLayout userRole="hq_admin" userName={userName}>
+        <PageHeader
+          title="HQ Dashboard"
+          description="Empowered Athletes network overview"
+        />
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-8 w-8 animate-spin text-neon" />
+        </div>
+      </AdminLayout>
+    )
+  }
+
+  // Error state
+  if (error && !data) {
+    return (
+      <AdminLayout userRole="hq_admin" userName={userName}>
+        <PageHeader
+          title="HQ Dashboard"
+          description="Empowered Athletes network overview"
+        />
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <AlertCircle className="h-12 w-12 text-magenta mb-4" />
+          <p className="text-white/70 mb-4">{error}</p>
+          <Button variant="outline-neon" onClick={fetchData}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Try Again
+          </Button>
+        </div>
+      </AdminLayout>
+    )
+  }
+
+  // Use data or empty defaults
+  const overview = data?.overview || {
+    activeLicensees: 0,
+    totalRegistrations: 0,
+    totalRevenue: 0,
+    activeAthletes: 0,
+    activeCamps: 0,
+    todayCampers: 0,
+  }
+
+  const licensees = data?.licensees || []
+  const recentActivity = data?.recentActivity || []
+  const revenueShare = data?.revenueShare || {
+    grossRevenue: 0,
+    licenseeShare: 0,
+    hqRevenue: 0,
+    royaltyRate: 0.1,
+  }
+  const comparison = data?.comparison || {
+    revenueChange: 0,
+    registrationChange: 0,
+  }
+
   return (
-    <AdminLayout
-      userRole="hq_admin"
-      userName="Sarah Admin"
-    >
+    <AdminLayout userRole="hq_admin" userName={userName}>
       <PageHeader
         title="HQ Dashboard"
         description="Empowered Athletes network overview"
-      />
+      >
+        <div className="flex items-center gap-3">
+          <Button
+            variant="outline-neon"
+            size="sm"
+            onClick={fetchData}
+            disabled={loading}
+          >
+            <RefreshCw className={cn('h-4 w-4 mr-2', loading && 'animate-spin')} />
+            Refresh
+          </Button>
+        </div>
+      </PageHeader>
+
+      {/* Time Range Selector */}
+      <div className="mb-6">
+        <div className="inline-flex items-center gap-1 bg-black/50 border border-white/10 p-1">
+          {(['30d', '90d', 'ytd'] as const).map((range) => (
+            <button
+              key={range}
+              onClick={() => setTimeRange(range)}
+              className={cn(
+                'px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition-colors',
+                timeRange === range
+                  ? 'bg-neon text-black'
+                  : 'text-white/50 hover:text-white'
+              )}
+            >
+              {range === 'ytd' ? 'YTD' : range}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {/* Global Stats */}
       <StatCardGrid columns={4} className="mb-8">
         <StatCard
           label="Active Licensees"
-          value={globalStats.activeLicensees}
+          value={overview.activeLicensees}
           icon={Building2}
           accent="neon"
         />
         <StatCard
           label="Total Registrations"
-          value={globalStats.totalRegistrations.toLocaleString()}
+          value={overview.totalRegistrations.toLocaleString()}
           icon={Users}
           accent="magenta"
-          change={{ value: globalStats.registrationChange, type: 'increase' }}
+          change={
+            comparison.registrationChange !== 0
+              ? {
+                  value: Math.abs(comparison.registrationChange),
+                  type: comparison.registrationChange >= 0 ? 'increase' : 'decrease',
+                }
+              : undefined
+          }
         />
         <StatCard
           label="Platform Revenue"
-          value={formatCurrency(globalStats.totalRevenue)}
+          value={formatCurrency(overview.totalRevenue)}
           icon={DollarSign}
           accent="purple"
-          change={{ value: globalStats.revenueChange, type: 'increase' }}
+          change={
+            comparison.revenueChange !== 0
+              ? {
+                  value: Math.abs(comparison.revenueChange),
+                  type: comparison.revenueChange >= 0 ? 'increase' : 'decrease',
+                }
+              : undefined
+          }
         />
         <StatCard
           label="Active Athletes"
-          value={globalStats.activeAthletes.toLocaleString()}
+          value={overview.activeAthletes.toLocaleString()}
           icon={Crown}
           accent="neon"
         />
@@ -166,62 +307,68 @@ export default function LicensorDashboard() {
               </Link>
             }
           >
-            <DataTable
-              columns={[
-                {
-                  key: 'name',
-                  label: 'Licensee',
-                  sortable: true,
-                  render: (_, row) => (
-                    <div>
-                      <div className="font-bold text-white">{row.name}</div>
-                      <div className="text-xs text-white/40">{row.territory}</div>
-                    </div>
-                  ),
-                },
-                {
-                  key: 'status',
-                  label: 'Status',
-                  render: (value) => (
-                    <TableBadge
-                      variant={value === 'active' ? 'success' : value === 'pending' ? 'warning' : 'default'}
-                    >
-                      {String(value)}
-                    </TableBadge>
-                  ),
-                },
-                {
-                  key: 'registrations',
-                  label: 'Registrations',
-                  sortable: true,
-                  align: 'right',
-                  render: (value) => (
-                    <span className="font-bold text-white">{Number(value).toLocaleString()}</span>
-                  ),
-                },
-                {
-                  key: 'revenue',
-                  label: 'Revenue',
-                  sortable: true,
-                  align: 'right',
-                  render: (value) => (
-                    <span className="font-bold text-neon">{formatCurrency(Number(value))}</span>
-                  ),
-                },
-                {
-                  key: 'upcomingCamps',
-                  label: 'Upcoming',
-                  align: 'center',
-                  render: (value) => (
-                    <span className="text-white/70">{String(value)} camps</span>
-                  ),
-                },
-              ]}
-              data={licenseeData}
-              keyField="id"
-              onRowClick={(row) => console.log('Navigate to licensee:', row.id)}
-              accent="neon"
-            />
+            {licensees.length === 0 ? (
+              <div className="py-8 text-center text-white/50">
+                No licensee data available yet
+              </div>
+            ) : (
+              <DataTable<LicenseeItem>
+                columns={[
+                  {
+                    key: 'name',
+                    label: 'Licensee',
+                    sortable: true,
+                    render: (_, row: LicenseeItem) => (
+                      <div>
+                        <div className="font-bold text-white">{row.name}</div>
+                        <div className="text-xs text-white/40">{row.territory || 'No territory'}</div>
+                      </div>
+                    ),
+                  },
+                  {
+                    key: 'status',
+                    label: 'Status',
+                    render: (value) => (
+                      <TableBadge
+                        variant={value === 'active' ? 'success' : value === 'suspended' ? 'warning' : 'default'}
+                      >
+                        {String(value)}
+                      </TableBadge>
+                    ),
+                  },
+                  {
+                    key: 'registrations',
+                    label: 'Registrations',
+                    sortable: true,
+                    align: 'right',
+                    render: (value) => (
+                      <span className="font-bold text-white">{Number(value).toLocaleString()}</span>
+                    ),
+                  },
+                  {
+                    key: 'revenue',
+                    label: 'Revenue',
+                    sortable: true,
+                    align: 'right',
+                    render: (value) => (
+                      <span className="font-bold text-neon">{formatCurrency(Number(value))}</span>
+                    ),
+                  },
+                  {
+                    key: 'upcomingCamps',
+                    label: 'Upcoming',
+                    align: 'center',
+                    render: (value) => (
+                      <span className="text-white/70">{String(value)} camps</span>
+                    ),
+                  },
+                ]}
+                data={licensees}
+                keyField="id"
+                onRowClick={handleLicenseeClick}
+                accent="neon"
+              />
+            )}
           </ContentCard>
         </div>
 
@@ -271,28 +418,35 @@ export default function LicensorDashboard() {
 
           {/* Recent Activity */}
           <ContentCard title="Recent Activity" accent="purple">
-            <div className="space-y-4">
-              {recentActivity.map((activity, i) => (
-                <div key={i} className="flex items-start gap-3">
-                  <div className={`h-2 w-2 mt-2 ${
-                    activity.type === 'registration' ? 'bg-neon' :
-                    activity.type === 'payment' ? 'bg-purple' :
-                    activity.type === 'alert' ? 'bg-magenta' :
-                    'bg-white/50'
-                  }`} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-white/70">{activity.message}</p>
-                    <p className="text-xs text-white/30 mt-1">{activity.time}</p>
+            {recentActivity.length === 0 ? (
+              <div className="py-4 text-center text-white/50 text-sm">
+                No recent activity
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {recentActivity.map((activity, i) => (
+                  <div key={i} className="flex items-start gap-3">
+                    <div
+                      className={`h-2 w-2 mt-2 ${
+                        activity.type === 'registration'
+                          ? 'bg-neon'
+                          : activity.type === 'payment'
+                          ? 'bg-purple'
+                          : activity.type === 'alert'
+                          ? 'bg-magenta'
+                          : activity.type === 'camp'
+                          ? 'bg-cyan-400'
+                          : 'bg-white/50'
+                      }`}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-white/70">{activity.message}</p>
+                      <p className="text-xs text-white/30 mt-1">{activity.time}</p>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-            <Link
-              href="/admin/activity"
-              className="block mt-4 text-center text-xs font-bold uppercase tracking-wider text-neon hover:text-neon/80 transition-colors"
-            >
-              View All Activity
-            </Link>
+                ))}
+              </div>
+            )}
           </ContentCard>
 
           {/* Revenue Share Summary */}
@@ -300,16 +454,26 @@ export default function LicensorDashboard() {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-white/50">Gross Revenue</span>
-                <span className="font-bold text-white">$84,750</span>
+                <span className="font-bold text-white">
+                  {formatCurrency(revenueShare.grossRevenue)}
+                </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-white/50">Licensee Share (90%)</span>
-                <span className="font-bold text-white/70">$76,275</span>
+                <span className="text-sm text-white/50">
+                  Licensee Share ({Math.round((1 - revenueShare.royaltyRate) * 100)}%)
+                </span>
+                <span className="font-bold text-white/70">
+                  {formatCurrency(revenueShare.licenseeShare)}
+                </span>
               </div>
               <div className="h-[1px] bg-white/10" />
               <div className="flex items-center justify-between">
-                <span className="text-sm font-bold text-neon">HQ Revenue (10%)</span>
-                <span className="font-black text-neon text-lg">$8,475</span>
+                <span className="text-sm font-bold text-neon">
+                  HQ Revenue ({Math.round(revenueShare.royaltyRate * 100)}%)
+                </span>
+                <span className="font-black text-neon text-lg">
+                  {formatCurrency(revenueShare.hqRevenue)}
+                </span>
               </div>
             </div>
           </ContentCard>

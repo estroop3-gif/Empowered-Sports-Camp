@@ -4,12 +4,25 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter, useParams } from 'next/navigation'
 import { AdminLayout, PageHeader, ContentCard } from '@/components/admin/admin-layout'
-import {
-  getTerritoryById,
-  assignTerritory,
-  getTenantsForAssignment,
-  Territory,
-} from '@/lib/services/territories'
+
+// Types
+type TerritoryStatus = 'open' | 'reserved' | 'assigned' | 'closed'
+
+interface Territory {
+  id: string
+  name: string
+  description: string | null
+  country: string
+  state_region: string
+  city: string | null
+  postal_codes: string | null
+  tenant_id: string | null
+  status: TerritoryStatus
+  notes: string | null
+  created_at: string
+  updated_at: string
+  tenant_name?: string | null
+}
 import { cn } from '@/lib/utils'
 import {
   ArrowLeft,
@@ -44,35 +57,42 @@ export default function AssignLicenseePage() {
     async function fetchData() {
       setLoading(true)
 
-      const [territoryResult, tenantsResult] = await Promise.all([
-        getTerritoryById(territoryId),
-        getTenantsForAssignment(),
-      ])
+      try {
+        const [territoryRes, tenantsRes] = await Promise.all([
+          fetch(`/api/admin/territories/${territoryId}`),
+          fetch('/api/admin/territories'),
+        ])
 
-      if (territoryResult.error || !territoryResult.data) {
-        setError(territoryResult.error?.message || 'Territory not found')
-        setLoading(false)
-        return
-      }
+        const territoryResult = await territoryRes.json()
+        const tenantsResult = await tenantsRes.json()
 
-      const t = territoryResult.data
+        if (!territoryRes.ok || !territoryResult.data) {
+          setError(territoryResult.error || 'Territory not found')
+          setLoading(false)
+          return
+        }
 
-      if (t.status === 'closed') {
-        setError('This territory is closed. Reopen it before assigning a licensee.')
-        setLoading(false)
-        return
-      }
+        const t = territoryResult.data
 
-      if (t.tenant_id) {
-        setError(`This territory is already assigned to ${t.tenant_name || 'a licensee'}. Remove the current licensee first.`)
-        setLoading(false)
-        return
-      }
+        if (t.status === 'closed') {
+          setError('This territory is closed. Reopen it before assigning a licensee.')
+          setLoading(false)
+          return
+        }
 
-      setTerritory(t)
+        if (t.tenant_id) {
+          setError(`This territory is already assigned to ${t.tenant_name || 'a licensee'}. Remove the current licensee first.`)
+          setLoading(false)
+          return
+        }
 
-      if (tenantsResult.data) {
-        setTenants(tenantsResult.data)
+        setTerritory(t)
+
+        if (tenantsResult.data?.tenants) {
+          setTenants(tenantsResult.data.tenants)
+        }
+      } catch {
+        setError('Failed to load territory')
       }
 
       setLoading(false)
@@ -94,23 +114,30 @@ export default function AssignLicenseePage() {
 
     setSaving(true)
 
-    const { success: assignSuccess, error: assignError } = await assignTerritory(
-      territoryId,
-      selectedTenant
-    )
+    try {
+      const response = await fetch(`/api/admin/territories/${territoryId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenant_id: selectedTenant, status: 'assigned' }),
+      })
 
-    if (assignError) {
-      setError(assignError.message || 'Failed to assign licensee')
+      if (!response.ok) {
+        const result = await response.json()
+        setError(result.error || 'Failed to assign licensee')
+        setSaving(false)
+        return
+      }
+
+      setSuccess(true)
       setSaving(false)
-      return
+
+      setTimeout(() => {
+        router.push('/admin/licensees/territories')
+      }, 1500)
+    } catch {
+      setError('Failed to assign licensee')
+      setSaving(false)
     }
-
-    setSuccess(true)
-    setSaving(false)
-
-    setTimeout(() => {
-      router.push('/admin/licensees/territories')
-    }, 1500)
   }
 
   if (loading) {

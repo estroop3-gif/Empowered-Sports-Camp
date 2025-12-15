@@ -88,7 +88,8 @@ export async function PATCH(
       const { data, error } = await markCampDayComplete(
         campDayId,
         user.id,
-        body.notes
+        body.notes,
+        body.recapData // Pass recap data for daily email
       )
 
       if (error) {

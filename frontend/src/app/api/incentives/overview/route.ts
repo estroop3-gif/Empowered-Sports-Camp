@@ -12,6 +12,7 @@ import {
   getPersonCompensationHistory,
 } from '@/lib/services/incentives'
 import { getAuthenticatedUserFromRequest } from '@/lib/auth/cognito-server'
+import prisma from '@/lib/db/client'
 
 export async function GET(request: NextRequest) {
   try {
@@ -21,8 +22,27 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const role = user.role || ''
-    const tenantId = user.tenantId
+    // Get role from database (source of truth) if not in JWT
+    let role = user.role || ''
+    let tenantId = user.tenantId
+
+    if (!role) {
+      const userRole = await prisma.userRoleAssignment.findFirst({
+        where: {
+          userId: user.id,
+          isActive: true,
+        },
+        select: {
+          role: true,
+          tenantId: true,
+        },
+      })
+
+      if (userRole) {
+        role = userRole.role
+        tenantId = userRole.tenantId || tenantId
+      }
+    }
     const staffProfileId = request.nextUrl.searchParams.get('staffProfileId')
     const mode = request.nextUrl.searchParams.get('mode') || 'overview'
 

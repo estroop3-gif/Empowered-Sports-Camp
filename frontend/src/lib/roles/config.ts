@@ -179,6 +179,7 @@ export const ROLE_NAV_ITEMS: Record<UserRole, NavItem[]> = {
   licensee_owner: [
     { label: 'Dashboard', href: '/licensee/dashboard', icon: LayoutDashboard },
     { label: 'My Camps', href: '/licensee/camps', icon: Calendar },
+    { label: 'Analytics', href: '/licensee/analytics', icon: BarChart3 },
     { label: 'Royalties', href: '/licensee/reports/royalties', icon: Percent },
     { label: 'Quality', href: '/licensee/reports/quality', icon: Star },
     { label: 'Staff', href: '/licensee/staff', icon: UserCircle },

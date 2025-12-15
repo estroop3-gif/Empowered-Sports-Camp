@@ -332,12 +332,18 @@ model Tenant {
   sessionCompensations   CampSessionCompensation[]
   royaltyInvoices        RoyaltyInvoice[]
 
-  // SHELL: New relations for messaging, notifications, reports
-  pdfReports             PdfReport[]
-  notifications          Notification[]
-  messageThreads         MessageThread[]
-  revenueSnapshots       RevenueSnapshot[]
-  curriculumSubmissions  CurriculumSubmission[]
+  // New relations for messaging, notifications, reports
+  pdfReports              PdfReport[]
+  notifications           Notification[]
+  notificationPreferences NotificationPreference[]
+  messageThreads          MessageThread[]
+  revenueSnapshots        RevenueSnapshot[]
+  curriculumSubmissions   CurriculumSubmission[]
+
+  // Email system relations
+  emailLogs               EmailLog[]
+  emailTemplates          EmailTemplate[]
+  campDayRecaps           CampDayRecap[]
 
   @@map("tenants")
 }
@@ -405,6 +411,9 @@ model Camp {
   numGroups            Int?           @default(5) @map("num_groups")
   maxGradeSpread       Int?           @default(2) @map("max_grade_spread")
 
+  // Analytics fields
+  curriculumAdherenceScore Decimal?   @map("curriculum_adherence_score") @db.Decimal(5, 2) // 0-100
+
   createdAt            DateTime       @default(now()) @map("created_at") @db.Timestamptz
   updatedAt            DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
@@ -434,6 +443,10 @@ model Camp {
 
   // Royalty relations
   royaltyInvoices            RoyaltyInvoice[]
+
+  // Analytics relations
+  sessionSurveys             SessionSurvey[]
+  sessionComplaints          SessionComplaint[]
 
   @@unique([tenantId, slug])
   @@index([tenantId])
@@ -483,12 +496,17 @@ model Profile {
   sessionCompensations        CampSessionCompensation[]  @relation("StaffCompensation")
   dailyCompensationSnapshots  CampDayCompensationSnapshot[] @relation("DailyCompensationSnapshots")
 
-  // SHELL: New relations for messaging, notifications, curriculum submissions
+  // New relations for messaging, notifications, curriculum submissions
   notifications               Notification[]
+  notificationPreferences     NotificationPreference[]
   messageParticipations       MessageParticipant[]
   sentMessages                Message[]
   submittedCurriculums        CurriculumSubmission[]     @relation("SubmittedCurriculums")
   reviewedCurriculums         CurriculumSubmission[]     @relation("ReviewedCurriculums")
+
+  // Email system relations
+  emailLogs                   EmailLog[]
+  submittedCampDayRecaps      CampDayRecap[]
 
   @@map("profiles")
 }
@@ -1745,6 +1763,7 @@ model CampDay {
   incidents       CampIncident[]
   scheduleBlockProgress ScheduleBlockProgress[]
   compensationSnapshots CampDayCompensationSnapshot[]
+  recap           CampDayRecap?
 
   @@unique([campId, date])
   @@unique([campId, dayNumber])
@@ -2391,46 +2410,116 @@ model PdfReport {
   @@map("pdf_reports")
 }
 
-// SHELL: In-app notifications
+// In-app notifications
 enum NotificationType {
+  // Licensee Applications
+  licensee_application_created
+  licensee_application_status_changed
+  // CIT Applications
+  cit_application_created
+  cit_application_status_changed
+  // Camp & Registrations
+  camp_registration_completed
+  payment_confirmed
   camp_reminder
-  payment_received
-  payment_failed
-  registration_confirmed
+  schedule_changed
+  // Camp Day Operations
+  camp_day_status_changed
+  camp_day_recap_submitted
+  camp_day_incident_logged
+  grouping_alert
+  // Incentives & Compensation
+  incentive_earned
+  compensation_finalized
+  // LMS / EmpowerU
+  lms_module_assigned
+  lms_module_completed
+  lms_quiz_passed
+  lms_portal_unlocked
+  // Messaging
   message_received
+  // Royalties
+  royalty_invoice_created
+  royalty_invoice_status_changed
+  royalty_invoice_overdue
+  // Job Board
+  job_posted
+  job_application_status_changed
+  // Certifications
   certification_approved
   certification_rejected
-  camp_day_complete
-  report_ready
-  royalty_due
-  staff_assigned
-  schedule_changed
+  certification_expiring
+  // System
   system_alert
+  welcome
+}
+
+enum NotificationCategory {
+  licensee
+  camp
+  lms
+  message
+  royalty
+  incentive
+  job
+  certification
+  system
+}
+
+enum NotificationSeverity {
+  info
+  success
+  warning
+  error
 }
 
 model Notification {
-  id          String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId      String           @map("user_id") @db.Uuid
-  tenantId    String?          @map("tenant_id") @db.Uuid
+  id          String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId      String               @map("user_id") @db.Uuid
+  tenantId    String?              @map("tenant_id") @db.Uuid
   type        NotificationType
+  category    NotificationCategory @default(system)
+  severity    NotificationSeverity @default(info)
   title       String
-  body        String           @db.Text
-  actionUrl   String?          @map("action_url")
-  isRead      Boolean          @default(false) @map("is_read")
-  readAt      DateTime?        @map("read_at") @db.Timestamptz
-  metadata    Json?            // Additional data for the notification
-  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  body        String               @db.Text
+  actionUrl   String?              @map("action_url")
+  data        Json?                // Structured data payload (ids, names, metadata)
+  isRead      Boolean              @default(false) @map("is_read")
+  readAt      DateTime?            @map("read_at") @db.Timestamptz
+  createdAt   DateTime             @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime             @updatedAt @map("updated_at") @db.Timestamptz
 
   // Relations
-  user        Profile          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tenant      Tenant?          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user        Profile              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant      Tenant?              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([tenantId])
   @@index([type])
+  @@index([category])
   @@index([isRead])
   @@index([createdAt])
   @@map("notifications")
+}
+
+model NotificationPreference {
+  id            String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId        String               @map("user_id") @db.Uuid
+  tenantId      String?              @map("tenant_id") @db.Uuid
+  category      NotificationCategory
+  enabledInApp  Boolean              @default(true) @map("enabled_in_app")
+  enabledEmail  Boolean              @default(true) @map("enabled_email")
+  createdAt     DateTime             @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime             @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  user          Profile              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant        Tenant?              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, tenantId, category])
+  @@index([userId])
+  @@index([tenantId])
+  @@map("notification_preferences")
 }
 
 // SHELL: Internal messaging system
@@ -2580,4 +2669,266 @@ model CurriculumSubmission {
   @@index([status])
   @@index([createdAt])
   @@map("curriculum_submissions")
+}
+
+// ============================================================================
+// ANALYTICS TABLES
+// ============================================================================
+
+// Session Survey - CSAT data from parents after camp
+model SessionSurvey {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  campId          String   @map("camp_id") @db.Uuid
+  tenantId        String   @map("tenant_id") @db.Uuid
+  parentProfileId String   @map("parent_profile_id") @db.Uuid
+  athleteId       String?  @map("athlete_id") @db.Uuid
+
+  // Rating (1-5 stars)
+  rating          Int      // 1-5
+  comment         String?  @db.Text
+
+  // Optional detailed ratings
+  staffRating         Int? @map("staff_rating")
+  activitiesRating    Int? @map("activities_rating")
+  communicationRating Int? @map("communication_rating")
+  safetyRating        Int? @map("safety_rating")
+  valueRating         Int? @map("value_rating")
+
+  // Would recommend
+  wouldRecommend  Boolean? @map("would_recommend")
+
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relations
+  camp            Camp     @relation(fields: [campId], references: [id], onDelete: Cascade)
+
+  @@unique([campId, parentProfileId, athleteId])
+  @@index([campId])
+  @@index([tenantId])
+  @@index([rating])
+  @@index([createdAt])
+  @@map("session_surveys")
+}
+
+// Session Complaint - Parent complaints about a camp session
+enum ComplaintSeverity {
+  low
+  medium
+  high
+  critical
+}
+
+enum ComplaintStatus {
+  open
+  investigating
+  resolved
+  dismissed
+}
+
+model SessionComplaint {
+  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  campId          String            @map("camp_id") @db.Uuid
+  tenantId        String            @map("tenant_id") @db.Uuid
+  parentProfileId String?           @map("parent_profile_id") @db.Uuid
+  athleteId       String?           @map("athlete_id") @db.Uuid
+
+  // Complaint details
+  category        String            // safety, communication, staff, activities, billing, other
+  severity        ComplaintSeverity @default(medium)
+  subject         String
+  description     String            @db.Text
+
+  // Resolution
+  status          ComplaintStatus   @default(open)
+  assignedToId    String?           @map("assigned_to_id") @db.Uuid
+  resolution      String?           @db.Text
+  resolvedAt      DateTime?         @map("resolved_at") @db.Timestamptz
+  resolvedById    String?           @map("resolved_by_id") @db.Uuid
+
+  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  camp            Camp              @relation(fields: [campId], references: [id], onDelete: Cascade)
+
+  @@index([campId])
+  @@index([tenantId])
+  @@index([severity])
+  @@index([status])
+  @@index([createdAt])
+  @@map("session_complaints")
+}
+
+// ============================================================================
+// EMAIL SYSTEM
+// ============================================================================
+
+enum EmailType {
+  // Registration & Camp Communications
+  registration_confirmation
+  camp_two_weeks_out
+  camp_two_days_before
+  camp_daily_recap
+  camp_session_recap
+  // Seasonal Follow-ups
+  season_followup_jan
+  season_followup_feb
+  season_followup_mar
+  season_followup_apr
+  season_followup_may
+  // Existing types
+  camp_confirmation
+  camp_reminder
+  daily_recap
+  post_camp
+  staff_message
+  password_reset
+  welcome
+  payment_receipt
+  payment_failed
+  // Applications
+  licensee_application
+  licensee_status_update
+  cit_application
+  cit_status_update
+  // Royalties & Admin
+  royalty_invoice
+  royalty_status_update
+  // System
+  system_alert
+  broadcast
+}
+
+enum EmailStatus {
+  sent
+  failed
+  bounced
+  delivered
+}
+
+model EmailLog {
+  id                String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String?     @map("tenant_id") @db.Uuid
+  userId            String?     @map("user_id") @db.Uuid
+
+  // Email details
+  toEmail           String      @map("to_email")
+  fromEmail         String?     @map("from_email")
+  subject           String
+  emailType         EmailType   @map("email_type")
+
+  // Payload for debugging/replay
+  payload           Json?       // Variables used in template
+
+  // Provider response
+  providerMessageId String?     @map("provider_message_id")
+  status            EmailStatus @default(sent)
+  errorMessage      String?     @map("error_message") @db.Text
+
+  // Tracking
+  createdAt         DateTime    @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relations
+  tenant            Tenant?     @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  user              Profile?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([userId])
+  @@index([emailType])
+  @@index([status])
+  @@index([toEmail])
+  @@index([createdAt])
+  @@map("email_logs")
+}
+
+// Email Templates - Customizable email templates for each email type
+model EmailTemplate {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId        String?   @map("tenant_id") @db.Uuid // null = global default
+  emailType       EmailType @map("email_type")
+
+  // Template content
+  name            String    // Display name for the template
+  subject         String    // Email subject line (supports {{variables}})
+  bodyHtml        String    @map("body_html") @db.Text // HTML content (supports {{variables}})
+  bodyText        String?   @map("body_text") @db.Text // Plain text fallback
+
+  // Status
+  isActive        Boolean   @default(true) @map("is_active")
+
+  // Metadata
+  description     String?   @db.Text
+  availableVars   String[]  @default([]) @map("available_vars") // List of available template variables
+
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  createdBy       String?   @map("created_by") @db.Uuid
+  updatedBy       String?   @map("updated_by") @db.Uuid
+
+  // Relations
+  tenant          Tenant?   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, emailType]) // One template per type per tenant
+  @@index([emailType])
+  @@index([tenantId])
+  @@map("email_templates")
+}
+
+// Camp Day Recap - Director-submitted recap for daily parent emails
+model CampDayRecap {
+  id                    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  campDayId             String    @unique @map("camp_day_id") @db.Uuid
+  tenantId              String    @map("tenant_id") @db.Uuid
+  submittedByUserId     String    @map("submitted_by_user_id") @db.Uuid
+
+  // Day theme and summary
+  dayTheme              String?   @map("day_theme")
+  wordOfTheDay          String?   @map("word_of_the_day")
+  wordOfTheDayExample   String?   @map("word_of_the_day_example") @db.Text
+
+  // Sports covered
+  primarySport          String?   @map("primary_sport")
+  primarySportFocus     String?   @map("primary_sport_focus")
+  secondarySport        String?   @map("secondary_sport")
+  secondarySportFocus   String?   @map("secondary_sport_focus")
+
+  // Guest speaker (if any)
+  guestSpeakerName      String?   @map("guest_speaker_name")
+  guestSpeakerTitle     String?   @map("guest_speaker_title")
+  guestSpeakerTopic     String?   @map("guest_speaker_topic")
+
+  // Values / Points highlights
+  pinkPointSkill        String?   @map("pink_point_skill")
+  purplePointSkill      String?   @map("purple_point_skill")
+
+  // Tomorrow preview (for days 1-3)
+  tomorrowSport1        String?   @map("tomorrow_sport_1")
+  tomorrowSport2        String?   @map("tomorrow_sport_2")
+  tomorrowWordOfTheDay  String?   @map("tomorrow_word_of_the_day")
+
+  // Local resources (JSON array of links)
+  localResources        Json?     @map("local_resources")
+
+  // Photos from the day (JSON array of URLs)
+  photoUrls             Json?     @map("photo_urls")
+
+  // General notes/highlights
+  highlights            String?   @db.Text
+
+  // Email tracking
+  emailsSentAt          DateTime? @map("emails_sent_at") @db.Timestamptz
+  emailsSentCount       Int?      @map("emails_sent_count")
+
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt             DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  campDay               CampDay   @relation(fields: [campDayId], references: [id], onDelete: Cascade)
+  tenant                Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  submittedBy           Profile   @relation(fields: [submittedByUserId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([campDayId])
+  @@index([createdAt])
+  @@map("camp_day_recaps")
 }

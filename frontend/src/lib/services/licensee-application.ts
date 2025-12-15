@@ -7,6 +7,7 @@
 
 import prisma from '@/lib/db/client'
 import type { LicenseeApplicationStatus } from '@/generated/prisma'
+import { notifyLicenseeApplicationCreated, notifyLicenseeApplicationStatusChanged } from './notifications'
 
 // ============================================================================
 // INTERFACES
@@ -142,6 +143,14 @@ export async function createLicenseeApplication(
         howHeard: input.how_heard || null,
       },
     })
+
+    // Notify HQ admins about new application
+    notifyLicenseeApplicationCreated({
+      applicationId: application.id,
+      applicantName: `${application.firstName} ${application.lastName}`,
+      city: application.city || 'Unknown',
+      state: application.state || 'Unknown',
+    }).catch((err) => console.error('[LicenseeApplication] Failed to send notification:', err))
 
     return { data: transformLicenseeApplication(application), error: null }
   } catch (err) {
@@ -283,6 +292,21 @@ export async function updateLicenseeApplicationStatus(
       where: { id },
       data: updateData,
     })
+
+    // Try to notify the applicant if they have a user account
+    const userProfile = await prisma.profile.findFirst({
+      where: { email: { equals: application.email, mode: 'insensitive' } },
+      select: { id: true },
+    })
+
+    if (userProfile) {
+      notifyLicenseeApplicationStatusChanged({
+        userId: userProfile.id,
+        applicationId: application.id,
+        newStatus: status,
+        applicantName: `${application.firstName} ${application.lastName}`,
+      }).catch((err) => console.error('[LicenseeApplication] Failed to send status notification:', err))
+    }
 
     return { data: transformLicenseeApplication(application), error: null }
   } catch (err) {

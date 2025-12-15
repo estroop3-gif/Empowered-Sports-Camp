@@ -54,7 +54,7 @@ export default function AboutHero() {
             <Link href="/camps" className={buttonVariants({ variant: 'neon', size: 'lg' })}>
               Find a Camp
             </Link>
-            <Link href="/contact?inquiry=host" className={buttonVariants({ variant: 'outline-neon-purple', size: 'lg' })}>
+            <Link href="/host-a-camp" className={buttonVariants({ variant: 'outline-neon-purple', size: 'lg' })}>
               Host a Camp
             </Link>
           </div>

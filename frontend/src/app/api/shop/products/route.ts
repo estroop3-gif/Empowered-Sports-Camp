@@ -12,8 +12,18 @@ export async function GET(request: NextRequest) {
     const category = searchParams.get('category') || undefined
     const licenseeId = searchParams.get('tenantId') || searchParams.get('licenseeId') || undefined
 
-    const products = await getActiveProducts({ category, licenseeId })
-    return NextResponse.json(products)
+    const { data, error } = await getActiveProducts({ category, licenseeId })
+
+    if (error) {
+      console.error('[Shop Products API] Error:', error)
+      return NextResponse.json(
+        { error: 'Failed to fetch products' },
+        { status: 500 }
+      )
+    }
+
+    // Return array directly for the shop page
+    return NextResponse.json(data || [])
   } catch (error) {
     console.error('[Shop Products API] Error:', error)
     return NextResponse.json(

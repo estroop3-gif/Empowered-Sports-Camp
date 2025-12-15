@@ -31,6 +31,7 @@ import {
   Inbox,
   Briefcase,
   Trophy,
+  Mail,
 } from 'lucide-react'
 import { ViewAsControl } from './view-as-control'
 
@@ -119,6 +120,10 @@ const licensorNavItems: NavItem[] = [
     href: '/admin/revenue',
     icon: DollarSign,
     roles: ['hq_admin'],
+    children: [
+      { label: 'Revenue Analytics', href: '/admin/revenue' },
+      { label: 'Royalty Invoices', href: '/admin/revenue/royalties' },
+    ],
   },
   {
     label: 'Scorecards',
@@ -165,6 +170,16 @@ const licensorNavItems: NavItem[] = [
       { label: 'Add Product', href: '/admin/shop/products/new' },
       { label: 'Orders', href: '/admin/shop/orders' },
       { label: 'Settings', href: '/admin/shop/settings' },
+    ],
+  },
+  {
+    label: 'Automated Email',
+    href: '/admin/email',
+    icon: Mail,
+    roles: ['hq_admin'],
+    children: [
+      { label: 'Email Logs', href: '/admin/email' },
+      { label: 'Templates', href: '/admin/email/templates' },
     ],
   },
   {

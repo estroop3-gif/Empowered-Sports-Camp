@@ -48,16 +48,23 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const body = await request.json()
     const { status, reviewed_by, internal_notes, assigned_territory_id } = body
 
-    if (!status) {
-      return NextResponse.json(
-        { error: 'Status is required' },
-        { status: 400 }
-      )
+    // If no status provided, get current status first
+    let statusToUse = status
+    if (!statusToUse) {
+      const { data: currentApp } = await getLicenseeApplicationById(id)
+      if (currentApp) {
+        statusToUse = currentApp.status
+      } else {
+        return NextResponse.json(
+          { error: 'Application not found' },
+          { status: 404 }
+        )
+      }
     }
 
     const { data, error } = await updateLicenseeApplicationStatus(
       id,
-      status as LicenseeApplicationStatus,
+      statusToUse as LicenseeApplicationStatus,
       {
         reviewed_by,
         internal_notes,

@@ -26,6 +26,16 @@ import {
   Clock,
 } from 'lucide-react'
 
+interface StaffSummaryFromApi {
+  staff_profile_id: string
+  staff_name: string
+  staff_email: string
+  total_sessions: number
+  total_compensation: number
+  avg_csat_score: number | null
+  avg_enrollment: number | null
+}
+
 interface LicenseeOverview {
   id: string
   name: string
@@ -34,6 +44,7 @@ interface LicenseeOverview {
   total_compensation: number
   pending_compensation: number
   finalized_compensation: number
+  staff_summaries?: StaffSummaryFromApi[]
 }
 
 interface StaffSummary {
@@ -71,7 +82,40 @@ export default function AdminScorecardsPage() {
         const json = await res.json()
 
         if (res.ok && json.data) {
-          setOverview(json.data)
+          // Transform API response (array of tenant overviews) to expected format
+          const tenantOverviews = Array.isArray(json.data) ? json.data : []
+
+          // Calculate totals from all tenants
+          let totalCompensation = 0
+          let totalStaff = 0
+          let totalCamps = 0
+          const licensees: LicenseeOverview[] = []
+
+          for (const tenant of tenantOverviews) {
+            totalCompensation += tenant.total_payouts || 0
+            totalCamps += tenant.total_sessions || 0
+            totalStaff += tenant.staff_summaries?.length || 0
+
+            licensees.push({
+              id: tenant.tenant_id,
+              name: tenant.tenant_name,
+              total_staff: tenant.staff_summaries?.length || 0,
+              total_camps: tenant.total_sessions || 0,
+              total_compensation: tenant.total_payouts || 0,
+              pending_compensation: 0, // API doesn't distinguish pending vs finalized at tenant level
+              finalized_compensation: tenant.total_payouts || 0,
+              staff_summaries: tenant.staff_summaries || [],
+            })
+          }
+
+          setOverview({
+            total_compensation: totalCompensation,
+            pending_compensation: 0,
+            finalized_compensation: totalCompensation,
+            total_staff: totalStaff,
+            total_camps: totalCamps,
+            licensees,
+          })
         } else {
           setError(json.error || 'Failed to load data')
         }
@@ -84,30 +128,29 @@ export default function AdminScorecardsPage() {
     loadOverview()
   }, [])
 
-  // Load staff for selected licensee
+  // Load staff for selected licensee from cached data
   useEffect(() => {
-    if (!selectedLicensee) {
+    if (!selectedLicensee || !overview) {
       setStaffList([])
       return
     }
 
-    async function loadStaff() {
-      setStaffLoading(true)
-      try {
-        const res = await fetch(`/api/incentives/overview?tenantId=${selectedLicensee}`)
-        const json = await res.json()
-
-        if (res.ok && json.data?.staff) {
-          setStaffList(json.data.staff)
-        }
-      } catch (err) {
-        console.error('Failed to load staff:', err)
-      } finally {
-        setStaffLoading(false)
-      }
+    // Find the selected licensee and get staff from cached data
+    const licensee = overview.licensees.find((l) => l.id === selectedLicensee)
+    if (licensee?.staff_summaries) {
+      const mappedStaff: StaffSummary[] = licensee.staff_summaries.map((s) => ({
+        id: s.staff_profile_id,
+        name: s.staff_name,
+        email: s.staff_email,
+        camp_count: s.total_sessions,
+        total_earned: s.total_compensation,
+        pending_amount: 0, // API doesn't track pending at staff level
+      }))
+      setStaffList(mappedStaff)
+    } else {
+      setStaffList([])
     }
-    loadStaff()
-  }, [selectedLicensee])
+  }, [selectedLicensee, overview])
 
   const formatCurrency = (val: number) => `$${val.toFixed(2)}`
 

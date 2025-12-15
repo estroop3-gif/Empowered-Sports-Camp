@@ -7,7 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUser } from '@/lib/auth/server'
-import { sendDailyRecapEmail } from '@/lib/services/email'
+import { sendDailyRecapEmailBatch } from '@/lib/services/email'
 
 export async function POST(request: NextRequest) {
   try {
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No tenant context' }, { status: 400 })
     }
 
-    const { data, error } = await sendDailyRecapEmail({ campDayId, tenantId: user.tenantId })
+    const { data, error } = await sendDailyRecapEmailBatch({ campDayId, tenantId: user.tenantId })
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })
