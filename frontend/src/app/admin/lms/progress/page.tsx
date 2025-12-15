@@ -11,6 +11,9 @@ import {
   Loader2,
   ChevronDown,
   GraduationCap,
+  ShieldCheck,
+  ShieldX,
+  MoreHorizontal,
 } from 'lucide-react'
 // Types (no longer imported from service)
 interface UserProgressSummary {
@@ -42,10 +45,21 @@ export default function AdminLmsProgressPage() {
   const [roleFilter, setRoleFilter] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | 'completed' | 'in_progress' | 'not_started'>('all')
+  const [actionMenuOpen, setActionMenuOpen] = useState<string | null>(null)
+  const [updatingUser, setUpdatingUser] = useState<string | null>(null)
 
   useEffect(() => {
     loadProgress()
   }, [roleFilter])
+
+  // Close action menu when clicking outside
+  useEffect(() => {
+    function handleClick() {
+      setActionMenuOpen(null)
+    }
+    document.addEventListener('click', handleClick)
+    return () => document.removeEventListener('click', handleClick)
+  }, [])
 
   async function loadProgress() {
     setLoading(true)
@@ -68,6 +82,33 @@ export default function AdminLmsProgressPage() {
       console.error('Failed to load progress:', err)
     }
     setLoading(false)
+  }
+
+  async function setTrainingStatus(profileId: string, trainingType: string, completed: boolean) {
+    setUpdatingUser(profileId)
+    try {
+      const res = await fetch('/api/lms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'setTrainingStatus',
+          profileId,
+          trainingType,
+          completed,
+        }),
+      })
+
+      if (res.ok) {
+        // Reload progress to reflect changes
+        await loadProgress()
+      } else {
+        console.error('Failed to update training status')
+      }
+    } catch (err) {
+      console.error('Failed to update training status:', err)
+    }
+    setUpdatingUser(null)
+    setActionMenuOpen(null)
   }
 
   // Filter progress
@@ -223,6 +264,7 @@ export default function AdminLmsProgressPage() {
                 <th className="text-center py-4 px-4 text-xs font-bold uppercase tracking-wider text-white/50">Progress</th>
                 <th className="text-left py-4 px-4 text-xs font-bold uppercase tracking-wider text-white/50">Last Activity</th>
                 <th className="text-center py-4 px-4 text-xs font-bold uppercase tracking-wider text-white/50">Status</th>
+                <th className="text-center py-4 px-4 text-xs font-bold uppercase tracking-wider text-white/50">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -280,6 +322,68 @@ export default function AdminLmsProgressPage() {
                           Not Started
                         </span>
                       )}
+                    </td>
+                    <td className="py-4 px-4 text-center">
+                      <div className="relative inline-block">
+                        {updatingUser === user.profile_id ? (
+                          <Loader2 className="h-5 w-5 animate-spin text-neon mx-auto" />
+                        ) : (
+                          <>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setActionMenuOpen(actionMenuOpen === user.profile_id ? null : user.profile_id)
+                              }}
+                              className="p-2 text-white/50 hover:text-white hover:bg-white/10 transition-colors"
+                            >
+                              <MoreHorizontal className="h-5 w-5" />
+                            </button>
+                            {actionMenuOpen === user.profile_id && (
+                              <div
+                                className="absolute right-0 top-full mt-1 w-56 bg-black border border-white/20 shadow-xl z-50"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <div className="px-3 py-2 border-b border-white/10">
+                                  <p className="text-xs font-bold uppercase tracking-wider text-white/40">
+                                    Grant Training Credentials
+                                  </p>
+                                </div>
+                                <button
+                                  onClick={() => setTrainingStatus(user.profile_id, 'all', true)}
+                                  className="flex items-center gap-2 w-full px-3 py-2 text-left text-sm text-white hover:bg-neon/10 hover:text-neon transition-colors"
+                                >
+                                  <ShieldCheck className="h-4 w-4" />
+                                  Mark All Training Complete
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    const type = user.role === 'director' ? 'director' : user.role === 'cit_volunteer' ? 'volunteer' : 'core'
+                                    setTrainingStatus(user.profile_id, type, true)
+                                  }}
+                                  className="flex items-center gap-2 w-full px-3 py-2 text-left text-sm text-white hover:bg-neon/10 hover:text-neon transition-colors"
+                                >
+                                  <GraduationCap className="h-4 w-4" />
+                                  Mark Role Training Complete
+                                </button>
+                                <div className="border-t border-white/10 mt-1 pt-1">
+                                  <div className="px-3 py-2">
+                                    <p className="text-xs font-bold uppercase tracking-wider text-white/40">
+                                      Revoke Credentials
+                                    </p>
+                                  </div>
+                                  <button
+                                    onClick={() => setTrainingStatus(user.profile_id, 'all', false)}
+                                    className="flex items-center gap-2 w-full px-3 py-2 text-left text-sm text-white hover:bg-magenta/10 hover:text-magenta transition-colors"
+                                  >
+                                    <ShieldX className="h-4 w-4" />
+                                    Revoke All Credentials
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 )

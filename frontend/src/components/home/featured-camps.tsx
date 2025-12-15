@@ -2,61 +2,67 @@ import Link from 'next/link'
 import { ArrowRight, Zap } from 'lucide-react'
 import { CampCard } from '@/components/camps/camp-card'
 import { Button } from '@/components/ui/button'
+import { fetchFeaturedCamps, getProgramTypeLabel, type PublicCampCard } from '@/lib/services/camps'
 import type { CampCardData } from '@/types'
 
-// Sample data - in production, this would come from Supabase
-const FEATURED_CAMPS: CampCardData[] = [
-  {
-    id: '1',
-    slug: 'summer-week-1-lincoln-park',
-    name: 'Summer Week 1 - Lincoln Park',
-    programType: 'All Girls Sports Camp',
-    location: 'Lincoln Park',
-    city: 'Chicago',
-    state: 'IL',
-    startDate: '2025-06-09',
-    endDate: '2025-06-13',
-    minAge: 6,
-    maxAge: 12,
-    price: 29900,
-    spotsLeft: 8,
-    imageUrl: null,
-  },
-  {
-    id: '2',
-    slug: 'summer-week-2-evanston',
-    name: 'Summer Week 2 - Evanston',
-    programType: 'All Girls Sports Camp',
-    location: 'Evanston Recreation Center',
-    city: 'Evanston',
-    state: 'IL',
-    startDate: '2025-06-16',
-    endDate: '2025-06-20',
-    minAge: 6,
-    maxAge: 12,
-    price: 29900,
-    spotsLeft: 3,
-    imageUrl: null,
-  },
-  {
-    id: '3',
-    slug: 'cit-program-summer-2025',
-    name: 'CIT Program - Summer 2025',
-    programType: 'Counselor in Training',
-    location: 'Multiple Locations',
-    city: 'Chicago',
-    state: 'IL',
-    startDate: '2025-06-09',
-    endDate: '2025-08-08',
-    minAge: 14,
-    maxAge: 17,
-    price: 59900,
-    spotsLeft: 12,
-    imageUrl: null,
-  },
-]
+/**
+ * Transform database camp data to CampCardData for display
+ */
+function transformToCampCard(camp: PublicCampCard): CampCardData {
+  return {
+    id: camp.id,
+    slug: camp.slug,
+    name: camp.name,
+    programType: getProgramTypeLabel(camp.program_type),
+    location: camp.location_name || 'TBD',
+    city: camp.city || '',
+    state: camp.state || '',
+    startDate: camp.start_date.split('T')[0],
+    endDate: camp.end_date.split('T')[0],
+    minAge: camp.min_age,
+    maxAge: camp.max_age,
+    price: camp.current_price,
+    spotsLeft: camp.spots_remaining,
+    imageUrl: camp.image_url,
+  }
+}
 
-export function FeaturedCamps() {
+export async function FeaturedCamps() {
+  // Fetch featured camps from database
+  const camps = await fetchFeaturedCamps(3)
+  const featuredCamps = camps.map(transformToCampCard)
+
+  // If no camps are available, show a message
+  if (featuredCamps.length === 0) {
+    return (
+      <section className="relative py-24 overflow-hidden">
+        {/* Rainbow gradient background */}
+        <div className="absolute inset-0 bg-gradient-to-br from-neon/20 via-purple/15 to-magenta/20" />
+        <div className="absolute inset-0 bg-black/70" />
+
+        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 text-center">
+          <div className="flex items-center justify-center gap-3 mb-4">
+            <Zap className="h-5 w-5 text-neon" />
+            <span className="text-xs font-bold uppercase tracking-widest text-neon">
+              Coming Soon
+            </span>
+          </div>
+          <h2 className="headline-display headline-md text-white mb-4">
+            Camps <span className="text-neon">Opening Soon</span>
+          </h2>
+          <p className="text-lg text-white/50 mb-8">
+            Registration for our upcoming camps will be available shortly.
+          </p>
+          <Link href="/camps">
+            <Button variant="outline-neon" className="gap-2">
+              View All Programs
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+          </Link>
+        </div>
+      </section>
+    )
+  }
   return (
     <section className="relative py-24 overflow-hidden">
       {/* Rainbow gradient background */}
@@ -105,7 +111,7 @@ export function FeaturedCamps() {
 
         {/* Camp Grid */}
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {FEATURED_CAMPS.map((camp) => (
+          {featuredCamps.map((camp) => (
             <CampCard key={camp.id} camp={camp} />
           ))}
         </div>

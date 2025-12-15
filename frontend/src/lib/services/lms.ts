@@ -619,3 +619,69 @@ export async function fetchProgressSummary(
     return { data: null, error: error as Error }
   }
 }
+
+// =============================================================================
+// Admin Training Status Management
+// =============================================================================
+
+export interface TrainingStatusResult {
+  profile_id: string
+  has_completed_lms_core: boolean
+  has_completed_lms_director: boolean
+  has_completed_lms_volunteer: boolean
+}
+
+/**
+ * Set training completion status for a user (admin only)
+ *
+ * @param profileId - The profile ID to update
+ * @param trainingType - 'core', 'director', 'volunteer', or 'all'
+ * @param completed - Whether to mark as completed (true) or incomplete (false)
+ */
+export async function setTrainingStatus(
+  profileId: string,
+  trainingType: 'core' | 'director' | 'volunteer' | 'all',
+  completed: boolean
+): Promise<{ data: TrainingStatusResult | null; error: Error | null }> {
+  try {
+    const updateData: Record<string, boolean> = {}
+
+    if (trainingType === 'all') {
+      updateData.hasCompletedLmsCore = completed
+      updateData.hasCompletedLmsDirector = completed
+      updateData.hasCompletedLmsVolunteer = completed
+    } else if (trainingType === 'core') {
+      updateData.hasCompletedLmsCore = completed
+    } else if (trainingType === 'director') {
+      updateData.hasCompletedLmsDirector = completed
+    } else if (trainingType === 'volunteer') {
+      updateData.hasCompletedLmsVolunteer = completed
+    }
+
+    const profile = await prisma.profile.update({
+      where: { id: profileId },
+      data: updateData,
+      select: {
+        id: true,
+        hasCompletedLmsCore: true,
+        hasCompletedLmsDirector: true,
+        hasCompletedLmsVolunteer: true,
+      },
+    })
+
+    console.log(`[LMS] Training status updated for ${profileId}: ${trainingType} = ${completed}`)
+
+    return {
+      data: {
+        profile_id: profile.id,
+        has_completed_lms_core: profile.hasCompletedLmsCore,
+        has_completed_lms_director: profile.hasCompletedLmsDirector,
+        has_completed_lms_volunteer: profile.hasCompletedLmsVolunteer,
+      },
+      error: null,
+    }
+  } catch (error) {
+    console.error('[LMS] Failed to set training status:', error)
+    return { data: null, error: error as Error }
+  }
+}

@@ -14,6 +14,7 @@ import {
   updateModule,
   deleteModule,
   fetchProgressSummary,
+  setTrainingStatus,
 } from '@/lib/services/lms'
 
 export async function GET(request: NextRequest) {
@@ -117,6 +118,20 @@ export async function POST(request: NextRequest) {
         const result = await deleteModule(moduleId)
         if (result.error) return NextResponse.json({ error: result.error.message }, { status: 500 })
         return NextResponse.json({ success: true })
+      }
+
+      case 'setTrainingStatus': {
+        // Admin action to grant/revoke training credentials
+        const { profileId, trainingType, completed } = data
+        if (!profileId || !trainingType || completed === undefined) {
+          return NextResponse.json({ error: 'profileId, trainingType, and completed required' }, { status: 400 })
+        }
+        if (!['core', 'director', 'volunteer', 'all'].includes(trainingType)) {
+          return NextResponse.json({ error: 'Invalid trainingType' }, { status: 400 })
+        }
+        const result = await setTrainingStatus(profileId, trainingType, completed)
+        if (result.error) return NextResponse.json({ error: result.error.message }, { status: 500 })
+        return NextResponse.json({ data: result.data })
       }
 
       default:

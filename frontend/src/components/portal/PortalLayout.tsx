@@ -54,7 +54,7 @@ export function PortalLayout({
   headerActions,
 }: PortalLayoutProps) {
   const pathname = usePathname()
-  const { user, role, tenant, hasCompletedRequiredLms } = useAuth()
+  const { user, role, tenant, hasCompletedRequiredLms, isViewingAsOtherRole } = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const userName = user?.firstName || user?.email?.split('@')[0] || 'User'
@@ -62,11 +62,17 @@ export function PortalLayout({
   const navItems = customNavItems || (role ? ROLE_NAV_ITEMS[role] : [])
 
   return (
-    <div className="min-h-screen bg-dark-100 flex">
+    <div className={cn(
+      "min-h-screen bg-dark-100 flex",
+      isViewingAsOtherRole ? "pt-[116px]" : "pt-20"
+    )}>
       {/* Mobile Sidebar Overlay */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/80 z-40 lg:hidden"
+          className={cn(
+            "fixed inset-x-0 bottom-0 bg-black/80 z-30 lg:hidden",
+            isViewingAsOtherRole ? "top-[116px]" : "top-20"
+          )}
           onClick={() => setSidebarOpen(false)}
         />
       )}
@@ -74,8 +80,11 @@ export function PortalLayout({
       {/* Sidebar */}
       <aside
         className={cn(
-          'fixed lg:static inset-y-0 left-0 z-50 w-64 bg-black border-r border-white/10 flex flex-col transition-transform duration-200',
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+          'fixed lg:static left-0 z-40 w-64 bg-black border-r border-white/10 flex flex-col transition-transform duration-200',
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
+          isViewingAsOtherRole
+            ? 'top-[116px] bottom-0 lg:top-auto lg:bottom-auto'
+            : 'top-20 bottom-0 lg:inset-y-auto'
         )}
       >
         {/* Logo */}

@@ -293,6 +293,7 @@ export function AdminLayout({
   tenantLogo,
 }: AdminLayoutProps) {
   const pathname = usePathname()
+  const { isViewingAsOtherRole } = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [expandedItems, setExpandedItems] = useState<string[]>([])
 
@@ -311,7 +312,10 @@ export function AdminLayout({
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + '/')
 
   return (
-    <div className="min-h-screen bg-dark-100 pt-20">
+    <div className={cn(
+      "min-h-screen bg-dark-100",
+      isViewingAsOtherRole ? "pt-[116px]" : "pt-20"
+    )}>
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
         <div
@@ -323,9 +327,12 @@ export function AdminLayout({
       {/* Sidebar - positioned below the public navbar */}
       <aside
         className={cn(
-          'fixed top-20 left-0 z-40 h-[calc(100vh-5rem)] w-72 bg-black border-r border-white/10',
+          'fixed left-0 z-40 w-72 bg-black border-r border-white/10',
           'transform transition-transform duration-300 lg:translate-x-0',
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full',
+          isViewingAsOtherRole
+            ? 'top-[116px] h-[calc(100vh-116px)]'
+            : 'top-20 h-[calc(100vh-5rem)]'
         )}
       >
         {/* Sidebar Header */}
@@ -438,7 +445,10 @@ export function AdminLayout({
       {/* Main Content Area */}
       <div className="lg:pl-72">
         {/* Top Bar - positioned below the public navbar */}
-        <header className="sticky top-20 z-30 h-20 bg-black border-b border-white/10">
+        <header className={cn(
+          "sticky z-30 h-20 bg-black border-b border-white/10",
+          isViewingAsOtherRole ? "top-[116px]" : "top-20"
+        )}>
           {/* Gradient accent line */}
           <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r from-neon via-magenta to-purple" />
 

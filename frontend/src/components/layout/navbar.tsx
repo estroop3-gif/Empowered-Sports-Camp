@@ -26,7 +26,7 @@ export function Navbar() {
   const pathname = usePathname()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
-  const { user, loading, isHqAdmin, isLicenseeOwner, isDirector, isCoach } = useAuth()
+  const { user, loading, isHqAdmin, isLicenseeOwner, isDirector, isCoach, isViewingAsOtherRole } = useAuth()
 
   // Check if on admin/portal pages
   const isAdminPage = pathname?.startsWith('/admin') || pathname?.startsWith('/portal')
@@ -49,7 +49,8 @@ export function Navbar() {
   return (
     <header
       className={cn(
-        "fixed top-0 left-0 right-0 z-50 transition-all duration-300",
+        "fixed left-0 right-0 z-50 transition-all duration-300",
+        isViewingAsOtherRole ? "top-[36px]" : "top-0",
         scrolled
           ? "bg-black/95 backdrop-blur-md"
           : "bg-transparent"

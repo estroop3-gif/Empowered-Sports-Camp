@@ -70,7 +70,7 @@ export const ROLE_HIERARCHY: UserRole[] = [
 export const ROLE_HOME_ROUTES: Record<UserRole, string> = {
   parent: '/dashboard',
   cit_volunteer: '/cit/dashboard',
-  coach: '/portal',
+  coach: '/coach',
   director: '/director',
   licensee_owner: '/licensee/dashboard',
   hq_admin: '/admin',
@@ -202,9 +202,12 @@ export const ROLE_NAV_ITEMS: Record<UserRole, NavItem[]> = {
   ],
   coach: [
     { label: 'Dashboard', href: '/coach', icon: LayoutDashboard },
-    { label: 'My Camps', href: '/portal/camps', icon: Calendar },
-    { label: 'Rosters', href: '/portal/rosters', icon: Users },
-    { label: 'Check-In', href: '/camp-checkin', icon: UserCheck },
+    { label: 'My Camps', href: '/coach/camps', icon: Calendar },
+    { label: 'Today', href: '/coach/today', icon: Clipboard },
+    { label: 'EmpowerU', href: '/coach/empoweru', icon: GraduationCap },
+    { label: 'Curriculum', href: '/coach/curriculum', icon: BookOpen },
+    { label: 'Incentives', href: '/coach/incentives', icon: Trophy },
+    { label: 'Messages', href: '/coach/messages', icon: Inbox },
   ],
   parent: [
     { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },

@@ -60,6 +60,9 @@ interface AuthContextType {
   resetViewingRole: () => void  // Reset to actual role
   isViewingAsOtherRole: boolean
   canUseViewAs: boolean  // Whether current user can use View As
+  // LMS bypass for admin preview mode
+  lmsBypassEnabled: boolean
+  toggleLmsBypass: () => void
   // Role checks (based on effective role)
   isHqAdmin: boolean
   isLicenseeOwner: boolean
@@ -85,11 +88,13 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 const VIEWING_AS_ROLE_KEY = 'empowered_viewing_as_role'
+const LMS_BYPASS_KEY = 'empowered_lms_bypass'
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [actualRole, setActualRole] = useState<UserRole | null>(null)
   const [viewingAsRole, setViewingAsRoleState] = useState<UserRole | null>(null)
+  const [lmsBypassEnabled, setLmsBypassEnabled] = useState(false)
   const [tenant, setTenant] = useState<Tenant | null>(null)
   const [loading, setLoading] = useState(true)
   const initializedRef = useRef(false)
@@ -99,12 +104,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     hasCompletedVolunteer: false,
   })
 
-  // Load viewing as role from sessionStorage on mount
+  // Load viewing as role and LMS bypass from sessionStorage on mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const stored = sessionStorage.getItem(VIEWING_AS_ROLE_KEY)
-      if (stored) {
-        setViewingAsRoleState(stored as UserRole)
+      const storedRole = sessionStorage.getItem(VIEWING_AS_ROLE_KEY)
+      if (storedRole) {
+        setViewingAsRoleState(storedRole as UserRole)
+      }
+      const storedBypass = sessionStorage.getItem(LMS_BYPASS_KEY)
+      if (storedBypass === 'true') {
+        setLmsBypassEnabled(true)
       }
     }
   }, [])
@@ -130,10 +139,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Reset viewing role back to actual role
   const resetViewingRole = useCallback(() => {
     setViewingAsRoleState(null)
+    setLmsBypassEnabled(false)
     if (typeof window !== 'undefined') {
       sessionStorage.removeItem(VIEWING_AS_ROLE_KEY)
+      sessionStorage.removeItem(LMS_BYPASS_KEY)
     }
   }, [])
+
+  // Toggle LMS bypass (only works when viewing as another role)
+  const toggleLmsBypass = useCallback(() => {
+    // Only hq_admin can use this feature
+    if (actualRole !== 'hq_admin') {
+      console.warn('Only hq_admin can use LMS bypass feature')
+      return
+    }
+
+    setLmsBypassEnabled((prev) => {
+      const newValue = !prev
+      if (typeof window !== 'undefined') {
+        if (newValue) {
+          sessionStorage.setItem(LMS_BYPASS_KEY, 'true')
+        } else {
+          sessionStorage.removeItem(LMS_BYPASS_KEY)
+        }
+      }
+      return newValue
+    })
+  }, [actualRole])
 
   // Fetch user role and tenant from API
   const fetchUserRoleAndTenant = async (userId: string) => {
@@ -278,7 +310,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const hasCampViewAccess = hasCampManageAccess || isCoach || isVolunteer
 
   // LMS completion check based on current role
+  // If LMS bypass is enabled (admin preview mode), always return true
   const hasCompletedRequiredLms = (() => {
+    // Admin bypass takes priority
+    if (actualRole === 'hq_admin' && lmsBypassEnabled) {
+      return true
+    }
+
     switch (effectiveRole) {
       case 'director':
         return lmsStatus.hasCompletedDirector
@@ -320,6 +358,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         resetViewingRole,
         isViewingAsOtherRole,
         canUseViewAs,
+        // LMS bypass
+        lmsBypassEnabled,
+        toggleLmsBypass,
         // Role checks
         isHqAdmin,
         isLicenseeOwner,

@@ -16,6 +16,8 @@ import {
   ChevronDown,
   Check,
   RotateCcw,
+  GraduationCap,
+  ShieldCheck,
 } from 'lucide-react'
 
 /**
@@ -279,6 +281,7 @@ function ViewAsDropdownContent({
  * A persistent banner shown at the very top of the page when
  * viewing as a role different from actual role.
  * Makes it clear that the UI is in preview mode.
+ * Includes LMS bypass toggle to preview full dashboard functionality.
  */
 export function ViewingAsBanner() {
   const router = useRouter()
@@ -287,6 +290,8 @@ export function ViewingAsBanner() {
     role,
     resetViewingRole,
     isViewingAsOtherRole,
+    lmsBypassEnabled,
+    toggleLmsBypass,
   } = useAuth()
 
   if (!isViewingAsOtherRole || !role || !actualRole) {
@@ -312,17 +317,42 @@ export function ViewingAsBanner() {
             <span className="text-sm font-medium text-white">
               Viewing as <strong>{viewingConfig.label}</strong>
             </span>
-            <span className="text-xs text-white/60">
+            <span className="text-xs text-white/60 hidden sm:inline">
               (Your actual role: {actualConfig.label})
             </span>
           </div>
-          <button
-            onClick={handleExit}
-            className="flex items-center gap-2 px-3 py-1 bg-white/10 hover:bg-white/20 transition-colors text-sm font-medium text-white"
-          >
-            <EyeOff className="h-4 w-4" />
-            Exit Preview
-          </button>
+          <div className="flex items-center gap-2">
+            {/* LMS Bypass Toggle */}
+            <button
+              onClick={toggleLmsBypass}
+              title={lmsBypassEnabled ? 'LMS training bypassed - Click to see training gates' : 'Click to bypass LMS training gates'}
+              className={cn(
+                'flex items-center gap-2 px-3 py-1 transition-colors text-sm font-medium',
+                lmsBypassEnabled
+                  ? 'bg-neon text-black hover:bg-neon/90'
+                  : 'bg-white/10 text-white hover:bg-white/20'
+              )}
+            >
+              {lmsBypassEnabled ? (
+                <>
+                  <ShieldCheck className="h-4 w-4" />
+                  <span className="hidden sm:inline">Training Bypassed</span>
+                </>
+              ) : (
+                <>
+                  <GraduationCap className="h-4 w-4" />
+                  <span className="hidden sm:inline">Bypass Training</span>
+                </>
+              )}
+            </button>
+            <button
+              onClick={handleExit}
+              className="flex items-center gap-2 px-3 py-1 bg-white/10 hover:bg-white/20 transition-colors text-sm font-medium text-white"
+            >
+              <EyeOff className="h-4 w-4" />
+              <span className="hidden sm:inline">Exit Preview</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>

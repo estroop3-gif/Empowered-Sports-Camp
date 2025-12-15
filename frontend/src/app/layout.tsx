@@ -31,6 +31,10 @@ export const metadata: Metadata = {
     "volleyball camp",
   ],
   authors: [{ name: "Empowered Sports Camp" }],
+  icons: {
+    icon: "/images/logo.png",
+    apple: "/images/logo.png",
+  },
   openGraph: {
     type: "website",
     locale: "en_US",
@@ -38,12 +42,14 @@ export const metadata: Metadata = {
     title: "Empowered Sports Camp | Building Confidence Through Sports",
     description:
       "Empowering girls through sports, leadership, and confidence.",
+    images: ["/images/logo.png"],
   },
   twitter: {
     card: "summary_large_image",
     title: "Empowered Sports Camp",
     description:
       "Empowering girls through sports, leadership, and confidence.",
+    images: ["/images/logo.png"],
   },
 }
 
