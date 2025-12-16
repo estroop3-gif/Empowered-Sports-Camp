@@ -6,6 +6,7 @@ import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { useAuth, type UserRole } from '@/lib/auth/context'
+import { useBannerOffset } from '@/hooks/useBannerOffset'
 import { LogoutButton, UserMenu } from '@/components/layout/user-menu'
 import {
   LayoutDashboard,
@@ -315,7 +316,7 @@ export function AdminLayout({
   tenantLogo,
 }: AdminLayoutProps) {
   const pathname = usePathname()
-  const { isViewingAsOtherRole } = useAuth()
+  const { topWithNavbar, heightWithNavbarStyle } = useBannerOffset()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [expandedItems, setExpandedItems] = useState<string[]>([])
 
@@ -334,10 +335,10 @@ export function AdminLayout({
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + '/')
 
   return (
-    <div className={cn(
-      "min-h-screen bg-dark-100",
-      isViewingAsOtherRole ? "pt-[116px]" : "pt-20"
-    )}>
+    <div
+      className="min-h-screen bg-dark-100"
+      style={{ paddingTop: `${topWithNavbar}px` }}
+    >
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
         <div
@@ -351,11 +352,12 @@ export function AdminLayout({
         className={cn(
           'fixed left-0 z-40 w-72 bg-black border-r border-white/10',
           'transform transition-transform duration-300 lg:translate-x-0',
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full',
-          isViewingAsOtherRole
-            ? 'top-[116px] h-[calc(100vh-116px)]'
-            : 'top-20 h-[calc(100vh-5rem)]'
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         )}
+        style={{
+          top: `${topWithNavbar}px`,
+          height: `calc(100vh - ${topWithNavbar}px)`
+        }}
       >
         {/* Sidebar Header */}
         <div className="h-20 flex items-center justify-between px-6 border-b border-white/10">
@@ -467,10 +469,10 @@ export function AdminLayout({
       {/* Main Content Area */}
       <div className="lg:pl-72">
         {/* Top Bar - positioned below the public navbar */}
-        <header className={cn(
-          "sticky z-30 h-20 bg-black border-b border-white/10",
-          isViewingAsOtherRole ? "top-[116px]" : "top-20"
-        )}>
+        <header
+          className="sticky z-30 h-20 bg-black border-b border-white/10"
+          style={{ top: `${topWithNavbar}px` }}
+        >
           {/* Gradient accent line */}
           <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r from-neon via-magenta to-purple" />
 

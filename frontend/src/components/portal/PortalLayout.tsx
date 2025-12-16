@@ -6,6 +6,7 @@ import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { useAuth, type UserRole } from '@/lib/auth/context'
+import { useBannerOffset } from '@/hooks/useBannerOffset'
 import { ROLE_CONFIG, ROLE_NAV_ITEMS, type NavItem } from '@/lib/roles/config'
 import { LogoutButton, UserMenu } from '@/components/layout/user-menu'
 import { LmsProgressIndicator } from './LmsGate'
@@ -54,7 +55,8 @@ export function PortalLayout({
   headerActions,
 }: PortalLayoutProps) {
   const pathname = usePathname()
-  const { user, role, tenant, hasCompletedRequiredLms, isViewingAsOtherRole } = useAuth()
+  const { user, role, tenant, hasCompletedRequiredLms } = useAuth()
+  const { topWithNavbar } = useBannerOffset()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const userName = user?.firstName || user?.email?.split('@')[0] || 'User'
@@ -62,17 +64,15 @@ export function PortalLayout({
   const navItems = customNavItems || (role ? ROLE_NAV_ITEMS[role] : [])
 
   return (
-    <div className={cn(
-      "min-h-screen bg-dark-100 flex",
-      isViewingAsOtherRole ? "pt-[116px]" : "pt-20"
-    )}>
+    <div
+      className="min-h-screen bg-dark-100 flex"
+      style={{ paddingTop: `${topWithNavbar}px` }}
+    >
       {/* Mobile Sidebar Overlay */}
       {sidebarOpen && (
         <div
-          className={cn(
-            "fixed inset-x-0 bottom-0 bg-black/80 z-30 lg:hidden",
-            isViewingAsOtherRole ? "top-[116px]" : "top-20"
-          )}
+          className="fixed inset-x-0 bottom-0 bg-black/80 z-30 lg:hidden"
+          style={{ top: `${topWithNavbar}px` }}
           onClick={() => setSidebarOpen(false)}
         />
       )}
@@ -81,11 +81,9 @@ export function PortalLayout({
       <aside
         className={cn(
           'fixed lg:static left-0 z-40 w-64 bg-black border-r border-white/10 flex flex-col transition-transform duration-200',
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
-          isViewingAsOtherRole
-            ? 'top-[116px] bottom-0 lg:top-auto lg:bottom-auto'
-            : 'top-20 bottom-0 lg:inset-y-auto'
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         )}
+        style={{ top: `${topWithNavbar}px`, bottom: 0 }}
       >
         {/* Logo */}
         <div className="h-16 px-4 flex items-center justify-between border-b border-white/10">

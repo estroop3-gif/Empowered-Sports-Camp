@@ -3,7 +3,6 @@ import { Poppins } from "next/font/google"
 import "./globals.css"
 import { Navbar } from "@/components/layout/navbar"
 import { Footer } from "@/components/layout/footer"
-import { BannerSpacer } from "@/components/layout/BannerSpacer"
 import { AuthProvider } from "@/lib/auth/context"
 import { ViewingAsBanner } from "@/components/admin/view-as-control"
 import { GlobalDeveloperModeBanner } from "@/components/admin/DeveloperModeBanner"
@@ -68,7 +67,6 @@ export default function RootLayout({
           <ViewingAsBanner />
           <RoleDashboardRouter>
             <Navbar />
-            <BannerSpacer />
             <main className="flex flex-col min-h-screen">
               {children}
             </main>

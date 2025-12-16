@@ -25,7 +25,6 @@ import {
   Globe,
   Info,
 } from 'lucide-react'
-import { DeveloperModeBanner } from '@/components/admin/DeveloperModeBanner'
 
 interface SettingSchema {
   key: string
@@ -280,8 +279,6 @@ export default function LicenseeSettingsPage() {
   return (
     <LmsGate featureName="settings">
       <div>
-        <DeveloperModeBanner />
-
         <PortalPageHeader
           title="Settings"
           description={`Customize settings for ${tenant?.name || 'your territory'}`}

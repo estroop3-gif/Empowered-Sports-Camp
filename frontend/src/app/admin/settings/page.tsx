@@ -29,7 +29,6 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
-import { DeveloperModeBanner } from '@/components/admin/DeveloperModeBanner'
 
 /**
  * Admin Settings Page
@@ -332,8 +331,6 @@ export default function AdminSettingsPage() {
 
   return (
     <AdminLayout userRole="hq_admin" userName={userName}>
-      <DeveloperModeBanner />
-
       <PageHeader
         title="Settings"
         description="Configure global system settings and tenant overrides"
