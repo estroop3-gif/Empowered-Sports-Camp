@@ -95,30 +95,68 @@ export async function getAuthenticatedUser(): Promise<VerifiedUser | null> {
 
 /**
  * Get authenticated user from request headers (for API routes)
+ * Looks up the user's role from the database for accurate permissions
  */
 export async function getAuthenticatedUserFromRequest(
   request: Request
 ): Promise<VerifiedUser | null> {
+  let user: VerifiedUser | null = null
+
   // Try Authorization header first
   const authHeader = request.headers.get('Authorization')
   if (authHeader?.startsWith('Bearer ')) {
     const token = authHeader.substring(7)
-    return verifyToken(token)
+    user = await verifyToken(token)
   }
 
   // Fall back to cookie
-  const cookieHeader = request.headers.get('cookie')
-  if (cookieHeader) {
-    const cookies = Object.fromEntries(
-      cookieHeader.split('; ').map((c) => c.split('='))
-    )
-    const token = cookies['id_token']
-    if (token) {
-      return verifyToken(token)
+  if (!user) {
+    const cookieHeader = request.headers.get('cookie')
+    if (cookieHeader) {
+      const cookies = Object.fromEntries(
+        cookieHeader.split('; ').map((c) => c.split('='))
+      )
+      const token = cookies['id_token']
+      if (token) {
+        user = await verifyToken(token)
+      }
     }
   }
 
-  return null
+  // If user is authenticated, look up their role from the database
+  if (user) {
+    try {
+      const { default: prisma } = await import('@/lib/db/client')
+
+      // Find the user's profile by email (in case Cognito sub doesn't match profile id)
+      const profile = await prisma.profile.findFirst({
+        where: { email: user.email },
+      })
+
+      if (profile) {
+        // Get active role assignment
+        const roleAssignment = await prisma.userRoleAssignment.findFirst({
+          where: {
+            userId: profile.id,
+            isActive: true,
+          },
+        })
+
+        if (roleAssignment) {
+          user.role = roleAssignment.role
+          user.tenantId = roleAssignment.tenantId || undefined
+        }
+
+        // Update user id to match profile id
+        user.id = profile.id
+      }
+    } catch (error) {
+      console.error('Error looking up user role from database:', error)
+      // Continue with Cognito role if database lookup fails
+    }
+  }
+
+  return user
 }
 
 /**
