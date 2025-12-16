@@ -189,7 +189,7 @@ export default function TestimonyDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
+      <div className="min-h-screen bg-black pt-20 flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-magenta" />
       </div>
     )
@@ -197,7 +197,7 @@ export default function TestimonyDetailPage() {
 
   if (error && !testimony) {
     return (
-      <div className="min-h-screen bg-black p-8">
+      <div className="min-h-screen bg-black pt-20 p-8">
         <div className="max-w-3xl mx-auto">
           <Link
             href="/admin/contact?category=testimonies"
@@ -219,7 +219,7 @@ export default function TestimonyDetailPage() {
   const statusOption = STATUS_OPTIONS.find((s) => s.value === testimony.status)
 
   return (
-    <div className="min-h-screen bg-black">
+    <div className="min-h-screen bg-black pt-20">
       {/* Header */}
       <div className="bg-dark-100/50 border-b border-white/10">
         <div className="mx-auto max-w-5xl px-4 sm:px-6 py-6">
