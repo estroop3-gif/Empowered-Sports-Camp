@@ -165,6 +165,7 @@ export const ROLE_NAV_ITEMS: Record<UserRole, NavItem[]> = {
     { label: 'Inbox', href: '/admin/cit', icon: Inbox },
     { label: 'Licensees', href: '/admin/licensees', icon: Building2 },
     { label: 'Camp Manager', href: '/admin/camps', icon: Calendar },
+    { label: 'Venues', href: '/admin/venues', icon: MapPin },
     { label: 'Camp HQ', href: '/admin/camp-hq', icon: LayoutDashboard },
     { label: 'Analytics', href: '/admin/analytics', icon: BarChart3 },
     { label: 'Revenue', href: '/admin/revenue', icon: DollarSign },
@@ -179,6 +180,7 @@ export const ROLE_NAV_ITEMS: Record<UserRole, NavItem[]> = {
   licensee_owner: [
     { label: 'Dashboard', href: '/licensee/dashboard', icon: LayoutDashboard },
     { label: 'My Camps', href: '/licensee/camps', icon: Calendar },
+    { label: 'Venues', href: '/licensee/venues', icon: MapPin },
     { label: 'Analytics', href: '/licensee/analytics', icon: BarChart3 },
     { label: 'Royalties', href: '/licensee/reports/royalties', icon: Percent },
     { label: 'Quality', href: '/licensee/reports/quality', icon: Star },

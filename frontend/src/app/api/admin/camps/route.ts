@@ -76,9 +76,14 @@ export async function POST(request: NextRequest) {
       const body = await request.json()
       const formData: CampFormData = body
 
-      // Validate required fields
-      if (!formData.name || !formData.tenant_id || !formData.start_date || !formData.end_date) {
+      // Validate required fields - tenant_id only required for non-HQ admins
+      if (!formData.name || !formData.start_date || !formData.end_date) {
         return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+      }
+
+      // Non-HQ admins must provide a tenant_id
+      if (userRole !== 'hq_admin' && !formData.tenant_id) {
+        return NextResponse.json({ error: 'Tenant ID is required' }, { status: 400 })
       }
 
       // For non-HQ admins, ensure they're creating camps for their own tenant

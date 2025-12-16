@@ -36,7 +36,7 @@ export interface PublicCampCard {
   featured: boolean
   status: string
   tenant_id: string
-  // Location fields
+  // Location fields (legacy, populated from location or venue)
   location_id: string | null
   location_name: string | null
   location_address: string | null
@@ -46,6 +46,12 @@ export interface PublicCampCard {
   latitude: number | null
   longitude: number | null
   indoor: boolean | null
+  // Venue fields
+  venue_id: string | null
+  venue_name: string | null
+  venue_short_name: string | null
+  facility_type: string | null
+  indoor_outdoor: string | null
   // Tenant fields
   tenant_name: string | null
   tenant_slug: string | null
@@ -86,9 +92,10 @@ export interface CampSearchResult {
 
 /**
  * Transform Prisma camp data to PublicCampCard format
+ * Supports both legacy location and new venue fields
  */
 function transformCampToCard(camp: Prisma.CampGetPayload<{
-  include: { location: true; tenant: true; registrations: { select: { id: true } } }
+  include: { location: true; venue: true; tenant: true; registrations: { select: { id: true } } }
 }>): PublicCampCard {
   const registrationCount = camp.registrations?.length || 0
   const maxCapacity = camp.capacity || 60
@@ -96,6 +103,27 @@ function transformCampToCard(camp: Prisma.CampGetPayload<{
   const now = new Date()
   const isEarlyBird = camp.earlyBirdDeadline && new Date(camp.earlyBirdDeadline) > now
   const currentPrice = isEarlyBird && camp.earlyBirdPriceCents ? camp.earlyBirdPriceCents : camp.priceCents
+
+  // Use venue data if available, fallback to location data
+  const hasVenue = !!camp.venue
+  const hasLocation = !!camp.location
+
+  // Get location-style fields from venue or location
+  const locationName = hasVenue ? camp.venue!.name : (hasLocation ? camp.location!.name : null)
+  const locationAddress = hasVenue ? camp.venue!.addressLine1 : (hasLocation ? camp.location!.address : null)
+  const city = hasVenue ? camp.venue!.city : (hasLocation ? camp.location!.city : null)
+  const state = hasVenue ? camp.venue!.state : (hasLocation ? camp.location!.state : null)
+  const zipCode = hasVenue ? camp.venue!.postalCode : (hasLocation ? camp.location!.zip : null)
+  const latitude = hasVenue && camp.venue!.latitude ? Number(camp.venue!.latitude) : (hasLocation && camp.location!.latitude ? Number(camp.location!.latitude) : null)
+  const longitude = hasVenue && camp.venue!.longitude ? Number(camp.venue!.longitude) : (hasLocation && camp.location!.longitude ? Number(camp.location!.longitude) : null)
+
+  // Indoor/outdoor logic
+  let indoor: boolean | null = null
+  if (hasVenue) {
+    indoor = camp.venue!.indoorOutdoor === 'indoor' ? true : camp.venue!.indoorOutdoor === 'outdoor' ? false : null
+  } else if (hasLocation) {
+    indoor = camp.location!.indoorOutdoor === 'indoor' ? true : camp.location!.indoorOutdoor === 'outdoor' ? false : null
+  }
 
   return {
     id: camp.id,
@@ -121,16 +149,22 @@ function transformCampToCard(camp: Prisma.CampGetPayload<{
     featured: camp.featured,
     status: camp.status,
     tenant_id: camp.tenantId,
-    // Location fields
+    // Location fields (populated from venue or location)
     location_id: camp.locationId,
-    location_name: camp.location?.name || null,
-    location_address: camp.location?.address || null,
-    city: camp.location?.city || null,
-    state: camp.location?.state || null,
-    zip_code: camp.location?.zip || null,
-    latitude: camp.location?.latitude ? Number(camp.location.latitude) : null,
-    longitude: camp.location?.longitude ? Number(camp.location.longitude) : null,
-    indoor: camp.location?.indoorOutdoor === 'indoor' ? true : camp.location?.indoorOutdoor === 'outdoor' ? false : null,
+    location_name: locationName,
+    location_address: locationAddress,
+    city: city,
+    state: state,
+    zip_code: zipCode,
+    latitude: latitude,
+    longitude: longitude,
+    indoor: indoor,
+    // Venue fields
+    venue_id: camp.venueId,
+    venue_name: camp.venue?.name || null,
+    venue_short_name: camp.venue?.shortName || null,
+    facility_type: camp.venue?.facilityType || null,
+    indoor_outdoor: camp.venue?.indoorOutdoor || null,
     // Tenant fields
     tenant_name: camp.tenant?.name || null,
     tenant_slug: camp.tenant?.slug || null,
@@ -155,18 +189,31 @@ export async function fetchPublicCamps(
     status: { in: ['published', 'registration_open'] },
   }
 
-  // Location filters (through relation)
+  // Location/venue filters (support both legacy location and venue)
   if (filters.city || filters.state || filters.zip_code) {
-    where.location = {}
+    // Use OR to search both location and venue
+    where.OR = where.OR || []
+
+    const locationFilter: Prisma.LocationWhereInput = {}
+    const venueFilter: Prisma.VenueWhereInput = {}
+
     if (filters.city) {
-      where.location.city = { contains: filters.city, mode: 'insensitive' }
+      locationFilter.city = { contains: filters.city, mode: 'insensitive' }
+      venueFilter.city = { contains: filters.city, mode: 'insensitive' }
     }
     if (filters.state) {
-      where.location.state = { equals: filters.state, mode: 'insensitive' }
+      locationFilter.state = { equals: filters.state, mode: 'insensitive' }
+      venueFilter.state = { equals: filters.state, mode: 'insensitive' }
     }
     if (filters.zip_code) {
-      where.location.zip = filters.zip_code
+      locationFilter.zip = filters.zip_code
+      venueFilter.postalCode = filters.zip_code
     }
+
+    where.OR.push(
+      { location: locationFilter },
+      { venue: venueFilter }
+    )
   }
 
   // Age filters
@@ -210,11 +257,22 @@ export async function fetchPublicCamps(
 
   // Search filter
   if (filters.search) {
-    where.OR = [
+    const searchTerms = [
       { name: { contains: filters.search, mode: 'insensitive' } },
       { description: { contains: filters.search, mode: 'insensitive' } },
       { location: { city: { contains: filters.search, mode: 'insensitive' } } },
-    ]
+      { venue: { city: { contains: filters.search, mode: 'insensitive' } } },
+      { venue: { name: { contains: filters.search, mode: 'insensitive' } } },
+    ] as Prisma.CampWhereInput[]
+
+    // Merge with existing OR conditions if any
+    if (where.OR && where.OR.length > 0) {
+      // Wrap existing OR in AND with new search terms
+      where.AND = [{ OR: where.OR }, { OR: searchTerms }]
+      delete where.OR
+    } else {
+      where.OR = searchTerms
+    }
   }
 
   // Get total count
@@ -225,6 +283,7 @@ export async function fetchPublicCamps(
     where,
     include: {
       location: true,
+      venue: true,
       tenant: true,
       registrations: { select: { id: true } },
     },
@@ -264,6 +323,7 @@ export async function fetchCampBySlug(slug: string): Promise<PublicCampCard | nu
     },
     include: {
       location: true,
+      venue: true,
       tenant: true,
       registrations: { select: { id: true } },
     },
@@ -281,6 +341,7 @@ export async function fetchCampById(id: string): Promise<PublicCampCard | null> 
     where: { id },
     include: {
       location: true,
+      venue: true,
       tenant: true,
       registrations: { select: { id: true } },
     },
@@ -301,6 +362,7 @@ export async function fetchFeaturedCamps(limit: number = 3): Promise<PublicCampC
     },
     include: {
       location: true,
+      venue: true,
       tenant: true,
       registrations: { select: { id: true } },
     },
@@ -314,6 +376,7 @@ export async function fetchFeaturedCamps(limit: number = 3): Promise<PublicCampC
 
 /**
  * Fetch camps by location (city/state/zip)
+ * Searches both legacy location and venue data
  */
 export async function fetchCampsByLocation(
   location: { city?: string; state?: string; zipCode?: string },
@@ -324,22 +387,33 @@ export async function fetchCampsByLocation(
   }
 
   if (location.city || location.state || location.zipCode) {
-    where.location = {}
+    const locationFilter: Prisma.LocationWhereInput = {}
+    const venueFilter: Prisma.VenueWhereInput = {}
+
     if (location.city) {
-      where.location.city = { contains: location.city, mode: 'insensitive' }
+      locationFilter.city = { contains: location.city, mode: 'insensitive' }
+      venueFilter.city = { contains: location.city, mode: 'insensitive' }
     }
     if (location.state) {
-      where.location.state = { equals: location.state, mode: 'insensitive' }
+      locationFilter.state = { equals: location.state, mode: 'insensitive' }
+      venueFilter.state = { equals: location.state, mode: 'insensitive' }
     }
     if (location.zipCode) {
-      where.location.zip = location.zipCode
+      locationFilter.zip = location.zipCode
+      venueFilter.postalCode = location.zipCode
     }
+
+    where.OR = [
+      { location: locationFilter },
+      { venue: venueFilter },
+    ]
   }
 
   const camps = await prisma.camp.findMany({
     where,
     include: {
       location: true,
+      venue: true,
       tenant: true,
       registrations: { select: { id: true } },
     },
@@ -353,8 +427,10 @@ export async function fetchCampsByLocation(
 
 /**
  * Get unique cities with camps for location filter dropdown
+ * Includes cities from both locations and venues
  */
 export async function fetchCampCities(): Promise<string[]> {
+  // Get cities from locations
   const locations = await prisma.location.findMany({
     where: {
       camps: {
@@ -368,15 +444,34 @@ export async function fetchCampCities(): Promise<string[]> {
     orderBy: { city: 'asc' },
   })
 
-  return locations
-    .map(l => l.city)
-    .filter((city): city is string => city !== null)
+  // Get cities from venues
+  const venues = await prisma.venue.findMany({
+    where: {
+      camps: {
+        some: {
+          status: { in: ['published', 'registration_open'] },
+        },
+      },
+    },
+    select: { city: true },
+    distinct: ['city'],
+    orderBy: { city: 'asc' },
+  })
+
+  // Combine and dedupe cities
+  const citySet = new Set<string>()
+  locations.forEach(l => { if (l.city) citySet.add(l.city) })
+  venues.forEach(v => { if (v.city) citySet.add(v.city) })
+
+  return Array.from(citySet).sort()
 }
 
 /**
  * Get unique states with camps for location filter dropdown
+ * Includes states from both locations and venues
  */
 export async function fetchCampStates(): Promise<string[]> {
+  // Get states from locations
   const locations = await prisma.location.findMany({
     where: {
       camps: {
@@ -390,9 +485,26 @@ export async function fetchCampStates(): Promise<string[]> {
     orderBy: { state: 'asc' },
   })
 
-  return locations
-    .map(l => l.state)
-    .filter((state): state is string => state !== null)
+  // Get states from venues
+  const venues = await prisma.venue.findMany({
+    where: {
+      camps: {
+        some: {
+          status: { in: ['published', 'registration_open'] },
+        },
+      },
+    },
+    select: { state: true },
+    distinct: ['state'],
+    orderBy: { state: 'asc' },
+  })
+
+  // Combine and dedupe states
+  const stateSet = new Set<string>()
+  locations.forEach(l => { if (l.state) stateSet.add(l.state) })
+  venues.forEach(v => { if (v.state) stateSet.add(v.state) })
+
+  return Array.from(stateSet).sort()
 }
 
 /**

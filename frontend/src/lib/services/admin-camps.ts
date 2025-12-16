@@ -13,7 +13,8 @@ export interface CampFormData {
   description: string
   sport: string
   location_id: string | null
-  tenant_id: string
+  venue_id: string | null
+  tenant_id: string | null
   start_date: string
   end_date: string
   start_time: string
@@ -48,8 +49,9 @@ export interface AdminCamp {
   status: string
   featured: boolean
   image_url: string | null
-  tenant_id: string
+  tenant_id: string | null
   location_id: string | null
+  venue_id: string | null
   created_at: string
   updated_at: string
   location?: {
@@ -57,6 +59,16 @@ export interface AdminCamp {
     name: string
     city: string | null
     state: string | null
+  } | null
+  venue?: {
+    id: string
+    name: string
+    short_name: string | null
+    city: string
+    state: string
+    address_line_1: string
+    facility_type: string | null
+    indoor_outdoor: string | null
   } | null
   tenant?: {
     id: string
@@ -187,6 +199,7 @@ export async function fetchAdminCamps(options: {
         where,
         include: {
           location: { select: { id: true, name: true, city: true, state: true } },
+          venue: { select: { id: true, name: true, shortName: true, city: true, state: true, addressLine1: true, facilityType: true, indoorOutdoor: true } },
           tenant: { select: { id: true, name: true, slug: true } },
         },
         orderBy: { startDate: 'desc' },
@@ -218,6 +231,7 @@ export async function fetchAdminCamps(options: {
         image_url: c.imageUrl,
         tenant_id: c.tenantId,
         location_id: c.locationId,
+        venue_id: c.venueId,
         created_at: c.createdAt.toISOString(),
         updated_at: c.updatedAt.toISOString(),
         location: c.location ? {
@@ -225,6 +239,16 @@ export async function fetchAdminCamps(options: {
           name: c.location.name,
           city: c.location.city,
           state: c.location.state,
+        } : null,
+        venue: c.venue ? {
+          id: c.venue.id,
+          name: c.venue.name,
+          short_name: c.venue.shortName,
+          city: c.venue.city,
+          state: c.venue.state,
+          address_line_1: c.venue.addressLine1,
+          facility_type: c.venue.facilityType,
+          indoor_outdoor: c.venue.indoorOutdoor,
         } : null,
         tenant: c.tenant ? {
           id: c.tenant.id,
@@ -249,6 +273,7 @@ export async function fetchCampById(id: string): Promise<AdminCamp | null> {
       where: { id },
       include: {
         location: { select: { id: true, name: true, city: true, state: true } },
+        venue: { select: { id: true, name: true, shortName: true, city: true, state: true, addressLine1: true, facilityType: true, indoorOutdoor: true } },
         tenant: { select: { id: true, name: true, slug: true } },
       },
     })
@@ -276,6 +301,7 @@ export async function fetchCampById(id: string): Promise<AdminCamp | null> {
       image_url: camp.imageUrl,
       tenant_id: camp.tenantId,
       location_id: camp.locationId,
+      venue_id: camp.venueId,
       created_at: camp.createdAt.toISOString(),
       updated_at: camp.updatedAt.toISOString(),
       location: camp.location ? {
@@ -283,6 +309,16 @@ export async function fetchCampById(id: string): Promise<AdminCamp | null> {
         name: camp.location.name,
         city: camp.location.city,
         state: camp.location.state,
+      } : null,
+      venue: camp.venue ? {
+        id: camp.venue.id,
+        name: camp.venue.name,
+        short_name: camp.venue.shortName,
+        city: camp.venue.city,
+        state: camp.venue.state,
+        address_line_1: camp.venue.addressLine1,
+        facility_type: camp.venue.facilityType,
+        indoor_outdoor: camp.venue.indoorOutdoor,
       } : null,
       tenant: camp.tenant ? {
         id: camp.tenant.id,
@@ -326,6 +362,11 @@ export async function createCamp(formData: CampFormData): Promise<AdminCamp> {
     .replace(/^-|-$/g, '')
 
   try {
+    // Handle empty string tenant_id as null
+    const tenantId = formData.tenant_id && formData.tenant_id.trim() !== ''
+      ? formData.tenant_id
+      : null
+
     const camp = await prisma.camp.create({
       data: {
         name: formData.name,
@@ -334,7 +375,8 @@ export async function createCamp(formData: CampFormData): Promise<AdminCamp> {
         sportsOffered: formData.sport ? [formData.sport] : [],
         programType: 'all_girls_sports_camp',
         locationId: formData.location_id || null,
-        tenantId: formData.tenant_id,
+        venueId: formData.venue_id || null,
+        tenantId,
         startDate: new Date(formData.start_date),
         endDate: new Date(formData.end_date),
         startTime: formData.start_time ? new Date(`1970-01-01T${formData.start_time}:00Z`) : null,
@@ -355,7 +397,8 @@ export async function createCamp(formData: CampFormData): Promise<AdminCamp> {
       },
       include: {
         location: { select: { id: true, name: true, city: true, state: true } },
-        tenant: { select: { id: true, name: true, slug: true } },
+        venue: { select: { id: true, name: true, shortName: true, city: true, state: true, addressLine1: true, facilityType: true, indoorOutdoor: true } },
+        tenant: tenantId ? { select: { id: true, name: true, slug: true } } : false,
       },
     })
 
@@ -380,6 +423,7 @@ export async function createCamp(formData: CampFormData): Promise<AdminCamp> {
       image_url: camp.imageUrl,
       tenant_id: camp.tenantId,
       location_id: camp.locationId,
+      venue_id: camp.venueId,
       created_at: camp.createdAt.toISOString(),
       updated_at: camp.updatedAt.toISOString(),
       location: camp.location ? {
@@ -387,6 +431,16 @@ export async function createCamp(formData: CampFormData): Promise<AdminCamp> {
         name: camp.location.name,
         city: camp.location.city,
         state: camp.location.state,
+      } : null,
+      venue: camp.venue ? {
+        id: camp.venue.id,
+        name: camp.venue.name,
+        short_name: camp.venue.shortName,
+        city: camp.venue.city,
+        state: camp.venue.state,
+        address_line_1: camp.venue.addressLine1,
+        facility_type: camp.venue.facilityType,
+        indoor_outdoor: camp.venue.indoorOutdoor,
       } : null,
       tenant: camp.tenant ? {
         id: camp.tenant.id,
@@ -412,6 +466,7 @@ export async function updateCamp(id: string, formData: Partial<CampFormData>): P
     if (formData.description !== undefined) updateData.description = formData.description
     if (formData.sport !== undefined) updateData.sport = formData.sport
     if (formData.location_id !== undefined) updateData.locationId = formData.location_id
+    if (formData.venue_id !== undefined) updateData.venueId = formData.venue_id
     if (formData.start_date !== undefined) updateData.startDate = new Date(formData.start_date)
     if (formData.end_date !== undefined) updateData.endDate = new Date(formData.end_date)
     if (formData.start_time !== undefined) updateData.startTime = formData.start_time
@@ -449,6 +504,7 @@ export async function updateCamp(id: string, formData: Partial<CampFormData>): P
       data: updateData,
       include: {
         location: { select: { id: true, name: true, city: true, state: true } },
+        venue: { select: { id: true, name: true, shortName: true, city: true, state: true, addressLine1: true, facilityType: true, indoorOutdoor: true } },
         tenant: { select: { id: true, name: true, slug: true } },
       },
     })
@@ -474,6 +530,7 @@ export async function updateCamp(id: string, formData: Partial<CampFormData>): P
       image_url: camp.imageUrl,
       tenant_id: camp.tenantId,
       location_id: camp.locationId,
+      venue_id: camp.venueId,
       created_at: camp.createdAt.toISOString(),
       updated_at: camp.updatedAt.toISOString(),
       location: camp.location ? {
@@ -481,6 +538,16 @@ export async function updateCamp(id: string, formData: Partial<CampFormData>): P
         name: camp.location.name,
         city: camp.location.city,
         state: camp.location.state,
+      } : null,
+      venue: camp.venue ? {
+        id: camp.venue.id,
+        name: camp.venue.name,
+        short_name: camp.venue.shortName,
+        city: camp.venue.city,
+        state: camp.venue.state,
+        address_line_1: camp.venue.addressLine1,
+        facility_type: camp.venue.facilityType,
+        indoor_outdoor: camp.venue.indoorOutdoor,
       } : null,
       tenant: camp.tenant ? {
         id: camp.tenant.id,
@@ -519,6 +586,7 @@ export async function duplicateCamp(id: string): Promise<AdminCamp> {
     description: existing.description || '',
     sport: existing.sport || '',
     location_id: existing.location_id,
+    venue_id: existing.venue_id,
     tenant_id: existing.tenant_id,
     start_date: existing.start_date,
     end_date: existing.end_date,

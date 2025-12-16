@@ -62,6 +62,7 @@ model Tenant {
   territories              Territory[]
   testimonies              Testimony[]
   userRoles                UserRoleAssignment[]
+  venues                   Venue[]
   volunteerCertifications  VolunteerCertification[]
 
   @@map("tenants")
@@ -91,10 +92,47 @@ model Location {
   @@map("locations")
 }
 
+model Venue {
+  id                  String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId            String?        @map("tenant_id") @db.Uuid
+  name                String
+  shortName           String?        @map("short_name")
+  addressLine1        String         @map("address_line_1")
+  addressLine2        String?        @map("address_line_2")
+  city                String
+  state               String
+  postalCode          String         @map("postal_code")
+  country             String         @default("US")
+  latitude            Decimal?       @db.Decimal(10, 7)
+  longitude           Decimal?       @db.Decimal(10, 7)
+  regionLabel         String?        @map("region_label")
+  facilityType        FacilityType?  @default(other) @map("facility_type")
+  indoorOutdoor       IndoorOutdoor? @default(both) @map("indoor_outdoor")
+  sportsSupported     String[]       @default([]) @map("sports_supported")
+  maxDailyCapacity    Int?           @map("max_daily_capacity")
+  primaryContactName  String?        @map("primary_contact_name")
+  primaryContactEmail String?        @map("primary_contact_email")
+  primaryContactPhone String?        @map("primary_contact_phone")
+  notes               String?
+  heroImageUrl        String?        @map("hero_image_url")
+  galleryImageUrls    String[]       @default([]) @map("gallery_image_urls")
+  isActive            Boolean        @default(true) @map("is_active")
+  createdAt           DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tenant              Tenant?        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  camps               Camp[]         @relation("CampVenue")
+
+  @@index([tenantId])
+  @@index([city, state])
+  @@index([isActive])
+  @@map("venues")
+}
+
 model Camp {
   id                       String                        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId                 String                        @map("tenant_id") @db.Uuid
+  tenantId                 String?                       @map("tenant_id") @db.Uuid
   locationId               String?                       @map("location_id") @db.Uuid
+  venueId                  String?                       @map("venue_id") @db.Uuid
   name                     String
   slug                     String
   description              String?
@@ -138,7 +176,8 @@ model Camp {
   staffAssignments         CampStaffAssignment[]
   camperSessionData        CamperSessionData[]
   location                 Location?                     @relation(fields: [locationId], references: [id])
-  tenant                   Tenant                        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  venue                    Venue?                        @relation("CampVenue", fields: [venueId], references: [id])
+  tenant                   Tenant?                       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   constraintViolations     ConstraintViolation[]
   friendGroups             FriendGroup[]
   groupAssignments         GroupAssignment[]
@@ -2537,4 +2576,14 @@ enum InviteStatus {
   accepted
   expired
   revoked
+}
+
+enum FacilityType {
+  school
+  park
+  sports_complex
+  private_gym
+  community_center
+  recreation_center
+  other
 }

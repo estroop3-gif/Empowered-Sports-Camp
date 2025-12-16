@@ -110,6 +110,16 @@ const licensorNavItems: NavItem[] = [
     ],
   },
   {
+    label: 'Venues',
+    href: '/admin/venues',
+    icon: MapPin,
+    roles: ['hq_admin'],
+    children: [
+      { label: 'All Venues', href: '/admin/venues' },
+      { label: 'Add Venue', href: '/admin/venues/new' },
+    ],
+  },
+  {
     label: 'Global Analytics',
     href: '/admin/analytics',
     icon: BarChart3,
@@ -218,6 +228,16 @@ const licenseeNavItems: NavItem[] = [
     ],
   },
   {
+    label: 'Venues',
+    href: '/licensee/venues',
+    icon: MapPin,
+    roles: ['licensee_owner', 'director'],
+    children: [
+      { label: 'All Venues', href: '/licensee/venues' },
+      { label: 'Add Venue', href: '/licensee/venues/new' },
+    ],
+  },
+  {
     label: 'Registrations',
     href: '/portal/registrations',
     icon: Users,
@@ -228,12 +248,6 @@ const licenseeNavItems: NavItem[] = [
     href: '/portal/athletes',
     icon: Crown,
     roles: ['licensee_owner', 'director', 'coach'],
-  },
-  {
-    label: 'Locations',
-    href: '/portal/locations',
-    icon: MapPin,
-    roles: ['licensee_owner', 'director'],
   },
   {
     label: 'Staff',

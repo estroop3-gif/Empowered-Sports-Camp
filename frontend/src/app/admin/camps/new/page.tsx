@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { AdminLayout, PageHeader, ContentCard } from '@/components/admin/admin-layout'
@@ -17,6 +17,11 @@ import {
   Zap,
   AlertCircle,
   Loader2,
+  Search,
+  ChevronDown,
+  X,
+  Building2,
+  Check,
 } from 'lucide-react'
 
 // Types (defined locally to avoid Prisma imports in client component)
@@ -26,6 +31,7 @@ interface CampFormData {
   description: string
   sport: string
   location_id: string | null
+  venue_id: string | null
   tenant_id: string
   start_date: string
   end_date: string
@@ -71,6 +77,18 @@ interface Location {
   tenant_id: string
 }
 
+interface Venue {
+  id: string
+  name: string
+  short_name: string | null
+  city: string
+  state: string
+  facility_type: string | null
+  indoor_outdoor: string | null
+  tenant_id: string | null
+  is_global: boolean
+}
+
 const SPORTS = [
   'Multi-Sport',
   'Basketball',
@@ -101,7 +119,13 @@ export default function AdminCreateCampPage() {
   const [tenants, setTenants] = useState<Tenant[]>([])
   const [territories, setTerritories] = useState<Territory[]>([])
   const [locations, setLocations] = useState<Location[]>([])
+  const [venues, setVenues] = useState<Venue[]>([])
   const [selectedTerritoryId, setSelectedTerritoryId] = useState<string>('')
+
+  // Venue search dropdown state
+  const [venueSearchQuery, setVenueSearchQuery] = useState('')
+  const [venueDropdownOpen, setVenueDropdownOpen] = useState(false)
+  const venueDropdownRef = useRef<HTMLDivElement>(null)
 
   const [formData, setFormData] = useState<CampFormData>({
     name: '',
@@ -109,6 +133,7 @@ export default function AdminCreateCampPage() {
     description: '',
     sport: 'Multi-Sport',
     location_id: null,
+    venue_id: null,
     tenant_id: '',
     start_date: '',
     end_date: '',
@@ -131,11 +156,69 @@ export default function AdminCreateCampPage() {
     }
   }, [user])
 
+  // Close venue dropdown when clicking outside
   useEffect(() => {
-    if (formData.tenant_id) {
-      loadLocations(formData.tenant_id)
+    function handleClickOutside(event: MouseEvent) {
+      if (venueDropdownRef.current && !venueDropdownRef.current.contains(event.target as Node)) {
+        setVenueDropdownOpen(false)
+      }
     }
-  }, [formData.tenant_id])
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  // Filter venues based on search query
+  const filteredVenues = venues.filter(venue => {
+    if (!venueSearchQuery) return true
+    const query = venueSearchQuery.toLowerCase()
+    return (
+      venue.name.toLowerCase().includes(query) ||
+      venue.city.toLowerCase().includes(query) ||
+      venue.state.toLowerCase().includes(query) ||
+      (venue.short_name && venue.short_name.toLowerCase().includes(query))
+    )
+  })
+
+  // Debug: log venues state
+  console.log('[render] venues:', venues.length, 'filteredVenues:', filteredVenues.length)
+
+  // Get selected venue for display
+  const selectedVenue = venues.find(v => v.id === formData.venue_id)
+
+  useEffect(() => {
+    console.log('[useEffect] tenant_id:', formData.tenant_id, 'userRole:', userRole)
+    if (formData.tenant_id) {
+      console.log('[useEffect] Loading venues for tenant:', formData.tenant_id)
+      loadLocations(formData.tenant_id)
+      loadVenues(formData.tenant_id)
+    } else if (userRole === 'hq_admin') {
+      // HQ admins can see all venues even without selecting a territory
+      console.log('[useEffect] HQ admin - loading all venues')
+      loadVenues()
+    }
+  }, [formData.tenant_id, userRole])
+
+  async function loadVenues(tenantId?: string) {
+    try {
+      const url = tenantId
+        ? `/api/admin/camps/venues?tenantId=${tenantId}`
+        : '/api/admin/camps/venues'
+      console.log('[loadVenues] Fetching from:', url)
+      const response = await fetch(url, { credentials: 'include' })
+      console.log('[loadVenues] Response status:', response.status)
+      if (response.ok) {
+        const data = await response.json()
+        console.log('[loadVenues] Data received:', data)
+        console.log('[loadVenues] Venues count:', data.venues?.length || 0)
+        setVenues(data.venues || [])
+      } else {
+        const errorData = await response.json()
+        console.error('[loadVenues] Error response:', errorData)
+      }
+    } catch (err) {
+      console.error('Failed to load venues:', err)
+    }
+  }
 
   async function loadInitialData() {
     if (!user) {
@@ -172,6 +255,9 @@ export default function AdminCreateCampPage() {
           const tenantsData = await tenantsResponse.json()
           setTenants(tenantsData.tenants || [])
         }
+        // Load all venues for HQ admin
+        console.log('[loadInitialData] HQ admin detected, loading all venues...')
+        await loadVenues()
       } else if (roleData.tenant_id) {
         setFormData(prev => ({ ...prev, tenant_id: roleData.tenant_id! }))
         // Fetch territories for this tenant
@@ -183,6 +269,7 @@ export default function AdminCreateCampPage() {
           setTerritories(territoriesData.territories || [])
         }
         await loadLocations(roleData.tenant_id)
+        await loadVenues(roleData.tenant_id)
       }
     } catch (err) {
       console.error('Failed to load initial data:', err)
@@ -223,7 +310,8 @@ export default function AdminCreateCampPage() {
       return
     }
 
-    if (!formData.tenant_id) {
+    // Non-HQ users must have a tenant_id
+    if (!formData.tenant_id && !isHqAdmin) {
       setError('The selected territory is not assigned to a licensee. Please select a territory with an assigned licensee.')
       setSaving(false)
       return
@@ -323,11 +411,15 @@ export default function AdminCreateCampPage() {
                         // Find the selected territory and get its tenant_id
                         const territory = territories.find(t => t.id === territoryId)
                         if (territory?.tenant_id) {
-                          setFormData(prev => ({ ...prev, tenant_id: territory.tenant_id!, location_id: null }))
+                          setFormData(prev => ({ ...prev, tenant_id: territory.tenant_id!, location_id: null, venue_id: null }))
                           loadLocations(territory.tenant_id)
+                          loadVenues(territory.tenant_id)
                         } else {
-                          setFormData(prev => ({ ...prev, tenant_id: '', location_id: null }))
+                          // Territory has no tenant - for HQ admin, still load all venues (including global)
+                          setFormData(prev => ({ ...prev, tenant_id: '', location_id: null, venue_id: null }))
                           setLocations([])
+                          // Load all venues without tenant filter - this will include global venues
+                          loadVenues()
                         }
                       }}
                       className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-neon focus:outline-none"
@@ -405,30 +497,156 @@ export default function AdminCreateCampPage() {
               </div>
             </ContentCard>
 
-            <ContentCard title="Location" accent="magenta">
+            <ContentCard title="Venue" accent="magenta">
               <div>
                 <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
                   <MapPin className="h-4 w-4 inline mr-2" />
-                  Venue
+                  Select Venue
                 </label>
-                <select
-                  value={formData.location_id || ''}
-                  onChange={(e) => setFormData(prev => ({ ...prev, location_id: e.target.value || null }))}
-                  className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-magenta focus:outline-none"
-                  disabled={!formData.tenant_id}
-                >
-                  <option value="">Select a location...</option>
-                  {locations.map(loc => (
-                    <option key={loc.id} value={loc.id}>
-                      {loc.name} - {loc.city}, {loc.state}
-                    </option>
-                  ))}
-                </select>
-                {!formData.tenant_id && (
-                  <p className="mt-2 text-sm text-white/40">Select a territory first to see locations</p>
+
+                {/* Searchable Venue Dropdown */}
+                <div className="relative" ref={venueDropdownRef}>
+                  {/* Dropdown Trigger */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // HQ admins can open dropdown without a territory, others need a territory
+                      if (isHqAdmin || formData.tenant_id) {
+                        setVenueDropdownOpen(!venueDropdownOpen)
+                      }
+                    }}
+                    disabled={!isHqAdmin && !formData.tenant_id}
+                    className={`w-full px-4 py-3 bg-black border text-left flex items-center justify-between transition-colors ${
+                      venueDropdownOpen ? 'border-magenta' : 'border-white/20'
+                    } ${!isHqAdmin && !formData.tenant_id ? 'opacity-50 cursor-not-allowed' : 'hover:border-white/40'}`}
+                  >
+                    {selectedVenue ? (
+                      <div className="flex items-center gap-3 min-w-0">
+                        <Building2 className="h-4 w-4 text-magenta flex-shrink-0" />
+                        <div className="min-w-0">
+                          <span className="text-white truncate block">{selectedVenue.name}</span>
+                          <span className="text-white/50 text-sm">{selectedVenue.city}, {selectedVenue.state}</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <span className="text-white/40">Search and select a venue...</span>
+                    )}
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {selectedVenue && (
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setFormData(prev => ({ ...prev, venue_id: null }))
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.stopPropagation()
+                              setFormData(prev => ({ ...prev, venue_id: null }))
+                            }
+                          }}
+                          className="p-1 hover:bg-white/10 rounded cursor-pointer"
+                        >
+                          <X className="h-4 w-4 text-white/40 hover:text-white" />
+                        </span>
+                      )}
+                      <ChevronDown className={`h-4 w-4 text-white/40 transition-transform ${venueDropdownOpen ? 'rotate-180' : ''}`} />
+                    </div>
+                  </button>
+
+                  {/* Dropdown Panel */}
+                  {venueDropdownOpen && (
+                    <div className="absolute z-50 w-full mt-1 bg-dark-100 border border-white/20 shadow-xl max-h-80 overflow-hidden">
+                      {/* Search Input */}
+                      <div className="p-3 border-b border-white/10">
+                        <div className="relative">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
+                          <input
+                            type="text"
+                            value={venueSearchQuery}
+                            onChange={(e) => setVenueSearchQuery(e.target.value)}
+                            placeholder="Search venues..."
+                            className="w-full pl-10 pr-4 py-2 bg-black border border-white/20 text-white placeholder:text-white/30 focus:border-magenta focus:outline-none text-sm"
+                            autoFocus
+                          />
+                        </div>
+                      </div>
+
+                      {/* Venue List */}
+                      <div className="max-h-56 overflow-y-auto">
+                        {filteredVenues.length === 0 ? (
+                          <div className="p-4 text-center text-white/40 text-sm">
+                            {venueSearchQuery ? 'No venues match your search' : 'No venues available'}
+                          </div>
+                        ) : (
+                          filteredVenues.map(venue => (
+                            <button
+                              key={venue.id}
+                              type="button"
+                              onClick={() => {
+                                setFormData(prev => ({ ...prev, venue_id: venue.id }))
+                                setVenueDropdownOpen(false)
+                                setVenueSearchQuery('')
+                              }}
+                              className={`w-full px-4 py-3 flex items-center gap-3 text-left hover:bg-white/5 transition-colors ${
+                                formData.venue_id === venue.id ? 'bg-magenta/10' : ''
+                              }`}
+                            >
+                              <Building2 className={`h-4 w-4 flex-shrink-0 ${formData.venue_id === venue.id ? 'text-magenta' : 'text-white/40'}`} />
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className={`font-medium ${formData.venue_id === venue.id ? 'text-magenta' : 'text-white'}`}>
+                                    {venue.name}
+                                  </span>
+                                  {venue.is_global && (
+                                    <span className="px-1.5 py-0.5 text-xs bg-purple/20 text-purple uppercase tracking-wider">
+                                      Global
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-sm text-white/50 flex items-center gap-2">
+                                  <span>{venue.city}, {venue.state}</span>
+                                  {venue.facility_type && (
+                                    <>
+                                      <span className="text-white/20">•</span>
+                                      <span className="capitalize">{venue.facility_type.replace(/_/g, ' ')}</span>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                              {formData.venue_id === venue.id && (
+                                <Check className="h-4 w-4 text-magenta flex-shrink-0" />
+                              )}
+                            </button>
+                          ))
+                        )}
+                      </div>
+
+                      {/* Add New Venue Link */}
+                      <div className="p-3 border-t border-white/10">
+                        <Link
+                          href="/admin/venues/new"
+                          className="flex items-center gap-2 text-sm text-neon hover:underline"
+                        >
+                          <MapPin className="h-4 w-4" />
+                          Add a new venue
+                        </Link>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {!isHqAdmin && !formData.tenant_id && (
+                  <p className="mt-2 text-sm text-white/40">Select a territory first to see venues</p>
                 )}
-                {formData.tenant_id && locations.length === 0 && (
-                  <p className="mt-2 text-sm text-white/40">No locations found for this territory</p>
+                {(isHqAdmin || formData.tenant_id) && venues.length === 0 && !venueDropdownOpen && (
+                  <p className="mt-2 text-sm text-white/40">
+                    No venues found.{' '}
+                    <Link href="/admin/venues/new" className="text-neon hover:underline">
+                      Add a new venue
+                    </Link>
+                  </p>
                 )}
               </div>
             </ContentCard>
