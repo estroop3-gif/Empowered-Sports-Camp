@@ -21,13 +21,43 @@ import {
   UsersRound,
   LayoutDashboard,
 } from 'lucide-react'
-import {
-  fetchAdminCamps,
-  getCurrentUserRole,
-  duplicateCamp,
-  deleteCamp,
-  type AdminCamp,
-} from '@/lib/services/admin-camps'
+
+// Type definition (avoid importing from Prisma-based service in client component)
+interface AdminCamp {
+  id: string
+  name: string
+  slug: string
+  description: string | null
+  sport: string | null
+  start_date: string
+  end_date: string
+  start_time: string | null
+  end_time: string | null
+  age_min: number
+  age_max: number
+  capacity: number
+  price: number
+  early_bird_price: number | null
+  early_bird_deadline: string | null
+  status: string
+  featured: boolean
+  image_url: string | null
+  tenant_id: string
+  location_id: string | null
+  created_at: string
+  updated_at: string
+  location?: {
+    id: string
+    name: string
+    city: string | null
+    state: string | null
+  } | null
+  tenant?: {
+    id: string
+    name: string
+    slug: string
+  } | null
+}
 
 /**
  * Admin Camps Page
@@ -60,16 +90,22 @@ export default function AdminCampsPage() {
     setError(null)
 
     try {
-      const options: { status?: string } = {}
+      const params = new URLSearchParams()
       if (statusFilter) {
-        options.status = statusFilter
+        params.set('status', statusFilter)
       }
 
-      const { camps: campData } = await fetchAdminCamps(options)
-      setCamps(campData)
+      const response = await fetch(`/api/admin/camps?${params.toString()}`)
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to fetch camps')
+      }
+
+      setCamps(result.camps || [])
     } catch (err) {
       console.error('Failed to load camps:', err)
-      setError('Failed to load camps')
+      setError(`Failed to load camps: ${err instanceof Error ? err.message : 'Unknown error'}`)
     } finally {
       setLoading(false)
     }
@@ -77,7 +113,12 @@ export default function AdminCampsPage() {
 
   async function handleDuplicate(id: string) {
     try {
-      await duplicateCamp(id)
+      const response = await fetch(`/api/admin/camps?action=duplicate&id=${id}`, {
+        method: 'POST',
+      })
+      if (!response.ok) {
+        throw new Error('Failed to duplicate camp')
+      }
       loadCamps()
       setActionMenuOpen(null)
     } catch (err) {
@@ -89,7 +130,12 @@ export default function AdminCampsPage() {
     if (!confirm('Are you sure you want to delete this camp? This cannot be undone.')) return
 
     try {
-      await deleteCamp(id)
+      const response = await fetch(`/api/admin/camps?id=${id}`, {
+        method: 'DELETE',
+      })
+      if (!response.ok) {
+        throw new Error('Failed to delete camp')
+      }
       loadCamps()
       setActionMenuOpen(null)
     } catch (err) {
