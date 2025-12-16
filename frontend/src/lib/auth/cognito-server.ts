@@ -158,6 +158,27 @@ export async function hasRole(roles: string[]): Promise<boolean> {
 }
 
 /**
+ * Get user's roles from the database
+ */
+export async function getUserRoles(userId: string): Promise<{ role: string; tenantId: string | null }[]> {
+  // Import prisma dynamically to avoid circular dependencies
+  const { default: prisma } = await import('@/lib/db/client')
+
+  const roles = await prisma.userRoleAssignment.findMany({
+    where: {
+      userId,
+      isActive: true,
+    },
+    select: {
+      role: true,
+      tenantId: true,
+    },
+  })
+
+  return roles.map((r) => ({ role: r.role, tenantId: r.tenantId }))
+}
+
+/**
  * Exchange authorization code for tokens (OAuth callback)
  */
 export async function exchangeCodeForTokens(code: string): Promise<{

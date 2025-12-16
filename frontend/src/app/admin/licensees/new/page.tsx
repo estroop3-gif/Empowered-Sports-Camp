@@ -149,10 +149,26 @@ export default function NewLicenseePage() {
         return
       }
 
-      // If send_invite is checked, trigger email (placeholder for now)
+      // If send_invite is checked, send invite email via the role invite system
       if (formData.send_invite && data) {
-        // TODO: Call Resend API to send invite email
-        console.log('Would send invite email to:', formData.email)
+        try {
+          await fetch('/api/invites', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email: formData.email,
+              firstName: formData.first_name,
+              lastName: formData.last_name,
+              phone: formData.phone,
+              targetRole: 'licensee_owner',
+              tenantId: data.tenant_id,
+              sendEmail: true,
+            }),
+          })
+        } catch (inviteErr) {
+          console.error('Failed to send invite email:', inviteErr)
+          // Don't block the creation, just log the error
+        }
       }
     } catch (err) {
       setError('Failed to create licensee')

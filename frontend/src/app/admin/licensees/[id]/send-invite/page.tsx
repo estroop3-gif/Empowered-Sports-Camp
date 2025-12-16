@@ -4,8 +4,6 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter, useParams } from 'next/navigation'
 import { AdminLayout, PageHeader, ContentCard } from '@/components/admin/admin-layout'
-import { getLicenseeById, Licensee } from '@/lib/services/licensees'
-import { sendLicenseeApplicationEmail } from '@/lib/email'
 import {
   ArrowLeft,
   Mail,
@@ -13,9 +11,25 @@ import {
   Loader2,
   CheckCircle,
   AlertCircle,
-  User,
   MapPin,
 } from 'lucide-react'
+
+// Licensee type for API response
+interface Licensee {
+  id: string
+  email: string
+  first_name: string | null
+  last_name: string | null
+  phone: string | null
+  city: string | null
+  state: string | null
+  created_at: string
+  role_id?: string
+  tenant_id?: string | null
+  is_active?: boolean
+  tenant_name?: string | null
+  territory_name?: string | null
+}
 
 /**
  * Send Licensee Application Invite Page
@@ -35,16 +49,21 @@ export default function SendInvitePage() {
   const [sent, setSent] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Fetch licensee data
+  // Fetch licensee data via API
   useEffect(() => {
     async function fetchLicensee() {
       setLoading(true)
-      const { data, error: fetchError } = await getLicenseeById(licenseeId)
+      try {
+        const response = await fetch(`/api/licensees?action=byId&id=${licenseeId}`)
+        const result = await response.json()
 
-      if (fetchError || !data) {
-        setError(fetchError?.message || 'Licensee not found')
-      } else {
-        setLicensee(data)
+        if (result.error || !result.data) {
+          setError(result.error || 'Licensee not found')
+        } else {
+          setLicensee(result.data)
+        }
+      } catch (err) {
+        setError('Failed to load licensee')
       }
 
       setLoading(false)
@@ -61,22 +80,22 @@ export default function SendInvitePage() {
     setSending(true)
     setError(null)
 
-    // Generate application URL (this would be a real URL in production)
-    const applicationUrl = `${window.location.origin}/apply/licensee?token=${licenseeId}`
+    try {
+      const response = await fetch('/api/admin/licensees/send-invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ licenseeId }),
+      })
 
-    const result = await sendLicenseeApplicationEmail({
-      to: licensee.email,
-      subject: `Complete Your Licensee Application - ${licensee.territory_name || 'Empowered Sports Camp'}`,
-      firstName: licensee.first_name || '',
-      lastName: licensee.last_name || '',
-      territoryName: licensee.territory_name || 'Your Territory',
-      applicationUrl,
-    })
+      const result = await response.json()
 
-    if (result.success) {
-      setSent(true)
-    } else {
-      setError(result.error || 'Failed to send email')
+      if (result.error) {
+        setError(result.error)
+      } else {
+        setSent(true)
+      }
+    } catch (err) {
+      setError('Failed to send email')
     }
 
     setSending(false)

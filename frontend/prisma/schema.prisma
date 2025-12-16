@@ -348,6 +348,9 @@ model Tenant {
   // Testimony relations
   testimonies             Testimony[]
 
+  // Role invite relations
+  roleInvites             RoleInvite[]
+
   @@map("tenants")
 }
 
@@ -517,6 +520,10 @@ model Profile {
   // Testimony relations
   createdTestimonies          Testimony[]                @relation("TestimonyCreator")
   reviewedTestimonies         Testimony[]                @relation("TestimonyReviewer")
+
+  // Role invite relations
+  sentInvites                 RoleInvite[]               @relation("SentInvites")
+  acceptedInvites             RoleInvite[]               @relation("AcceptedInvites")
 
   @@map("profiles")
 }
@@ -3024,4 +3031,71 @@ model CampDayRecap {
   @@index([campDayId])
   @@index([createdAt])
   @@map("camp_day_recaps")
+}
+
+// ============================================================================
+// ROLE INVITE SYSTEM
+// ============================================================================
+
+// Invite status enum
+enum InviteStatus {
+  pending
+  accepted
+  expired
+  revoked
+}
+
+// Role Invites - Allows users to invite others to join with specific roles
+// Supports hierarchical invitations:
+// - HQ Admin can invite: Licensee Owners
+// - Licensee Owners can invite: Directors, Coaches, CIT Volunteers
+// - Directors can invite: Coaches, CIT Volunteers
+// - Coaches can invite: CIT Volunteers
+model RoleInvite {
+  id              String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId        String?      @map("tenant_id") @db.Uuid // null for HQ-level invites
+  invitedByUserId String       @map("invited_by_user_id") @db.Uuid
+
+  // Invite details
+  email           String       // Email to send invite to
+  firstName       String?      @map("first_name")
+  lastName        String?      @map("last_name")
+  phone           String?
+
+  // Role assignment
+  targetRole      UserRole     @map("target_role") // Role they'll be assigned
+
+  // Invite token and status
+  token           String       @unique @default(dbgenerated("gen_random_uuid()"))
+  status          InviteStatus @default(pending)
+
+  // Expiration (default 7 days from creation)
+  expiresAt       DateTime     @map("expires_at") @db.Timestamptz
+
+  // Completion tracking
+  acceptedAt      DateTime?    @map("accepted_at") @db.Timestamptz
+  acceptedUserId  String?      @map("accepted_user_id") @db.Uuid // Profile ID of user who accepted
+
+  // Email tracking
+  lastEmailSentAt DateTime?    @map("last_email_sent_at") @db.Timestamptz
+  emailSentCount  Int          @default(0) @map("email_sent_count")
+
+  // Metadata
+  notes           String?      @db.Text
+  createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  tenant          Tenant?      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  invitedBy       Profile      @relation("SentInvites", fields: [invitedByUserId], references: [id], onDelete: Cascade)
+  acceptedUser    Profile?     @relation("AcceptedInvites", fields: [acceptedUserId], references: [id], onDelete: SetNull)
+
+  @@index([email])
+  @@index([token])
+  @@index([tenantId])
+  @@index([invitedByUserId])
+  @@index([targetRole])
+  @@index([status])
+  @@index([expiresAt])
+  @@map("role_invites")
 }

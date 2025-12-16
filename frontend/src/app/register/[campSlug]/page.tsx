@@ -20,58 +20,93 @@ import type { CampSession, AddOn, CampWithAddOns } from '@/types/registration'
  * Steps: Camp Selection → Camper Info → Add-Ons → Payment → Confirmation
  */
 
-// Mock data - replace with actual API fetch
-const MOCK_CAMP: CampSession = {
-  id: 'camp-001',
-  slug: 'summer-2025-all-girls',
-  name: 'All-Girls Summer Camp 2025',
-  description: 'A week of fierce competition, skill building, and confidence boosting for girls ages 8-14.',
-  programType: 'all_girls_sports_camp',
-  locationId: 'loc-001',
-  location: {
-    id: 'loc-001',
-    name: 'Northfield Sports Complex',
-    addressLine1: '1234 Champion Way',
-    addressLine2: null,
-    city: 'Northfield',
-    state: 'IL',
-    zipCode: '60093',
-    latitude: null,
-    longitude: null,
-  },
-  startDate: '2025-06-16',
-  endDate: '2025-06-20',
-  dailyStartTime: '09:00',
-  dailyEndTime: '15:00',
-  minAge: 8,
-  maxAge: 14,
-  maxCapacity: 50,
-  spotsRemaining: 23,
-  price: 39900, // $399
-  earlyBirdPrice: 34900, // $349
-  earlyBirdDeadline: '2025-05-01',
-  siblingDiscountPercent: 10,
-  beforeCarePrice: 2500,
-  afterCarePrice: 2500,
-  beforeCareStart: '07:30',
-  afterCareEnd: '17:30',
-  imageUrl: '/images/camp-hero.jpg',
-  highlights: [
-    'Multi-sport rotation: Basketball, Soccer, Volleyball',
-    'Leadership workshops and team building',
-    'Professional female athlete guest speakers',
-    'End-of-week showcase for families',
-  ],
-  sportsOffered: ['Basketball', 'Soccer', 'Volleyball', 'Flag Football'],
-  isEarlyBird: true,
-  isFull: false,
-  tenantId: 'tenant-001',
+// Transform API response (PublicCampCard) to CampSession format
+interface PublicCampCard {
+  id: string
+  slug: string
+  name: string
+  description: string | null
+  program_type: string
+  start_date: string
+  end_date: string
+  daily_start_time: string | null
+  daily_end_time: string | null
+  min_age: number
+  max_age: number
+  max_capacity: number
+  price: number
+  early_bird_price: number | null
+  early_bird_deadline: string | null
+  image_url: string | null
+  highlights: string[]
+  sports_offered: string[]
+  tenant_id: string
+  location_id: string | null
+  location_name: string | null
+  location_address: string | null
+  city: string | null
+  state: string | null
+  zip_code: string | null
+  latitude: number | null
+  longitude: number | null
+  spots_remaining: number
+  current_price: number
+  is_full: boolean
 }
 
-const MOCK_ADDONS: AddOn[] = [
+function transformApiCampToSession(apiCamp: PublicCampCard): CampSession {
+  const now = new Date()
+  const isEarlyBird = apiCamp.early_bird_deadline && new Date(apiCamp.early_bird_deadline) > now
+
+  return {
+    id: apiCamp.id,
+    slug: apiCamp.slug,
+    name: apiCamp.name,
+    description: apiCamp.description,
+    programType: apiCamp.program_type as CampSession['programType'],
+    locationId: apiCamp.location_id,
+    location: apiCamp.location_id ? {
+      id: apiCamp.location_id,
+      name: apiCamp.location_name || '',
+      addressLine1: apiCamp.location_address || '',
+      addressLine2: null,
+      city: apiCamp.city || '',
+      state: apiCamp.state || '',
+      zipCode: apiCamp.zip_code || '',
+      latitude: apiCamp.latitude,
+      longitude: apiCamp.longitude,
+    } : null,
+    startDate: apiCamp.start_date.split('T')[0],
+    endDate: apiCamp.end_date.split('T')[0],
+    dailyStartTime: apiCamp.daily_start_time || '09:00',
+    dailyEndTime: apiCamp.daily_end_time || '15:00',
+    minAge: apiCamp.min_age,
+    maxAge: apiCamp.max_age,
+    maxCapacity: apiCamp.max_capacity,
+    spotsRemaining: apiCamp.spots_remaining,
+    price: apiCamp.price,
+    earlyBirdPrice: apiCamp.early_bird_price,
+    earlyBirdDeadline: apiCamp.early_bird_deadline?.split('T')[0] || null,
+    siblingDiscountPercent: 10, // Default sibling discount
+    beforeCarePrice: 2500, // Default before care price
+    afterCarePrice: 2500, // Default after care price
+    beforeCareStart: '07:30',
+    afterCareEnd: '17:30',
+    imageUrl: apiCamp.image_url,
+    highlights: apiCamp.highlights || [],
+    sportsOffered: apiCamp.sports_offered || [],
+    isEarlyBird: isEarlyBird || false,
+    isFull: apiCamp.is_full,
+    tenantId: apiCamp.tenant_id,
+  }
+}
+
+// Default add-ons for when API returns empty or no add-ons exist
+// These serve as examples and fallback upsell items
+const DEFAULT_ADDONS: AddOn[] = [
   {
     id: 'addon-001',
-    tenantId: 'tenant-001',
+    tenantId: 'default',
     name: 'Daily Fuel Pack',
     slug: 'daily-fuel-pack',
     description: 'Balanced snacks and drinks to keep her energized all day.',
@@ -87,7 +122,7 @@ const MOCK_ADDONS: AddOn[] = [
   },
   {
     id: 'addon-002',
-    tenantId: 'tenant-001',
+    tenantId: 'default',
     name: 'Empowered Athlete Tee',
     slug: 'empowered-tee',
     description: 'Official camp t-shirt. Premium cotton blend.',
@@ -112,7 +147,7 @@ const MOCK_ADDONS: AddOn[] = [
   },
   {
     id: 'addon-003',
-    tenantId: 'tenant-001',
+    tenantId: 'default',
     name: 'Champion Water Bottle',
     slug: 'water-bottle',
     description: '32oz insulated stainless steel with logo.',
@@ -128,7 +163,7 @@ const MOCK_ADDONS: AddOn[] = [
   },
   {
     id: 'addon-004',
-    tenantId: 'tenant-001',
+    tenantId: 'default',
     name: 'Empowered Snapback',
     slug: 'snapback-hat',
     description: 'Adjustable snapback with embroidered logo.',
@@ -144,7 +179,7 @@ const MOCK_ADDONS: AddOn[] = [
   },
   {
     id: 'addon-005',
-    tenantId: 'tenant-001',
+    tenantId: 'default',
     name: 'Fierce Wristband Pack',
     slug: 'wristband-pack',
     description: 'Set of 3 silicone wristbands in neon, magenta, and purple.',
@@ -258,22 +293,80 @@ export default function RegisterPage() {
       setError(null)
 
       try {
-        // TODO: Fetch actual camp data from API
-        // const response = await fetch(`/api/camps/${params.campSlug}`)
-        // const data: CampWithAddOns = await response.json()
+        // Fetch camp data from API
+        const campResponse = await fetch(`/api/camps?action=bySlug&slug=${params.campSlug}`)
+        const campResult = await campResponse.json()
 
-        // For now, use mock data
-        await new Promise((resolve) => setTimeout(resolve, 500))
-
-        if (params.campSlug === 'summer-2025-all-girls' || params.campSlug === 'demo') {
-          setCamp(MOCK_CAMP)
-          setAddons(MOCK_ADDONS)
-        } else {
+        if (!campResult.data) {
           setError('Camp not found')
+          return
+        }
+
+        // Transform API response to CampSession format
+        const campSession = transformApiCampToSession(campResult.data)
+        setCamp(campSession)
+
+        // Fetch shop products with category 'addons' for upsells
+        const addonsResponse = await fetch('/api/shop/products?category=addons')
+        const addonsResult = await addonsResponse.json()
+
+        // API returns array directly (not wrapped in data object)
+        const shopProducts = Array.isArray(addonsResult) ? addonsResult : addonsResult.data || []
+
+        if (shopProducts.length > 0) {
+          // Transform shop products to AddOn format for the registration flow
+          const shopAddons: AddOn[] = shopProducts.map((product: {
+            id: string
+            licensee_id: string | null
+            name: string
+            slug: string
+            description: string | null
+            price_cents: number
+            image_url: string | null
+            is_featured: boolean
+            variants?: Array<{
+              id: string
+              product_id: string
+              name: string
+              sku: string | null
+              price_cents: number | null
+              inventory_quantity: number | null
+            }>
+          }, index: number) => ({
+            id: product.id,
+            tenantId: product.licensee_id || campSession.tenantId,
+            name: product.name,
+            slug: product.slug,
+            description: product.description,
+            hypeCopy: product.description,
+            addonType: 'merchandise' as const,
+            scope: 'per_camper' as const,
+            price: product.price_cents,
+            compareAtPrice: null,
+            imageUrl: product.image_url,
+            displayOrder: index + 1,
+            featured: product.is_featured,
+            variants: (product.variants || []).map((v) => ({
+              id: v.id,
+              addonId: product.id,
+              name: v.name,
+              sku: v.sku,
+              priceOverride: v.price_cents,
+              inventoryQuantity: v.inventory_quantity || 0,
+              lowStockThreshold: 5,
+              allowBackorder: false,
+              isLowStock: (v.inventory_quantity || 0) <= 5 && (v.inventory_quantity || 0) > 0,
+              isSoldOut: (v.inventory_quantity || 0) <= 0,
+            })),
+          }))
+          setAddons(shopAddons)
+        } else {
+          // Fall back to default add-ons if no shop products configured
+          setAddons(DEFAULT_ADDONS)
         }
       } catch (err) {
         setError('Failed to load camp data')
-        console.error(err)
+        console.error('Error loading camp data:', err)
       } finally {
         setIsLoading(false)
       }
