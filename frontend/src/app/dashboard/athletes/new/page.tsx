@@ -293,20 +293,25 @@ function AddAthleteContent() {
                   </div>
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-wider text-white/50 mb-2">
-                      Gender
+                      Gender *
                     </label>
                     <select
                       name="gender"
                       value={formData.gender}
                       onChange={handleChange}
+                      required
                       className="w-full bg-black border border-white/20 text-white px-4 py-3 focus:border-neon focus:outline-none"
                     >
                       <option value="">Select...</option>
                       <option value="female">Female</option>
                       <option value="male">Male</option>
-                      <option value="non-binary">Non-Binary</option>
-                      <option value="prefer-not-to-say">Prefer not to say</option>
                     </select>
+                    {formData.gender === 'male' && (
+                      <p className="mt-2 text-xs text-amber-400 flex items-center gap-1">
+                        <AlertTriangle className="h-3 w-3" />
+                        Note: Empowered Athletes camps are for female athletes only.
+                      </p>
+                    )}
                   </div>
                 </div>
 

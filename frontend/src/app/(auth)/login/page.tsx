@@ -96,8 +96,8 @@ export default function LoginPage() {
 
     try {
       await forgotPassword(formData.email)
-      setMessage('Password reset code sent! Check your email.')
-      // Could redirect to reset password page
+      // Redirect to reset password page with email pre-filled
+      router.push(`/reset-password?email=${encodeURIComponent(formData.email)}`)
     } catch (err: unknown) {
       const error = err as Error & { code?: string }
       if (error.code === 'UserNotFoundException') {
