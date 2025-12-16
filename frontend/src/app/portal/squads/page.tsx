@@ -21,6 +21,7 @@ import {
 import { AdminLayout, PageHeader, ContentCard } from '@/components/admin/admin-layout'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { useAuth } from '@/lib/auth/context'
 
 /**
  * Parent Squad Management Page
@@ -62,6 +63,7 @@ interface SquadInvite {
 export default function SquadsPage() {
   const searchParams = useSearchParams()
   const filterCampId = searchParams.get('campId')
+  const { user } = useAuth()
 
   const [isLoading, setIsLoading] = useState(true)
   const [squads, setSquads] = useState<Squad[]>([])
@@ -101,7 +103,7 @@ export default function SquadsPage() {
             campName: s.camp?.name || 'Camp',
             campId: s.campId,
             campDates: s.camp ? formatDateRange(s.camp.startDate, s.camp.endDate) : '',
-            isOwner: true, // TODO: Compare with current user ID
+            isOwner: user?.id === s.createdByParentId,
             members: s.members.map((m) => ({
               id: m.id,
               athleteName: `${m.athlete.firstName} ${m.athlete.lastName}`,
@@ -131,7 +133,7 @@ export default function SquadsPage() {
     }
 
     fetchData()
-  }, [filterCampId])
+  }, [filterCampId, user?.id])
 
   const formatDateRange = (start: string, end: string) => {
     const startDate = new Date(start)

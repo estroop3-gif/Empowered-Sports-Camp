@@ -739,3 +739,165 @@ export async function sendCitAdminNotificationEmail(
 export function isCitNotificationsConfigured(): boolean {
   return !!process.env.RESEND_API_KEY && !!process.env.CIT_NOTIFICATIONS_EMAIL
 }
+
+// ============================================
+// Squad Invite Email Functions
+// ============================================
+
+export interface SquadInviteEmailOptions {
+  to: string
+  inviterName: string
+  campName: string
+  signupUrl: string
+}
+
+/**
+ * Generate HTML email template for squad invite (new user)
+ */
+function generateSquadInviteHtml(options: SquadInviteEmailOptions): string {
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>You've Been Invited to Join a Squad!</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #000000; font-family: 'Poppins', Arial, sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #000000; padding: 40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background-color: #0a0a0a; border: 1px solid rgba(255,255,255,0.1);">
+          <!-- Header -->
+          <tr>
+            <td style="padding: 40px 40px 20px; border-bottom: 2px solid #a855f7;">
+              <h1 style="margin: 0; color: #a855f7; font-size: 24px; font-weight: 900; text-transform: uppercase; letter-spacing: 2px;">
+                Empowered Sports Camp
+              </h1>
+            </td>
+          </tr>
+
+          <!-- Content -->
+          <tr>
+            <td style="padding: 40px;">
+              <h2 style="margin: 0 0 20px; color: #ffffff; font-size: 20px; font-weight: 700;">
+                You've Been Invited to Join a Squad! 🎉
+              </h2>
+
+              <p style="margin: 0 0 20px; color: rgba(255,255,255,0.7); font-size: 16px; line-height: 1.6;">
+                <strong style="color: #ffffff;">${options.inviterName}</strong> has invited you to have your athletes grouped together at <strong style="color: #a855f7;">${options.campName}</strong>.
+              </p>
+
+              <p style="margin: 0 0 20px; color: rgba(255,255,255,0.7); font-size: 16px; line-height: 1.6;">
+                With our "Build Her Squad" feature, you can keep friends together during camp activities. Create an account to accept the invite and register your athletes.
+              </p>
+
+              <table cellpadding="0" cellspacing="0" style="margin: 0 0 30px;">
+                <tr>
+                  <td style="background-color: #a855f7; padding: 16px 32px;">
+                    <a href="${options.signupUrl}" style="color: #000000; text-decoration: none; font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;">
+                      Sign Up & Join Squad
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin: 0 0 20px; color: rgba(255,255,255,0.5); font-size: 14px;">
+                Or copy and paste this link into your browser:
+              </p>
+              <p style="margin: 0 0 30px; color: #a855f7; font-size: 14px; word-break: break-all;">
+                ${options.signupUrl}
+              </p>
+
+              <p style="margin: 0; color: rgba(255,255,255,0.5); font-size: 14px;">
+                This invite will expire in 30 days.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 30px 40px; border-top: 1px solid rgba(255,255,255,0.1); background-color: rgba(0,0,0,0.5);">
+              <p style="margin: 0; color: rgba(255,255,255,0.4); font-size: 12px; text-align: center;">
+                &copy; ${new Date().getFullYear()} Empowered Sports Camp. All rights reserved.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+  `.trim()
+}
+
+/**
+ * Generate plain text email for squad invite
+ */
+function generateSquadInviteText(options: SquadInviteEmailOptions): string {
+  return `
+You've Been Invited to Join a Squad!
+
+${options.inviterName} has invited you to have your athletes grouped together at ${options.campName}.
+
+With our "Build Her Squad" feature, you can keep friends together during camp activities. Create an account to accept the invite and register your athletes.
+
+Sign up here: ${options.signupUrl}
+
+This invite will expire in 30 days.
+
+---
+Empowered Sports Camp
+  `.trim()
+}
+
+/**
+ * Send squad invite email to a new user
+ *
+ * Called when a parent invites someone who doesn't have an account yet.
+ */
+export async function sendSquadInviteEmail(
+  options: SquadInviteEmailOptions
+): Promise<EmailResult> {
+  const { to, inviterName, campName, signupUrl } = options
+
+  // If Resend is not configured, log to console and return success
+  if (!resend) {
+    console.log('=== DEV MODE: Squad Invite Email ===')
+    console.log('To:', to)
+    console.log('Subject:', `${inviterName} invited you to join their squad!`)
+    console.log('Inviter:', inviterName)
+    console.log('Camp:', campName)
+    console.log('Signup URL:', signupUrl)
+    console.log('====================================')
+    console.log('')
+    console.log('NOTE: Set RESEND_API_KEY in .env.local to send real emails')
+    console.log('')
+
+    return {
+      success: true,
+      messageId: `dev-${Date.now()}`,
+    }
+  }
+
+  try {
+    const { data, error } = await resend.emails.send({
+      from: DEFAULT_FROM,
+      to: [to],
+      subject: `${inviterName} invited you to join their squad!`,
+      html: generateSquadInviteHtml(options),
+      text: generateSquadInviteText(options),
+    })
+
+    if (error) {
+      console.error('Resend error (squad invite):', error)
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, messageId: data?.id }
+  } catch (err) {
+    console.error('Email send error (squad invite):', err)
+    return { success: false, error: (err as Error).message }
+  }
+}

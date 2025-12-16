@@ -9,6 +9,7 @@
 
 import { prisma } from '@/lib/db/client'
 import { createNotification } from './notifications'
+import { sendSquadInviteEmail } from '@/lib/email'
 import type { SquadMemberStatus } from '@/generated/prisma'
 
 // =============================================================================
@@ -388,8 +389,16 @@ export async function sendSquadInvite(params: {
         },
       })
 
-      // TODO: Send email to invite them to sign up
-      // This would integrate with the existing email service
+      // Send email to invite them to sign up
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://empoweredsportscamp.com'
+      const signupUrl = `${baseUrl}/signup?invite=squad&email=${encodeURIComponent(invitedEmail.toLowerCase())}&campId=${squad.campId}`
+
+      await sendSquadInviteEmail({
+        to: invitedEmail.toLowerCase(),
+        inviterName: invitingName,
+        campName: squad.camp.name,
+        signupUrl,
+      })
 
       return { data: { sent: true, isNewUser: true }, error: null }
     }
