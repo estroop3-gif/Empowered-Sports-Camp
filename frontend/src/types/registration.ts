@@ -138,7 +138,7 @@ export interface CamperFormData {
   lastName: string
   dateOfBirth: string // YYYY-MM-DD
   grade: string
-  pronouns: string
+  sex: 'female' // Fixed: Females-only camp
   tshirtSize: TShirtSize
   medicalNotes: string
   allergies: string

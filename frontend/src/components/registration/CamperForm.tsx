@@ -51,7 +51,7 @@ const GRADES = [
   '12th Grade',
 ]
 
-const PRONOUNS = ['she/her', 'he/him', 'they/them', 'other']
+// Sex is fixed to Female for this girls-only camp
 
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label: string
@@ -276,12 +276,14 @@ function CamperCard({ camper, index, total, campSession, onUpdate, onRemove }: C
               onChange={(e) => onUpdate({ grade: e.target.value })}
               options={GRADES.map((g) => ({ value: g, label: g }))}
             />
-            <FormSelect
-              label="Pronouns"
-              value={camper.pronouns}
-              onChange={(e) => onUpdate({ pronouns: e.target.value })}
-              options={PRONOUNS.map((p) => ({ value: p, label: p }))}
-            />
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold uppercase tracking-wider text-white/60">
+                Sex
+              </label>
+              <div className="w-full px-4 py-3 bg-white/5 border border-white/10 text-white/60 cursor-not-allowed">
+                Female (Females-Only)
+              </div>
+            </div>
           </div>
 
           <FormSelect

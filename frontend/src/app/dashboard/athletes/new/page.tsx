@@ -75,7 +75,7 @@ function AddAthleteContent() {
     firstName: '',
     lastName: '',
     dateOfBirth: '',
-    gender: '',
+    gender: 'female', // Fixed: Females-only camp
     grade: '',
     schoolName: '',
     tshirtSize: '',
@@ -293,25 +293,15 @@ function AddAthleteContent() {
                   </div>
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-wider text-white/50 mb-2">
-                      Gender *
+                      Sex
                     </label>
-                    <select
-                      name="gender"
-                      value={formData.gender}
-                      onChange={handleChange}
-                      required
-                      className="w-full bg-black border border-white/20 text-white px-4 py-3 focus:border-neon focus:outline-none"
-                    >
-                      <option value="">Select...</option>
-                      <option value="female">Female</option>
-                      <option value="male">Male</option>
-                    </select>
-                    {formData.gender === 'male' && (
-                      <p className="mt-2 text-xs text-amber-400 flex items-center gap-1">
-                        <AlertTriangle className="h-3 w-3" />
-                        Note: Empowered Athletes camps are for female athletes only.
-                      </p>
-                    )}
+                    <div className="w-full bg-black/50 border border-white/10 text-white/70 px-4 py-3 cursor-not-allowed">
+                      Female (Females-Only Camp)
+                    </div>
+                    <p className="mt-2 text-xs text-magenta/80 flex items-center gap-1">
+                      <Crown className="h-3 w-3" />
+                      Empowered Athletes is a girls-only sports camp
+                    </p>
                   </div>
                 </div>
 

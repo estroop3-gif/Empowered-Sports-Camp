@@ -37,7 +37,7 @@ const createInitialCamper = (): CamperFormData => ({
   lastName: '',
   dateOfBirth: '',
   grade: '',
-  pronouns: '',
+  sex: 'female', // Fixed: Females-only camp
   tshirtSize: '',
   medicalNotes: '',
   allergies: '',
