@@ -910,12 +910,10 @@ export async function getPaymentStatus(params: {
 
 /**
  * Get Stripe connected account for a licensee (for payouts)
- *
- * TODO: Add stripeAccountId field to Tenant model to enable this feature
  */
 export async function getConnectedAccount(params: {
   tenantId: string
-}): Promise<{ data: { accountId: string; status: string } | null; error: Error | null }> {
+}): Promise<{ data: { accountId: string; status: string; onboardingComplete: boolean } | null; error: Error | null }> {
   try {
     const { tenantId } = params
 
@@ -924,6 +922,8 @@ export async function getConnectedAccount(params: {
       select: {
         id: true,
         name: true,
+        stripeAccountId: true,
+        stripeOnboardingComplete: true,
       },
     })
 
@@ -931,8 +931,19 @@ export async function getConnectedAccount(params: {
       return { data: null, error: new Error('Tenant not found') }
     }
 
-    // TODO: Once Tenant model has stripeAccountId field, return it here
-    // For now, return null indicating no connected account
+    // Return connected account info if available
+    if (tenant.stripeAccountId) {
+      return {
+        data: {
+          accountId: tenant.stripeAccountId,
+          status: tenant.stripeOnboardingComplete ? 'active' : 'pending',
+          onboardingComplete: tenant.stripeOnboardingComplete,
+        },
+        error: null,
+      }
+    }
+
+    // No connected account yet
     return { data: null, error: null }
   } catch (error) {
     console.error('[Payments] Failed to get connected account:', error)
@@ -985,11 +996,11 @@ export async function createConnectOnboardingLink(params: {
       },
     })
 
-    // TODO: Save account.id to tenant record
-    // await prisma.tenant.update({
-    //   where: { id: tenantId },
-    //   data: { stripeAccountId: account.id },
-    // })
+    // Save account.id to tenant record
+    await prisma.tenant.update({
+      where: { id: tenantId },
+      data: { stripeAccountId: account.id },
+    })
 
     // Create onboarding link
     const accountLink = await stripe.accountLinks.create({

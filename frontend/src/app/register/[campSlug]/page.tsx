@@ -211,13 +211,11 @@ function RegistrationContent({ camp, addons }: { camp: CampSession; addons: AddO
     }
   }, [state.step, state.campSession, setStep])
 
-  const handlePaymentComplete = async (paymentIntentId: string) => {
-    // TODO: Submit registration to API
-    // This would create the registration record and process payment
-    console.log('Payment complete:', paymentIntentId)
-
-    // Generate confirmation number
-    const confirmation = `EA-${Date.now().toString(36).toUpperCase()}`
+  const handlePaymentComplete = async (sessionId: string) => {
+    // This callback is called in demo mode when Stripe isn't configured
+    // In production, users are redirected to Stripe and return to /register/confirmation
+    // Generate confirmation number from session ID
+    const confirmation = `EA-${sessionId.slice(-8).toUpperCase()}`
     setConfirmationNumber(confirmation)
 
     // Move to confirmation step

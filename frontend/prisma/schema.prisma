@@ -305,6 +305,11 @@ model Tenant {
   licenseStartDate DateTime?    @map("license_start_date") @db.Date
   licenseEndDate  DateTime?     @map("license_end_date") @db.Date
   royaltyRate     Decimal?      @default(0.08) @map("royalty_rate") @db.Decimal(5, 4)
+
+  // Stripe Connect
+  stripeAccountId String?       @map("stripe_account_id") // Connected Stripe account ID for payouts
+  stripeOnboardingComplete Boolean @default(false) @map("stripe_onboarding_complete")
+
   createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz
   updatedAt       DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
