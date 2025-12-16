@@ -120,7 +120,7 @@ export function Navbar() {
                   Sign In
                 </Button>
               </Link>
-              <Link href="/camps">
+              <Link href="/signup">
                 <Button variant="neon" size="md">
                   Register Now
                 </Button>
@@ -198,7 +198,7 @@ export function Navbar() {
                     Sign In
                   </Button>
                 </Link>
-                <Link href="/camps" onClick={() => setMobileMenuOpen(false)}>
+                <Link href="/signup" onClick={() => setMobileMenuOpen(false)}>
                   <Button variant="neon" className="w-full">
                     Register Now
                   </Button>

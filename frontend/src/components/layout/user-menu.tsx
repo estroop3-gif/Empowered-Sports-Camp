@@ -176,7 +176,7 @@ export function UserMenu({ variant = 'navbar', className }: UserMenuProps) {
           Sign In
         </Link>
         <Link
-          href="/camps"
+          href="/signup"
           className="px-6 py-3 bg-neon text-black text-sm font-bold uppercase tracking-wider hover:bg-neon/90 transition-colors"
         >
           Register Now
