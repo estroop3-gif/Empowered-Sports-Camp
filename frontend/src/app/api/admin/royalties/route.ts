@@ -6,6 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { getAuthenticatedUserFromRequest } from '@/lib/auth/cognito-server'
 import {
   getAdminRoyaltyInvoices,
   getAdminRoyaltyLicensees,
@@ -17,6 +18,17 @@ import {
 import type { RoyaltyInvoiceStatus } from '@/generated/prisma'
 
 export async function GET(request: NextRequest) {
+  // Authenticate user
+  const user = await getAuthenticatedUserFromRequest(request)
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  // Check for admin role - only HQ admins can access royalties
+  if (user.role?.toLowerCase() !== 'hq_admin') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
   const searchParams = request.nextUrl.searchParams
   const action = searchParams.get('action') || 'list'
 
@@ -92,6 +104,17 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  // Authenticate user
+  const user = await getAuthenticatedUserFromRequest(request)
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  // Check for admin role - only HQ admins can access royalties
+  if (user.role?.toLowerCase() !== 'hq_admin') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
   try {
     const body = await request.json()
     const { action } = body

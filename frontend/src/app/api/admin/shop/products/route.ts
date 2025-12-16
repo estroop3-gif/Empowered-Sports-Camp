@@ -6,30 +6,61 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { getAuthenticatedUserFromRequest } from '@/lib/auth/cognito-server'
 import { getAdminProducts, createProduct } from '@/lib/services/shop'
 
 export async function GET(request: NextRequest) {
-  const licenseeId = request.nextUrl.searchParams.get('licenseeId')
+  try {
+    const user = await getAuthenticatedUserFromRequest(request)
+    if (!user) {
+      return NextResponse.json({ data: null, error: 'Unauthorized' }, { status: 401 })
+    }
 
-  const { data, error } = await getAdminProducts({
-    licenseeId: licenseeId || undefined
-  })
+    const allowedRoles = ['hq_admin', 'licensee_owner']
+    if (!allowedRoles.includes(user.role?.toLowerCase() || '')) {
+      return NextResponse.json({ data: null, error: 'Forbidden' }, { status: 403 })
+    }
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    const licenseeId = request.nextUrl.searchParams.get('licenseeId')
+
+    const { data, error } = await getAdminProducts({
+      licenseeId: licenseeId || undefined
+    })
+
+    if (error) {
+      return NextResponse.json({ data: null, error: error.message }, { status: 500 })
+    }
+
+    return NextResponse.json({ data, error: null })
+  } catch (err) {
+    console.error('Error in GET /api/admin/shop/products:', err)
+    return NextResponse.json({ data: null, error: 'Internal server error' }, { status: 500 })
   }
-
-  return NextResponse.json({ data })
 }
 
 export async function POST(request: NextRequest) {
-  const body = await request.json()
+  try {
+    const user = await getAuthenticatedUserFromRequest(request)
+    if (!user) {
+      return NextResponse.json({ data: null, error: 'Unauthorized' }, { status: 401 })
+    }
 
-  const { data, error } = await createProduct(body)
+    const allowedRoles = ['hq_admin', 'licensee_owner']
+    if (!allowedRoles.includes(user.role?.toLowerCase() || '')) {
+      return NextResponse.json({ data: null, error: 'Forbidden' }, { status: 403 })
+    }
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    const body = await request.json()
+
+    const { data, error } = await createProduct(body)
+
+    if (error) {
+      return NextResponse.json({ data: null, error: error.message }, { status: 500 })
+    }
+
+    return NextResponse.json({ data, error: null })
+  } catch (err) {
+    console.error('Error in POST /api/admin/shop/products:', err)
+    return NextResponse.json({ data: null, error: 'Internal server error' }, { status: 500 })
   }
-
-  return NextResponse.json({ data })
 }

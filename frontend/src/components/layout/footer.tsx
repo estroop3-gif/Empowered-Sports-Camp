@@ -27,7 +27,7 @@ const footerLinks = {
   company: [
     { label: 'About Us', href: '/about' },
     { label: 'Our Coaches', href: '/about#coaches' },
-    { label: 'Testimonials', href: '/testimonials' },
+    { label: 'Testimonials', href: '/testimonies' },
     { label: 'Host a Camp', href: '/host-a-camp' },
     { label: 'Careers', href: '/careers' },
   ],

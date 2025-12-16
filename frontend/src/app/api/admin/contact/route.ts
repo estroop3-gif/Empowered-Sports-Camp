@@ -5,6 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { getAuthenticatedUserFromRequest } from '@/lib/auth/cognito-server'
 import {
   listContactSubmissions,
   getContactSubmissionCounts,
@@ -13,6 +14,18 @@ import type { ContactSubmissionStatus } from '@/generated/prisma'
 
 export async function GET(request: NextRequest) {
   try {
+    // Authenticate user
+    const user = await getAuthenticatedUserFromRequest(request)
+    if (!user) {
+      return NextResponse.json({ data: null, error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // Check for admin role
+    const allowedRoles = ['hq_admin', 'licensee_owner']
+    if (!allowedRoles.includes(user.role?.toLowerCase() || '')) {
+      return NextResponse.json({ data: null, error: 'Forbidden' }, { status: 403 })
+    }
+
     const { searchParams } = new URL(request.url)
 
     // If counts requested, return aggregated counts
@@ -21,12 +34,12 @@ export async function GET(request: NextRequest) {
 
       if (error) {
         return NextResponse.json(
-          { error: 'Failed to fetch counts' },
+          { data: null, error: 'Failed to fetch counts' },
           { status: 500 }
         )
       }
 
-      return NextResponse.json({ data })
+      return NextResponse.json({ data, error: null })
     }
 
     // Parse query parameters
@@ -50,16 +63,16 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       return NextResponse.json(
-        { error: 'Failed to fetch submissions' },
+        { data: null, error: 'Failed to fetch submissions' },
         { status: 500 }
       )
     }
 
-    return NextResponse.json({ data })
+    return NextResponse.json({ data, error: null })
   } catch (error) {
     console.error('Admin contact list error:', error)
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { data: null, error: 'Internal server error' },
       { status: 500 }
     )
   }

@@ -5,16 +5,31 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { getAuthenticatedUserFromRequest } from '@/lib/auth/cognito-server'
 import { createVariant } from '@/lib/services/shop'
 
 export async function POST(request: NextRequest) {
-  const body = await request.json()
+  try {
+    const user = await getAuthenticatedUserFromRequest(request)
+    if (!user) {
+      return NextResponse.json({ data: null, error: 'Unauthorized' }, { status: 401 })
+    }
 
-  const { data, error } = await createVariant(body)
+    const allowedRoles = ['hq_admin', 'licensee_owner']
+    if (!allowedRoles.includes(user.role?.toLowerCase() || '')) {
+      return NextResponse.json({ data: null, error: 'Forbidden' }, { status: 403 })
+    }
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    const body = await request.json()
+    const { data, error } = await createVariant(body)
+
+    if (error) {
+      return NextResponse.json({ data: null, error: error.message }, { status: 500 })
+    }
+
+    return NextResponse.json({ data, error: null })
+  } catch (err) {
+    console.error('Error in POST /api/admin/shop/variants:', err)
+    return NextResponse.json({ data: null, error: 'Internal server error' }, { status: 500 })
   }
-
-  return NextResponse.json({ data })
 }
