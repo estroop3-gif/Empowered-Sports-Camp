@@ -8,13 +8,25 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { getAuthenticatedUserFromRequest } from '@/lib/auth/cognito-server'
 import prisma from '@/lib/db/client'
 
 export async function GET(request: NextRequest) {
+  // Authenticate the request
+  const authUser = await getAuthenticatedUserFromRequest(request)
+  if (!authUser) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   const userId = request.nextUrl.searchParams.get('userId')
 
   if (!userId) {
     return NextResponse.json({ error: 'Missing userId' }, { status: 400 })
+  }
+
+  // Users can only fetch their own info (prevent user enumeration)
+  if (userId !== authUser.id) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
   try {

@@ -1,8 +1,13 @@
 /**
  * Registrations API Routes
+ *
+ * Protected routes for accessing registration data.
+ * Parents can only access their own registrations.
+ * Staff can access camp registrations they're assigned to.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { getAuthenticatedUserFromRequest } from '@/lib/auth/cognito-server'
 import {
   fetchRegistrationsByParent,
   fetchRegistrationsByCamp,
@@ -11,15 +16,27 @@ import {
 } from '@/lib/services/registrations'
 
 export async function GET(request: NextRequest) {
+  // Authenticate user
+  const user = await getAuthenticatedUserFromRequest(request)
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   const action = request.nextUrl.searchParams.get('action') || 'byParent'
   const parentId = request.nextUrl.searchParams.get('parentId')
   const campId = request.nextUrl.searchParams.get('campId')
   const registrationId = request.nextUrl.searchParams.get('registrationId')
 
+  const isStaff = ['hq_admin', 'licensee_owner', 'director', 'coach'].includes(user.role?.toLowerCase() || '')
+
   try {
     switch (action) {
       case 'byParent': {
         if (!parentId) return NextResponse.json({ error: 'parentId required' }, { status: 400 })
+        // Parents can only fetch their own registrations; staff can fetch any
+        if (!isStaff && parentId !== user.id) {
+          return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+        }
         const { data, error } = await fetchRegistrationsByParent(parentId)
         if (error) return NextResponse.json({ error: error.message }, { status: 500 })
         return NextResponse.json({ data })
@@ -27,6 +44,10 @@ export async function GET(request: NextRequest) {
 
       case 'byCamp': {
         if (!campId) return NextResponse.json({ error: 'campId required' }, { status: 400 })
+        // Only staff can fetch camp registrations
+        if (!isStaff) {
+          return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+        }
         const { data, error } = await fetchRegistrationsByCamp(campId)
         if (error) return NextResponse.json({ error: error.message }, { status: 500 })
         return NextResponse.json({ data })
@@ -36,6 +57,10 @@ export async function GET(request: NextRequest) {
         if (!registrationId) return NextResponse.json({ error: 'registrationId required' }, { status: 400 })
         const { data, error } = await fetchRegistrationById(registrationId)
         if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+        // Check ownership - staff or the parent who made the registration
+        if (!isStaff && data?.parent_id !== user.id) {
+          return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+        }
         return NextResponse.json({ data })
       }
 
@@ -48,6 +73,12 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  // Authenticate user
+  const user = await getAuthenticatedUserFromRequest(request)
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   const body = await request.json()
   const { action, ...data } = body
 

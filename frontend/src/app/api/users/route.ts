@@ -1,8 +1,11 @@
 /**
  * Users API Routes
+ *
+ * Admin-only routes for user management.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { getAuthenticatedUserFromRequest } from '@/lib/auth/cognito-server'
 import {
   fetchUsersWithRoles,
   getUserDetails,
@@ -17,6 +20,16 @@ import {
 import { UserRole } from '@/generated/prisma'
 
 export async function GET(request: NextRequest) {
+  // Authenticate user - only HQ admins can access user management
+  const user = await getAuthenticatedUserFromRequest(request)
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  if (user.role?.toLowerCase() !== 'hq_admin') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
   const action = request.nextUrl.searchParams.get('action') || 'withRoles'
   const userId = request.nextUrl.searchParams.get('userId')
   const limit = request.nextUrl.searchParams.get('limit')
@@ -54,6 +67,16 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  // Authenticate user - only HQ admins can access user management
+  const user = await getAuthenticatedUserFromRequest(request)
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  if (user.role?.toLowerCase() !== 'hq_admin') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
   try {
     const body = await request.json()
     const { action, userId, role, tenantId, firstName, lastName, phone, email } = body

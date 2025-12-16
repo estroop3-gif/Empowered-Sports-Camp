@@ -49,17 +49,12 @@ export function Navbar() {
   return (
     <header
       className={cn(
-        "fixed left-0 right-0 z-50 transition-all duration-300",
-        isViewingAsOtherRole ? "top-[36px]" : "top-0",
-        scrolled
-          ? "bg-black/95 backdrop-blur-md"
-          : "bg-transparent"
+        "fixed left-0 right-0 z-50 transition-all duration-300 bg-black/95 backdrop-blur-md",
+        isViewingAsOtherRole ? "top-[36px]" : "top-0"
       )}
     >
-      {/* Gradient border when scrolled */}
-      {scrolled && (
-        <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r from-neon via-magenta to-purple" />
-      )}
+      {/* Gradient border */}
+      <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r from-neon via-magenta to-purple" />
       <nav className="mx-auto flex h-20 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-3 group">
