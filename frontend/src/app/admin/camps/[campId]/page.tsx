@@ -1,32 +1,54 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, use } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { AdminLayout, PageHeader, ContentCard } from '@/components/admin/admin-layout'
-import { CampCreateStepper, getStepsForCurrentStep } from '@/components/admin/camps/CampCreateStepper'
 import { useAuth } from '@/lib/auth/context'
 import {
   ArrowLeft,
-  ArrowRight,
   Calendar,
   MapPin,
   Users,
   DollarSign,
   Clock,
-  Zap,
+  Save,
+  Trash2,
   AlertCircle,
   Loader2,
+  ExternalLink,
 } from 'lucide-react'
 
 // Types (defined locally to avoid Prisma imports in client component)
+interface AdminCamp {
+  id: string
+  name: string
+  slug: string
+  description: string | null
+  sport: string | null
+  start_date: string
+  end_date: string
+  start_time: string | null
+  end_time: string | null
+  age_min: number
+  age_max: number
+  capacity: number
+  price: number
+  early_bird_price: number | null
+  early_bird_deadline: string | null
+  status: string
+  featured: boolean
+  image_url: string | null
+  tenant_id: string
+  location_id: string | null
+}
+
 interface CampFormData {
   name: string
   slug: string
   description: string
   sport: string
   location_id: string | null
-  tenant_id: string
   start_date: string
   end_date: string
   start_time: string
@@ -40,14 +62,6 @@ interface CampFormData {
   status: 'draft' | 'published' | 'open' | 'closed'
   featured: boolean
   image_url: string | null
-}
-
-interface Tenant {
-  id: string
-  name: string
-  slug: string
-  city: string | null
-  state: string | null
 }
 
 interface Location {
@@ -77,17 +91,20 @@ const STATUS_OPTIONS = [
   { value: 'draft', label: 'Draft', description: 'Not visible to public' },
   { value: 'published', label: 'Published', description: 'Visible but registration closed' },
   { value: 'open', label: 'Open', description: 'Accepting registrations' },
+  { value: 'closed', label: 'Closed', description: 'Registration ended' },
 ]
 
-export default function AdminCreateCampPage() {
+export default function AdminEditCampPage({ params }: { params: Promise<{ campId: string }> }) {
+  const { campId } = use(params)
   const router = useRouter()
   const { user } = useAuth()
   const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
+  const [camp, setCamp] = useState<AdminCamp | null>(null)
   const [userRole, setUserRole] = useState<string | null>(null)
-  const [tenants, setTenants] = useState<Tenant[]>([])
   const [locations, setLocations] = useState<Location[]>([])
 
   const [formData, setFormData] = useState<CampFormData>({
@@ -96,7 +113,6 @@ export default function AdminCreateCampPage() {
     description: '',
     sport: 'Multi-Sport',
     location_id: null,
-    tenant_id: '',
     start_date: '',
     end_date: '',
     start_time: '09:00',
@@ -114,17 +130,11 @@ export default function AdminCreateCampPage() {
 
   useEffect(() => {
     if (user) {
-      loadInitialData()
+      loadCamp()
     }
-  }, [user])
+  }, [user, campId])
 
-  useEffect(() => {
-    if (formData.tenant_id) {
-      loadLocations(formData.tenant_id)
-    }
-  }, [formData.tenant_id])
-
-  async function loadInitialData() {
+  async function loadCamp() {
     if (!user) {
       setError('Not authenticated')
       return
@@ -139,46 +149,52 @@ export default function AdminCreateCampPage() {
         return
       }
       const roleData = await roleResponse.json()
-
       setUserRole(roleData.role)
 
-      if (roleData.role === 'hq_admin') {
-        // Fetch tenants for HQ admin
-        const tenantsResponse = await fetch('/api/admin/camps/tenants')
-        if (tenantsResponse.ok) {
-          const tenantsData = await tenantsResponse.json()
-          setTenants(tenantsData.tenants || [])
-        }
-      } else if (roleData.tenant_id) {
-        setFormData(prev => ({ ...prev, tenant_id: roleData.tenant_id! }))
-        await loadLocations(roleData.tenant_id)
+      // Fetch camp data from API
+      const campResponse = await fetch(`/api/admin/camps/${campId}`)
+      if (!campResponse.ok) {
+        const errorData = await campResponse.json()
+        setError(errorData.error || 'Camp not found')
+        setLoading(false)
+        return
+      }
+      const { camp: campData } = await campResponse.json()
+
+      setCamp(campData)
+      setFormData({
+        name: campData.name,
+        slug: campData.slug,
+        description: campData.description || '',
+        sport: campData.sport || 'Multi-Sport',
+        location_id: campData.location_id,
+        start_date: campData.start_date,
+        end_date: campData.end_date,
+        start_time: campData.start_time || '09:00',
+        end_time: campData.end_time || '15:00',
+        age_min: campData.age_min,
+        age_max: campData.age_max,
+        capacity: campData.capacity,
+        price: campData.price / 100,
+        early_bird_price: campData.early_bird_price ? campData.early_bird_price / 100 : null,
+        early_bird_deadline: campData.early_bird_deadline,
+        status: campData.status as 'draft' | 'published' | 'open' | 'closed',
+        featured: campData.featured,
+        image_url: campData.image_url,
+      })
+
+      // Fetch locations from API
+      const locationsResponse = await fetch(`/api/admin/camps/locations?tenantId=${campData.tenant_id}`)
+      if (locationsResponse.ok) {
+        const locationsData = await locationsResponse.json()
+        setLocations(locationsData.locations || [])
       }
     } catch (err) {
-      console.error('Failed to load initial data:', err)
-      setError('Failed to load data')
+      console.error('Failed to load camp:', err)
+      setError('Failed to load camp')
     } finally {
       setLoading(false)
     }
-  }
-
-  async function loadLocations(tenantId: string) {
-    try {
-      const response = await fetch(`/api/admin/camps/locations?tenantId=${tenantId}`)
-      if (response.ok) {
-        const data = await response.json()
-        setLocations(data.locations || [])
-      }
-    } catch (err) {
-      console.error('Failed to load locations:', err)
-    }
-  }
-
-  const handleNameChange = (name: string) => {
-    const slug = name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '')
-    setFormData(prev => ({ ...prev, name, slug }))
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -186,48 +202,49 @@ export default function AdminCreateCampPage() {
     setSaving(true)
     setError(null)
 
-    if (!formData.tenant_id) {
-      setError('Please select a territory')
-      setSaving(false)
-      return
-    }
-
-    if (!formData.start_date || !formData.end_date) {
-      setError('Please select start and end dates')
-      setSaving(false)
-      return
-    }
-
-    if (new Date(formData.end_date) < new Date(formData.start_date)) {
-      setError('End date must be after start date')
-      setSaving(false)
-      return
-    }
-
     try {
-      // Create camp via API
-      const response = await fetch('/api/admin/camps?action=create', {
-        method: 'POST',
+      const response = await fetch(`/api/admin/camps/${campId}`, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
       })
 
       if (!response.ok) {
         const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to create camp')
+        throw new Error(errorData.error || 'Failed to update camp')
       }
 
-      const data = await response.json()
-      // Stay in admin section - navigate to camp edit page
-      router.replace(`/admin/camps/${data.camp.id}`)
+      router.push('/admin/camps')
     } catch (err) {
-      console.error('Failed to create camp:', err)
-      setError(err instanceof Error ? err.message : 'Failed to create camp')
+      console.error('Failed to update camp:', err)
+      setError(err instanceof Error ? err.message : 'Failed to update camp')
+    } finally {
       setSaving(false)
     }
   }
 
-  const isHqAdmin = userRole === 'hq_admin'
+  const handleDelete = async () => {
+    if (!confirm('Are you sure you want to delete this camp? This cannot be undone.')) return
+
+    setDeleting(true)
+    try {
+      const response = await fetch(`/api/admin/camps/${campId}`, {
+        method: 'DELETE',
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to delete camp')
+      }
+
+      router.push('/admin/camps')
+    } catch (err) {
+      console.error('Failed to delete camp:', err)
+      setError(err instanceof Error ? err.message : 'Failed to delete camp')
+    } finally {
+      setDeleting(false)
+    }
+  }
 
   if (loading) {
     return (
@@ -239,12 +256,31 @@ export default function AdminCreateCampPage() {
     )
   }
 
+  if (!camp) {
+    return (
+      <AdminLayout userRole="hq_admin" userName="Admin">
+        <div className="text-center py-20">
+          <AlertCircle className="h-12 w-12 text-magenta mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-white mb-2">Camp Not Found</h2>
+          <p className="text-white/50 mb-6">{error || 'The requested camp could not be found.'}</p>
+          <Link
+            href="/admin/camps"
+            className="inline-flex items-center gap-2 px-6 py-3 bg-neon text-black font-bold uppercase tracking-wider"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to Camps
+          </Link>
+        </div>
+      </AdminLayout>
+    )
+  }
+
   return (
     <AdminLayout
       userRole={userRole as 'hq_admin' | 'licensee_owner' || 'hq_admin'}
       userName="Admin"
     >
-      <div className="mb-6">
+      <div className="mb-6 flex items-center justify-between">
         <Link
           href="/admin/camps"
           className="inline-flex items-center gap-2 text-sm text-white/50 hover:text-neon transition-colors"
@@ -252,12 +288,18 @@ export default function AdminCreateCampPage() {
           <ArrowLeft className="h-4 w-4" />
           Back to Camps
         </Link>
+        <a
+          href={`/camps/${camp.slug}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-2 text-sm text-neon hover:text-neon/80 transition-colors"
+        >
+          View Public Page
+          <ExternalLink className="h-4 w-4" />
+        </a>
       </div>
 
-      <PageHeader title="Create New Camp" description="Set up a new camp session for registration" />
-
-      {/* Wizard Stepper */}
-      <CampCreateStepper steps={getStepsForCurrentStep(1)} currentStep={1} />
+      <PageHeader title={`Edit: ${camp.name}`} description="Update camp details and settings" />
 
       {error && (
         <div className="mb-6 p-4 bg-magenta/10 border border-magenta/30 flex items-center gap-3">
@@ -271,25 +313,6 @@ export default function AdminCreateCampPage() {
           <div className="lg:col-span-2 space-y-8">
             <ContentCard title="Basic Information" accent="neon">
               <div className="space-y-6">
-                {isHqAdmin && (
-                  <div>
-                    <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
-                      Territory *
-                    </label>
-                    <select
-                      required
-                      value={formData.tenant_id}
-                      onChange={(e) => setFormData(prev => ({ ...prev, tenant_id: e.target.value, location_id: null }))}
-                      className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-neon focus:outline-none"
-                    >
-                      <option value="">Select a territory...</option>
-                      {tenants.map(tenant => (
-                        <option key={tenant.id} value={tenant.id}>{tenant.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
                 <div>
                   <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
                     Camp Name *
@@ -298,9 +321,8 @@ export default function AdminCreateCampPage() {
                     type="text"
                     required
                     value={formData.name}
-                    onChange={(e) => handleNameChange(e.target.value)}
-                    placeholder="e.g., Summer Week 1 - Lincoln Park"
-                    className="w-full px-4 py-3 bg-black border border-white/20 text-white placeholder:text-white/30 focus:border-neon focus:outline-none"
+                    onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                    className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-neon focus:outline-none"
                   />
                 </div>
 
@@ -342,8 +364,7 @@ export default function AdminCreateCampPage() {
                     rows={4}
                     value={formData.description}
                     onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                    placeholder="Describe what makes this camp special..."
-                    className="w-full px-4 py-3 bg-black border border-white/20 text-white placeholder:text-white/30 focus:border-neon focus:outline-none resize-none"
+                    className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-neon focus:outline-none resize-none"
                   />
                 </div>
               </div>
@@ -359,7 +380,6 @@ export default function AdminCreateCampPage() {
                   value={formData.location_id || ''}
                   onChange={(e) => setFormData(prev => ({ ...prev, location_id: e.target.value || null }))}
                   className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-magenta focus:outline-none"
-                  disabled={!formData.tenant_id}
                 >
                   <option value="">Select a location...</option>
                   {locations.map(loc => (
@@ -368,12 +388,6 @@ export default function AdminCreateCampPage() {
                     </option>
                   ))}
                 </select>
-                {!formData.tenant_id && (
-                  <p className="mt-2 text-sm text-white/40">Select a territory first to see locations</p>
-                )}
-                {formData.tenant_id && locations.length === 0 && (
-                  <p className="mt-2 text-sm text-white/40">No locations found for this territory</p>
-                )}
               </div>
             </ContentCard>
 
@@ -606,12 +620,12 @@ export default function AdminCreateCampPage() {
                   {saving ? (
                     <>
                       <Loader2 className="h-5 w-5 animate-spin" />
-                      Creating...
+                      Saving...
                     </>
                   ) : (
                     <>
-                      Create Camp
-                      <ArrowRight className="h-5 w-5" />
+                      <Save className="h-5 w-5" />
+                      Save Changes
                     </>
                   )}
                 </button>
@@ -622,17 +636,25 @@ export default function AdminCreateCampPage() {
                 >
                   Cancel
                 </Link>
-              </div>
 
-              <div className="p-4 bg-black/30 border border-white/10">
-                <div className="flex items-start gap-3">
-                  <Zap className="h-5 w-5 text-neon flex-shrink-0 mt-0.5" />
-                  <div className="text-sm text-white/60">
-                    <p><strong className="text-white">Draft:</strong> Saved but not visible to the public.</p>
-                    <p className="mt-2"><strong className="text-white">Published:</strong> Visible on Find Camps but registration closed.</p>
-                    <p className="mt-2"><strong className="text-white">Open:</strong> Live and accepting registrations.</p>
-                  </div>
-                </div>
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="flex items-center justify-center gap-2 w-full py-3 border border-magenta/30 text-magenta font-bold uppercase tracking-wider hover:bg-magenta/10 transition-colors disabled:opacity-50"
+                >
+                  {deleting ? (
+                    <>
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                      Deleting...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="h-5 w-5" />
+                      Delete Camp
+                    </>
+                  )}
+                </button>
               </div>
             </div>
           </div>
