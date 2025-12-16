@@ -2,7 +2,6 @@
 
 import { useState, Suspense } from 'react'
 import Link from 'next/link'
-import Image from 'next/image'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -181,29 +180,6 @@ function AddAthleteContent() {
 
   return (
     <div className="min-h-screen bg-black">
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-black border-b border-white/10">
-        <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r from-neon via-magenta to-purple" />
-        <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
-          <div className="flex h-16 items-center justify-between">
-            <Link href="/" className="flex items-center gap-3">
-              <div className="relative h-8 w-8">
-                <Image
-                  src="/images/logo.png"
-                  alt="Empowered Athletes"
-                  fill
-                  className="object-contain"
-                />
-              </div>
-              <div className="hidden sm:block">
-                <span className="text-lg font-black uppercase tracking-wider text-white">Empowered</span>
-                <span className="text-lg font-light uppercase tracking-wider text-neon ml-2">Athletes</span>
-              </div>
-            </Link>
-          </div>
-        </div>
-      </header>
-
       {/* Main Content */}
       <main className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
         {/* Back Link */}

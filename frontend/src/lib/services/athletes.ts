@@ -25,7 +25,11 @@ export interface Athlete {
   emergency_contact_phone: string | null
   emergency_contact_relationship: string | null
   photo_url: string | null
-  tshirt_size?: string | null
+  tshirt_size: string | null
+  jersey_number_preference: string | null
+  primary_sport_interest: string | null
+  secondary_sport_interest: string | null
+  pickup_notes: string | null
   created_at: string
   updated_at: string
 }
@@ -62,7 +66,11 @@ export async function fetchAthletesByParent(
         emergency_contact_phone: a.emergencyContactPhone,
         emergency_contact_relationship: a.emergencyContactRelationship,
         photo_url: a.photoUrl,
-        tshirt_size: null, // Not in schema, kept for compatibility
+        tshirt_size: a.tShirtSize,
+        jersey_number_preference: a.jerseyNumberPreference,
+        primary_sport_interest: a.primarySportInterest,
+        secondary_sport_interest: a.secondarySportInterest,
+        pickup_notes: a.pickupNotes,
         created_at: a.createdAt.toISOString(),
         updated_at: a.updatedAt.toISOString(),
       })),
@@ -105,7 +113,11 @@ export async function fetchAthleteById(
         emergency_contact_phone: athlete.emergencyContactPhone,
         emergency_contact_relationship: athlete.emergencyContactRelationship,
         photo_url: athlete.photoUrl,
-        tshirt_size: null,
+        tshirt_size: athlete.tShirtSize,
+        jersey_number_preference: athlete.jerseyNumberPreference,
+        primary_sport_interest: athlete.primarySportInterest,
+        secondary_sport_interest: athlete.secondarySportInterest,
+        pickup_notes: athlete.pickupNotes,
         created_at: athlete.createdAt.toISOString(),
         updated_at: athlete.updatedAt.toISOString(),
       },
@@ -149,6 +161,11 @@ export interface UpdateAthleteInput {
   emergency_contact_phone?: string
   emergency_contact_relationship?: string
   photo_url?: string
+  tshirt_size?: string | null
+  jersey_number_preference?: string | null
+  primary_sport_interest?: string | null
+  secondary_sport_interest?: string | null
+  pickup_notes?: string | null
 }
 
 /**
@@ -191,7 +208,11 @@ export async function createAthlete(
         emergency_contact_phone: athlete.emergencyContactPhone,
         emergency_contact_relationship: athlete.emergencyContactRelationship,
         photo_url: athlete.photoUrl,
-        tshirt_size: null,
+        tshirt_size: athlete.tShirtSize,
+        jersey_number_preference: athlete.jerseyNumberPreference,
+        primary_sport_interest: athlete.primarySportInterest,
+        secondary_sport_interest: athlete.secondarySportInterest,
+        pickup_notes: athlete.pickupNotes,
         created_at: athlete.createdAt.toISOString(),
         updated_at: athlete.updatedAt.toISOString(),
       },
@@ -215,7 +236,12 @@ export async function updateAthlete(
 
     if (input.first_name !== undefined) updateData.firstName = input.first_name
     if (input.last_name !== undefined) updateData.lastName = input.last_name
-    if (input.date_of_birth !== undefined) updateData.dateOfBirth = new Date(input.date_of_birth)
+    if (input.date_of_birth !== undefined && input.date_of_birth) {
+      const parsedDate = new Date(input.date_of_birth)
+      if (!isNaN(parsedDate.getTime())) {
+        updateData.dateOfBirth = parsedDate
+      }
+    }
     if (input.gender !== undefined) updateData.gender = input.gender
     if (input.grade !== undefined) updateData.grade = input.grade
     if (input.school !== undefined) updateData.school = input.school
@@ -225,6 +251,11 @@ export async function updateAthlete(
     if (input.emergency_contact_phone !== undefined) updateData.emergencyContactPhone = input.emergency_contact_phone
     if (input.emergency_contact_relationship !== undefined) updateData.emergencyContactRelationship = input.emergency_contact_relationship
     if (input.photo_url !== undefined) updateData.photoUrl = input.photo_url
+    if (input.tshirt_size !== undefined) updateData.tShirtSize = input.tshirt_size
+    if (input.jersey_number_preference !== undefined) updateData.jerseyNumberPreference = input.jersey_number_preference
+    if (input.primary_sport_interest !== undefined) updateData.primarySportInterest = input.primary_sport_interest
+    if (input.secondary_sport_interest !== undefined) updateData.secondarySportInterest = input.secondary_sport_interest
+    if (input.pickup_notes !== undefined) updateData.pickupNotes = input.pickup_notes
 
     const athlete = await prisma.athlete.update({
       where: { id: athleteId },
@@ -247,7 +278,11 @@ export async function updateAthlete(
         emergency_contact_phone: athlete.emergencyContactPhone,
         emergency_contact_relationship: athlete.emergencyContactRelationship,
         photo_url: athlete.photoUrl,
-        tshirt_size: null,
+        tshirt_size: athlete.tShirtSize,
+        jersey_number_preference: athlete.jerseyNumberPreference,
+        primary_sport_interest: athlete.primarySportInterest,
+        secondary_sport_interest: athlete.secondarySportInterest,
+        pickup_notes: athlete.pickupNotes,
         created_at: athlete.createdAt.toISOString(),
         updated_at: athlete.updatedAt.toISOString(),
       },

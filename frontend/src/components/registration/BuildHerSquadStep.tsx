@@ -12,6 +12,8 @@ import {
   Sparkles,
   Heart,
   ArrowRight,
+  UserCheck,
+  Send,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -20,14 +22,22 @@ import { Button } from '@/components/ui/button'
  * BuildHerSquadStep
  *
  * "Build Her Squad" feature for camp registration.
- * Parents can invite other parents to group their athletes together.
- * All squad members get grouped by the algorithm via friendGroupId.
+ * Shows other registered campers to request squad grouping with.
+ * Also allows inviting friends who haven't registered yet.
  */
 
 interface Athlete {
   id: string
   firstName: string
   lastName: string
+}
+
+interface RegisteredCamper {
+  athleteId: string
+  athleteName: string
+  grade: string | null
+  parentName: string
+  parentId: string
 }
 
 interface SquadMember {
@@ -71,35 +81,56 @@ export function BuildHerSquadStep({
   onBack,
   onSquadUpdate,
 }: BuildHerSquadStepProps) {
-  const [isLoading, setIsLoading] = useState(false)
-  const [squad, setSquad] = useState<{
-    id: string
-    label: string
-    members: SquadMember[]
-  } | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [otherCampers, setOtherCampers] = useState<RegisteredCamper[]>([])
+  const [selectedCampers, setSelectedCampers] = useState<Set<string>>(new Set())
+  const [requestedCampers, setRequestedCampers] = useState<Set<string>>(new Set())
   const [pendingInvites, setPendingInvites] = useState<PendingInvite[]>([])
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteError, setInviteError] = useState<string | null>(null)
   const [inviteSent, setInviteSent] = useState(false)
-  const [skipSquad, setSkipSquad] = useState(false)
+  const [sendingRequest, setSendingRequest] = useState(false)
+  const [sendingInvite, setSendingInvite] = useState(false)
+  const [existingSquad, setExistingSquad] = useState<{
+    id: string
+    label: string
+    members: SquadMember[]
+  } | null>(null)
 
-  // Fetch existing squad and invites
+  // Fetch other registered campers and existing squad data
   useEffect(() => {
-    async function fetchSquadData() {
+    async function fetchData() {
       try {
         setIsLoading(true)
 
-        // Fetch squads for this parent and camp
+        // Fetch other registered campers for this camp
+        const campersRes = await fetch(`/api/squads?action=otherCampers&campId=${campId}`)
+        const campersData = await campersRes.json()
+
+        if (campersData.data) {
+          setOtherCampers(campersData.data)
+        }
+
+        // Fetch existing squad data
         const squadRes = await fetch(`/api/squads?action=list&campId=${campId}`)
         const squadData = await squadRes.json()
 
         if (squadData.data && squadData.data.length > 0) {
-          const existingSquad = squadData.data[0]
-          setSquad(existingSquad)
-          onSquadUpdate?.(existingSquad.id)
+          const squad = squadData.data[0]
+          setExistingSquad(squad)
+          onSquadUpdate?.(squad.id)
+
+          // Mark already requested campers
+          const requested = new Set<string>()
+          squad.members?.forEach((m: SquadMember) => {
+            if (m.status === 'requested' || m.status === 'accepted') {
+              requested.add(m.athleteId)
+            }
+          })
+          setRequestedCampers(requested)
         }
 
-        // Fetch pending invites
+        // Fetch pending invites from other parents
         const invitesRes = await fetch(`/api/squads?action=invites&campId=${campId}`)
         const invitesData = await invitesRes.json()
 
@@ -113,59 +144,72 @@ export function BuildHerSquadStep({
       }
     }
 
-    fetchSquadData()
+    fetchData()
   }, [campId, onSquadUpdate])
 
-  const createSquad = async () => {
+  const toggleCamperSelection = (athleteId: string) => {
+    if (requestedCampers.has(athleteId)) return // Already requested
+
+    setSelectedCampers(prev => {
+      const next = new Set(prev)
+      if (next.has(athleteId)) {
+        next.delete(athleteId)
+      } else {
+        next.add(athleteId)
+      }
+      return next
+    })
+  }
+
+  const sendSquadRequests = async () => {
+    if (selectedCampers.size === 0) return
+
+    setSendingRequest(true)
+    setInviteError(null)
+
     try {
-      setIsLoading(true)
-      setInviteError(null)
+      const athleteIds = registeredAthletes.map(a => a.id)
 
-      const athleteIds = registeredAthletes.map((a) => a.id)
+      // Send request for each selected camper
+      for (const targetAthleteId of selectedCampers) {
+        const res = await fetch('/api/squads', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'requestSquad',
+            campId,
+            tenantId,
+            athleteIds,
+            targetAthleteId,
+          }),
+        })
 
-      const res = await fetch('/api/squads', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'create',
-          campId,
-          tenantId,
-          label: `${parentName}'s Squad`,
-          athleteIds,
-        }),
-      })
+        const data = await res.json()
 
-      const data = await res.json()
+        if (data.error) {
+          console.error('Failed to send squad request:', data.error)
+          continue
+        }
 
-      if (data.error) {
-        setInviteError(data.error)
-        return
+        // Update squad if we got one back
+        if (data.data?.squadId) {
+          onSquadUpdate?.(data.data.squadId)
+        }
       }
 
-      setSquad({
-        id: data.data.id,
-        label: data.data.label,
-        members: registeredAthletes.map((a) => ({
-          id: `temp-${a.id}`,
-          athleteId: a.id,
-          parentId: '',
-          athleteName: `${a.firstName} ${a.lastName}`,
-          parentName: parentName,
-          parentEmail: parentEmail,
-          status: 'accepted' as const,
-        })),
-      })
-      onSquadUpdate?.(data.data.id)
+      // Move selected to requested
+      setRequestedCampers(prev => new Set([...prev, ...selectedCampers]))
+      setSelectedCampers(new Set())
     } catch (error) {
-      console.error('Failed to create squad:', error)
-      setInviteError('Failed to create squad. Please try again.')
+      console.error('Failed to send squad requests:', error)
+      setInviteError('Failed to send requests. Please try again.')
     } finally {
-      setIsLoading(false)
+      setSendingRequest(false)
     }
   }
 
-  const sendInvite = async () => {
-    if (!inviteEmail || !squad) return
+  const sendEmailInvite = async () => {
+    if (!inviteEmail) return
 
     // Validate email
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -179,16 +223,42 @@ export function BuildHerSquadStep({
       return
     }
 
-    try {
-      setIsLoading(true)
-      setInviteError(null)
+    setSendingInvite(true)
+    setInviteError(null)
 
+    try {
+      // First, create a squad if we don't have one
+      let squadId = existingSquad?.id
+
+      if (!squadId) {
+        const createRes = await fetch('/api/squads', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'create',
+            campId,
+            tenantId,
+            label: `${parentName}'s Squad`,
+            athleteIds: registeredAthletes.map(a => a.id),
+          }),
+        })
+
+        const createData = await createRes.json()
+        if (createData.error) {
+          setInviteError(createData.error)
+          return
+        }
+        squadId = createData.data.id
+        onSquadUpdate?.(squadId ?? null)
+      }
+
+      // Send the invite
       const res = await fetch('/api/squads', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'invite',
-          squadId: squad.id,
+          squadId,
           inviteeEmail: inviteEmail,
           inviterName: parentName,
           campName,
@@ -211,14 +281,12 @@ export function BuildHerSquadStep({
       console.error('Failed to send invite:', error)
       setInviteError('Failed to send invite. Please try again.')
     } finally {
-      setIsLoading(false)
+      setSendingInvite(false)
     }
   }
 
   const respondToInvite = async (memberId: string, response: 'accepted' | 'declined') => {
     try {
-      setIsLoading(true)
-
       const res = await fetch('/api/squads', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -237,7 +305,7 @@ export function BuildHerSquadStep({
       }
 
       // Remove from pending invites
-      setPendingInvites((prev) => prev.filter((inv) => inv.id !== memberId))
+      setPendingInvites(prev => prev.filter(inv => inv.id !== memberId))
 
       // If accepted, update squad data
       if (response === 'accepted' && data.data?.squadId) {
@@ -245,18 +313,19 @@ export function BuildHerSquadStep({
       }
     } catch (error) {
       console.error('Failed to respond to invite:', error)
-    } finally {
-      setIsLoading(false)
     }
   }
 
-  if (isLoading && !squad && pendingInvites.length === 0) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center py-16">
         <Loader2 className="h-8 w-8 text-neon animate-spin" />
       </div>
     )
   }
+
+  const hasOtherCampers = otherCampers.length > 0
+  const hasNoExistingAthletes = registeredAthletes.length === 0
 
   return (
     <div className="space-y-8">
@@ -272,7 +341,7 @@ export function BuildHerSquadStep({
           Build Her Squad
         </h1>
         <p className="mt-2 text-white/60 max-w-md mx-auto">
-          Want her to be grouped with friends at camp? Invite other parents to join your squad!
+          Want her to be grouped with friends at camp? Select campers below or invite a friend!
         </p>
       </div>
 
@@ -301,14 +370,12 @@ export function BuildHerSquadStep({
                   <button
                     onClick={() => respondToInvite(invite.id, 'declined')}
                     className="p-2 text-white/40 hover:text-red-500 transition-colors"
-                    disabled={isLoading}
                   >
                     <X className="h-5 w-5" />
                   </button>
                   <button
                     onClick={() => respondToInvite(invite.id, 'accepted')}
                     className="px-4 py-2 bg-neon text-black font-bold uppercase text-sm hover:bg-neon/90 transition-colors"
-                    disabled={isLoading}
                   >
                     Accept
                   </button>
@@ -319,176 +386,181 @@ export function BuildHerSquadStep({
         </div>
       )}
 
-      {/* Main Content */}
-      {!skipSquad ? (
-        <>
-          {!squad ? (
-            // Create Squad Section
-            <div className="p-8 border border-white/10 bg-white/[0.02] text-center space-y-6">
-              <div className="inline-flex items-center justify-center h-16 w-16 rounded-full bg-neon/10 border border-neon/30 mx-auto">
-                <Users className="h-8 w-8 text-neon" />
-              </div>
-              <div>
-                <h2 className="text-xl font-bold text-white">Start a Squad</h2>
-                <p className="mt-2 text-white/60">
-                  Create a squad to invite friends. Athletes in the same squad will be grouped
-                  together during camp activities.
-                </p>
-              </div>
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-                <Button
-                  variant="neon"
-                  onClick={createSquad}
-                  disabled={isLoading || registeredAthletes.length === 0}
-                  className="min-w-[200px]"
-                >
-                  {isLoading ? (
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  ) : (
-                    <Users className="h-4 w-4 mr-2" />
-                  )}
-                  Create Squad
-                </Button>
-                <button
-                  onClick={() => setSkipSquad(true)}
-                  className="text-sm text-white/50 hover:text-white transition-colors"
-                >
-                  Skip for now
-                </button>
-              </div>
-              {inviteError && (
-                <p className="text-sm text-red-500 flex items-center justify-center gap-2">
-                  <AlertCircle className="h-4 w-4" />
-                  {inviteError}
-                </p>
-              )}
-            </div>
-          ) : (
-            // Squad Created - Invite Section
-            <div className="space-y-6">
-              {/* Squad Info */}
-              <div className="p-6 border border-neon/30 bg-neon/5">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="h-10 w-10 bg-neon text-black flex items-center justify-center">
-                    <CheckCircle2 className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h2 className="font-bold text-white">{squad.label}</h2>
-                    <p className="text-sm text-white/50">
-                      {squad.members.length} member{squad.members.length !== 1 && 's'}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Squad Members */}
-                <div className="space-y-2 mb-6">
-                  {squad.members.map((member) => (
-                    <div
-                      key={member.id}
-                      className="flex items-center justify-between p-3 bg-white/5 border border-white/10"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="h-8 w-8 bg-neon/20 text-neon flex items-center justify-center text-sm font-bold">
-                          {member.athleteName.charAt(0)}
-                        </div>
-                        <div>
-                          <p className="text-white font-medium">{member.athleteName}</p>
-                          <p className="text-xs text-white/40">{member.parentName}</p>
-                        </div>
-                      </div>
-                      <span
-                        className={cn(
-                          'text-xs font-bold uppercase tracking-wider px-2 py-1',
-                          member.status === 'accepted' && 'text-neon bg-neon/10',
-                          member.status === 'requested' && 'text-yellow-500 bg-yellow-500/10',
-                          member.status === 'declined' && 'text-red-500 bg-red-500/10'
-                        )}
-                      >
-                        {member.status}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Invite Form */}
-                <div className="pt-4 border-t border-white/10">
-                  <h3 className="text-sm font-bold uppercase tracking-wider text-white mb-3 flex items-center gap-2">
-                    <UserPlus className="h-4 w-4 text-magenta" />
-                    Invite a Friend
-                  </h3>
-                  <div className="flex gap-2">
-                    <div className="flex-1 relative">
-                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30" />
-                      <input
-                        type="email"
-                        value={inviteEmail}
-                        onChange={(e) => {
-                          setInviteEmail(e.target.value)
-                          setInviteError(null)
-                        }}
-                        placeholder="friend@email.com"
-                        className="w-full pl-10 pr-4 py-3 bg-white/5 border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-neon transition-colors"
-                      />
-                    </div>
-                    <Button
-                      variant="dark"
-                      onClick={sendInvite}
-                      disabled={isLoading || !inviteEmail}
-                    >
-                      {isLoading ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : inviteSent ? (
-                        <CheckCircle2 className="h-4 w-4 text-neon" />
-                      ) : (
-                        'Send'
-                      )}
-                    </Button>
-                  </div>
-                  {inviteError && (
-                    <p className="mt-2 text-sm text-red-500 flex items-center gap-2">
-                      <AlertCircle className="h-4 w-4" />
-                      {inviteError}
-                    </p>
-                  )}
-                  {inviteSent && (
-                    <p className="mt-2 text-sm text-neon flex items-center gap-2">
-                      <CheckCircle2 className="h-4 w-4" />
-                      Invitation sent successfully!
-                    </p>
-                  )}
-                  <p className="mt-3 text-xs text-white/40">
-                    They&apos;ll receive an email invitation to join your squad. Once they register
-                    and accept, their athlete will be grouped with yours!
-                  </p>
-                </div>
-              </div>
-
-              {/* Benefits Note */}
-              <div className="flex items-start gap-3 p-4 bg-magenta/5 border border-magenta/20">
-                <Heart className="h-5 w-5 text-magenta flex-shrink-0 mt-0.5" />
-                <div className="text-sm text-white/60">
-                  <span className="text-magenta font-medium">Squad Benefits:</span> Athletes in the
-                  same squad are placed in the same activity groups during camp. Perfect for best
-                  friends who want to stick together!
-                </div>
-              </div>
-            </div>
-          )}
-        </>
-      ) : (
-        // Skipped state
-        <div className="p-8 border border-white/10 bg-white/[0.02] text-center space-y-4">
-          <p className="text-white/60">
-            No problem! You can always create a squad later from your parent portal.
+      {/* No existing athletes message */}
+      {hasNoExistingAthletes && (
+        <div className="bg-purple/10 border border-purple/30 p-4">
+          <p className="text-sm text-white/70">
+            <span className="text-purple font-medium">Note:</span> Since you&apos;re registering new athletes,
+            you can still invite friends to join your squad. They&apos;ll be grouped together once you complete registration.
           </p>
-          <button
-            onClick={() => setSkipSquad(false)}
-            className="text-neon hover:text-neon/80 text-sm font-medium transition-colors"
-          >
-            Changed your mind? Create a squad
-          </button>
         </div>
       )}
+
+      {/* Other Registered Campers Section */}
+      {hasOtherCampers ? (
+        <div className="p-6 border border-white/10 bg-white/[0.02]">
+          <div className="flex items-center gap-2 mb-4">
+            <Users className="h-5 w-5 text-neon" />
+            <h2 className="font-bold uppercase tracking-wider text-white">
+              Campers Already Registered
+            </h2>
+          </div>
+          <p className="text-sm text-white/50 mb-4">
+            Select campers you&apos;d like to be grouped with. Their parents will receive a request.
+          </p>
+
+          <div className="space-y-2 mb-6">
+            {otherCampers.map((camper) => {
+              const isSelected = selectedCampers.has(camper.athleteId)
+              const isRequested = requestedCampers.has(camper.athleteId)
+
+              return (
+                <button
+                  key={camper.athleteId}
+                  onClick={() => toggleCamperSelection(camper.athleteId)}
+                  disabled={isRequested}
+                  className={cn(
+                    'w-full flex items-center justify-between p-4 border transition-all',
+                    isRequested
+                      ? 'bg-neon/10 border-neon/30 cursor-default'
+                      : isSelected
+                        ? 'bg-purple/20 border-purple hover:bg-purple/30'
+                        : 'bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20'
+                  )}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={cn(
+                      'h-10 w-10 flex items-center justify-center text-sm font-bold',
+                      isRequested
+                        ? 'bg-neon/20 text-neon'
+                        : isSelected
+                          ? 'bg-purple/30 text-purple'
+                          : 'bg-white/10 text-white/60'
+                    )}>
+                      {camper.athleteName.charAt(0)}
+                    </div>
+                    <div className="text-left">
+                      <p className="text-white font-medium">{camper.athleteName}</p>
+                      <p className="text-xs text-white/40">
+                        {camper.grade ? `Grade ${camper.grade}` : 'Camper'} • Parent: {camper.parentName}
+                      </p>
+                    </div>
+                  </div>
+                  {isRequested ? (
+                    <span className="flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-neon">
+                      <CheckCircle2 className="h-4 w-4" />
+                      Requested
+                    </span>
+                  ) : isSelected ? (
+                    <span className="flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-purple">
+                      <UserCheck className="h-4 w-4" />
+                      Selected
+                    </span>
+                  ) : (
+                    <span className="text-xs text-white/30">Tap to select</span>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Send Requests Button */}
+          {selectedCampers.size > 0 && (
+            <Button
+              variant="neon"
+              onClick={sendSquadRequests}
+              disabled={sendingRequest}
+              className="w-full"
+            >
+              {sendingRequest ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <Send className="h-4 w-4 mr-2" />
+              )}
+              Send Squad Request{selectedCampers.size > 1 ? 's' : ''} ({selectedCampers.size})
+            </Button>
+          )}
+        </div>
+      ) : (
+        // No other campers registered yet
+        <div className="p-8 border border-white/10 bg-white/[0.02] text-center">
+          <div className="inline-flex items-center justify-center h-16 w-16 rounded-full bg-white/5 border border-white/10 mx-auto mb-4">
+            <Users className="h-8 w-8 text-white/30" />
+          </div>
+          <h3 className="text-lg font-bold text-white mb-2">No Other Campers Yet</h3>
+          <p className="text-white/50 text-sm max-w-sm mx-auto">
+            Be the first to register! You can still invite friends using the form below.
+          </p>
+        </div>
+      )}
+
+      {/* Invite a Friend Section */}
+      <div className="p-6 border border-magenta/20 bg-magenta/5">
+        <div className="flex items-center gap-2 mb-4">
+          <UserPlus className="h-5 w-5 text-magenta" />
+          <h2 className="font-bold uppercase tracking-wider text-white">
+            Invite a Friend
+          </h2>
+        </div>
+        <p className="text-sm text-white/50 mb-4">
+          Know someone who should join? Send them an invite to register for this camp.
+        </p>
+
+        <div className="flex gap-2">
+          <div className="flex-1 relative">
+            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30" />
+            <input
+              type="email"
+              value={inviteEmail}
+              onChange={(e) => {
+                setInviteEmail(e.target.value)
+                setInviteError(null)
+              }}
+              placeholder="friend@email.com"
+              className="w-full pl-10 pr-4 py-3 bg-white/5 border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-magenta transition-colors"
+            />
+          </div>
+          <Button
+            variant="dark"
+            onClick={sendEmailInvite}
+            disabled={sendingInvite || !inviteEmail}
+          >
+            {sendingInvite ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : inviteSent ? (
+              <CheckCircle2 className="h-4 w-4 text-neon" />
+            ) : (
+              'Send Invite'
+            )}
+          </Button>
+        </div>
+
+        {inviteError && (
+          <p className="mt-2 text-sm text-red-500 flex items-center gap-2">
+            <AlertCircle className="h-4 w-4" />
+            {inviteError}
+          </p>
+        )}
+        {inviteSent && (
+          <p className="mt-2 text-sm text-neon flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4" />
+            Invitation sent successfully!
+          </p>
+        )}
+        <p className="mt-3 text-xs text-white/40">
+          They&apos;ll receive an email with a link to register for {campName}. Once they sign up, their camper will be grouped with yours!
+        </p>
+      </div>
+
+      {/* Squad Benefits Note */}
+      <div className="flex items-start gap-3 p-4 bg-neon/5 border border-neon/20">
+        <Heart className="h-5 w-5 text-neon flex-shrink-0 mt-0.5" />
+        <div className="text-sm text-white/60">
+          <span className="text-neon font-medium">Squad Benefits:</span> Athletes in the
+          same squad are placed in the same activity groups during camp. Perfect for best
+          friends who want to stick together!
+        </div>
+      </div>
 
       {/* Navigation Buttons */}
       <div className="flex flex-col sm:flex-row gap-4 pt-6">

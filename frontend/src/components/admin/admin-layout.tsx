@@ -34,6 +34,7 @@ import {
   Trophy,
   Mail,
   Heart,
+  Tag,
 } from 'lucide-react'
 import { ViewAsControl } from './view-as-control'
 
@@ -132,6 +133,12 @@ const licensorNavItems: NavItem[] = [
     label: 'Global Analytics',
     href: '/admin/analytics',
     icon: BarChart3,
+    roles: ['hq_admin'],
+  },
+  {
+    label: 'Promo Codes',
+    href: '/admin/promo-codes',
+    icon: Tag,
     roles: ['hq_admin'],
   },
   {

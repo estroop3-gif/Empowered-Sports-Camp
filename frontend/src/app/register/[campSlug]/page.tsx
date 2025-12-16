@@ -224,10 +224,12 @@ function RegistrationContent({ camp, addons }: { camp: CampSession; addons: AddO
   }
 
   // Build registered athletes from campers for squad feature
+  // Only include athletes that already exist in the database (have existingAthleteId)
+  // New athletes can't be added to squads until after registration is complete
   const registeredAthletes = state.campers
-    .filter((c) => c.firstName && c.lastName)
+    .filter((c) => c.firstName && c.lastName && c.existingAthleteId)
     .map((c) => ({
-      id: c.id,
+      id: c.existingAthleteId as string,
       firstName: c.firstName,
       lastName: c.lastName,
     }))

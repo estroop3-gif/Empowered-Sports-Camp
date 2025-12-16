@@ -153,10 +153,15 @@ export function ConfirmationStep({ campSession, confirmationNumber }: Confirmati
       )}
 
       {/* Email Notice */}
-      <div className="flex items-center justify-center gap-2 text-white/60">
-        <Mail className="h-4 w-4" />
-        <p className="text-sm">
-          Confirmation sent to <span className="text-white">{state.parentInfo.email}</span>
+      <div className="bg-neon/10 border border-neon/30 p-4">
+        <div className="flex items-center justify-center gap-2 text-neon">
+          <Mail className="h-5 w-5" />
+          <p className="font-semibold">
+            Confirmation Email Sent!
+          </p>
+        </div>
+        <p className="text-sm text-white/60 mt-1">
+          We&apos;ve sent a detailed confirmation to <span className="text-white">{state.parentInfo.email}</span>
         </p>
       </div>
 
@@ -209,11 +214,16 @@ export function ConfirmationStep({ campSession, confirmationNumber }: Confirmati
         </Button>
       </div>
 
-      {/* Return Home */}
-      <div className="pt-8">
-        <Link href="/">
+      {/* Return to Dashboard */}
+      <div className="pt-8 flex flex-col sm:flex-row gap-4 justify-center">
+        <Link href="/dashboard">
           <Button variant="neon" size="lg">
-            Return to Home
+            Go to Parent Dashboard
+          </Button>
+        </Link>
+        <Link href="/camps">
+          <Button variant="outline-white" size="lg">
+            Browse More Camps
           </Button>
         </Link>
       </div>

@@ -168,6 +168,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [actualRole])
 
   // Fetch user role and tenant from API
+  // Also updates user.id to profile ID if it differs from Cognito sub
   const fetchUserRoleAndTenant = async (userId: string) => {
     try {
       const response = await fetch(`/api/auth/user-info?userId=${userId}`)
@@ -178,6 +179,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       const data = await response.json()
+
+      // Update user.id to profile ID if returned (handles Cognito sub vs Profile ID mismatch)
+      if (data.profileId && data.profileId !== userId) {
+        setUser((prev) => prev ? { ...prev, id: data.profileId } : null)
+      }
 
       if (data.role) {
         setActualRole(data.role as UserRole)

@@ -20,6 +20,35 @@ import type {
   AddOn,
 } from '@/types/registration'
 
+// Type for existing athlete data from the user's profile
+export interface ExistingAthlete {
+  id: string
+  first_name: string
+  last_name: string
+  date_of_birth: string
+  gender: string | null
+  grade: string | null
+  tshirt_size: string | null
+  medical_notes: string | null
+  allergies: string | null
+}
+
+// Type for parent profile data
+export interface ParentProfile {
+  first_name: string | null
+  last_name: string | null
+  email: string
+  phone: string | null
+  address_line_1: string | null
+  address_line_2: string | null
+  city: string | null
+  state: string | null
+  zip_code: string | null
+  emergency_contact_name: string | null
+  emergency_contact_phone: string | null
+  emergency_contact_relationship: string | null
+}
+
 /**
  * CHECKOUT CONTEXT
  *
@@ -33,6 +62,8 @@ import type {
 
 const createInitialCamper = (): CamperFormData => ({
   id: crypto.randomUUID(),
+  existingAthleteId: null,
+  isNewAthlete: true, // Default to new athlete mode
   firstName: '',
   lastName: '',
   dateOfBirth: '',
@@ -92,7 +123,10 @@ type CheckoutAction =
   | { type: 'ADD_CAMPER' }
   | { type: 'REMOVE_CAMPER'; camperId: string }
   | { type: 'UPDATE_CAMPER'; camperId: string; data: Partial<CamperFormData> }
+  | { type: 'SELECT_EXISTING_ATHLETE'; camperId: string; athlete: ExistingAthlete }
+  | { type: 'SET_NEW_ATHLETE_MODE'; camperId: string }
   | { type: 'UPDATE_PARENT'; data: Partial<ParentFormData> }
+  | { type: 'SET_PARENT_FROM_PROFILE'; profile: ParentProfile }
   | { type: 'SET_SQUAD'; squadId: string | null }
   | { type: 'ADD_ADDON'; addon: SelectedAddOn }
   | { type: 'REMOVE_ADDON'; addonId: string; variantId: string | null; camperId: string | null }
@@ -168,10 +202,87 @@ function checkoutReducer(state: CheckoutState, action: CheckoutAction): Checkout
       return { ...state, campers: newCampers }
     }
 
+    case 'SELECT_EXISTING_ATHLETE': {
+      const camperIndex = state.campers.findIndex((c) => c.id === action.camperId)
+      if (camperIndex === -1) return state
+
+      // Calculate age from DOB
+      const dob = new Date(action.athlete.date_of_birth)
+      const today = new Date()
+      let age = today.getFullYear() - dob.getFullYear()
+      const monthDiff = today.getMonth() - dob.getMonth()
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
+        age--
+      }
+
+      // Check eligibility
+      let isEligible = false
+      if (state.campSession) {
+        isEligible = age >= state.campSession.minAge && age <= state.campSession.maxAge
+      }
+
+      const updatedCamper: CamperFormData = {
+        ...state.campers[camperIndex],
+        existingAthleteId: action.athlete.id,
+        isNewAthlete: false,
+        firstName: action.athlete.first_name,
+        lastName: action.athlete.last_name,
+        dateOfBirth: action.athlete.date_of_birth,
+        grade: action.athlete.grade || '',
+        sex: 'female',
+        tshirtSize: (action.athlete.tshirt_size as CamperFormData['tshirtSize']) || '',
+        medicalNotes: action.athlete.medical_notes || '',
+        allergies: action.athlete.allergies || '',
+        specialConsiderations: '',
+        age,
+        isEligible,
+      }
+
+      const updatedCampers = [...state.campers]
+      updatedCampers[camperIndex] = updatedCamper
+
+      return { ...state, campers: updatedCampers }
+    }
+
+    case 'SET_NEW_ATHLETE_MODE': {
+      const camperIndex = state.campers.findIndex((c) => c.id === action.camperId)
+      if (camperIndex === -1) return state
+
+      const clearedCamper: CamperFormData = {
+        ...createInitialCamper(),
+        id: state.campers[camperIndex].id, // Keep the same ID
+      }
+
+      const updatedCampers = [...state.campers]
+      updatedCampers[camperIndex] = clearedCamper
+
+      return { ...state, campers: updatedCampers }
+    }
+
     case 'UPDATE_PARENT':
       return {
         ...state,
         parentInfo: { ...state.parentInfo, ...action.data },
+      }
+
+    case 'SET_PARENT_FROM_PROFILE':
+      return {
+        ...state,
+        parentInfo: {
+          ...state.parentInfo,
+          firstName: action.profile.first_name || '',
+          lastName: action.profile.last_name || '',
+          email: action.profile.email || '',
+          phone: action.profile.phone || '',
+          emergencyContactName: action.profile.emergency_contact_name || '',
+          emergencyContactPhone: action.profile.emergency_contact_phone || '',
+          emergencyContactRelationship: action.profile.emergency_contact_relationship || '',
+          addressLine1: action.profile.address_line_1 || '',
+          addressLine2: action.profile.address_line_2 || '',
+          city: action.profile.city || '',
+          state: action.profile.state || '',
+          zipCode: action.profile.zip_code || '',
+        },
       }
 
     case 'SET_SQUAD':
@@ -280,9 +391,12 @@ interface CheckoutContextValue {
   addCamper: () => void
   removeCamper: (camperId: string) => void
   updateCamper: (camperId: string, data: Partial<CamperFormData>) => void
+  selectExistingAthlete: (camperId: string, athlete: ExistingAthlete) => void
+  setNewAthleteMode: (camperId: string) => void
 
   // Parent
   updateParent: (data: Partial<ParentFormData>) => void
+  setParentFromProfile: (profile: ParentProfile) => void
 
   // Squad
   setSquad: (squadId: string | null) => void
@@ -372,24 +486,34 @@ export function CheckoutProvider({ children }: { children: ReactNode }) {
     }
   }, [state.campSession, state.campers, state.selectedAddOns, state.promoCode])
 
+  // Scroll to top helper
+  const scrollToTop = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+  }, [])
+
   // Navigation
   const setStep = useCallback((step: CheckoutStep) => {
     dispatch({ type: 'SET_STEP', step })
-  }, [])
+    scrollToTop()
+  }, [scrollToTop])
 
   const nextStep = useCallback(() => {
     const currentIndex = STEP_ORDER.indexOf(state.step)
     if (currentIndex < STEP_ORDER.length - 1) {
       dispatch({ type: 'SET_STEP', step: STEP_ORDER[currentIndex + 1] })
+      scrollToTop()
     }
-  }, [state.step])
+  }, [state.step, scrollToTop])
 
   const prevStep = useCallback(() => {
     const currentIndex = STEP_ORDER.indexOf(state.step)
     if (currentIndex > 0) {
       dispatch({ type: 'SET_STEP', step: STEP_ORDER[currentIndex - 1] })
+      scrollToTop()
     }
-  }, [state.step])
+  }, [state.step, scrollToTop])
 
   const canProceed = useCallback((): boolean => {
     switch (state.step) {
@@ -446,9 +570,24 @@ export function CheckoutProvider({ children }: { children: ReactNode }) {
     []
   )
 
+  const selectExistingAthlete = useCallback(
+    (camperId: string, athlete: ExistingAthlete) => {
+      dispatch({ type: 'SELECT_EXISTING_ATHLETE', camperId, athlete })
+    },
+    []
+  )
+
+  const setNewAthleteMode = useCallback((camperId: string) => {
+    dispatch({ type: 'SET_NEW_ATHLETE_MODE', camperId })
+  }, [])
+
   // Parent
   const updateParent = useCallback((data: Partial<ParentFormData>) => {
     dispatch({ type: 'UPDATE_PARENT', data })
+  }, [])
+
+  const setParentFromProfile = useCallback((profile: ParentProfile) => {
+    dispatch({ type: 'SET_PARENT_FROM_PROFILE', profile })
   }, [])
 
   // Squad
@@ -518,7 +657,10 @@ export function CheckoutProvider({ children }: { children: ReactNode }) {
     addCamper,
     removeCamper,
     updateCamper,
+    selectExistingAthlete,
+    setNewAthleteMode,
     updateParent,
+    setParentFromProfile,
     setSquad,
     addAddOn,
     removeAddOn,

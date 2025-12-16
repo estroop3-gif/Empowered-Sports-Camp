@@ -60,6 +60,7 @@ export async function GET(request: NextRequest) {
     if (!userRole) {
       // No role found - return default parent role
       return NextResponse.json({
+        profileId: profileId, // Return profile ID so client can use it for queries
         role: 'parent',
         tenant: null,
         lmsStatus: {
@@ -93,6 +94,7 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({
+      profileId: profileId, // Return profile ID so client can use it for queries
       role: userRole.role,
       tenant,
       lmsStatus,

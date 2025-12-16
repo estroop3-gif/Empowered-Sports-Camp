@@ -6,6 +6,7 @@ import Image from 'next/image'
 import { ArrowLeft } from 'lucide-react'
 import { RegistrationStepper } from './RegistrationStepper'
 import { OrderSummary } from './OrderSummary'
+import { useBannerOffset } from '@/hooks/useBannerOffset'
 import type { CheckoutStep, CampSession, AddOn } from '@/types/registration'
 
 /**
@@ -32,10 +33,18 @@ export function RegistrationLayout({
   campSession,
   availableAddOns,
 }: RegistrationLayoutProps) {
+  const { topWithNavbar } = useBannerOffset()
+  // Height of this sub-header (h-16 = 64px)
+  const subHeaderHeight = 64
+  const stickyContentTop = topWithNavbar + subHeaderHeight
+
   return (
     <div className="min-h-screen bg-black">
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-black border-b border-white/10">
+      <header
+        className="sticky z-40 bg-black border-b border-white/10"
+        style={{ top: `${topWithNavbar}px` }}
+      >
         <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r from-neon via-magenta to-purple" />
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex h-16 items-center justify-between">
@@ -87,7 +96,7 @@ export function RegistrationLayout({
         <div className="lg:grid lg:grid-cols-12 lg:gap-8">
           {/* Left Column - Stepper (Desktop) */}
           <div className="hidden lg:block lg:col-span-2">
-            <div className="sticky top-24">
+            <div className="sticky" style={{ top: `${stickyContentTop + 16}px` }}>
               <RegistrationStepper currentStep={currentStep} />
             </div>
           </div>
@@ -104,7 +113,7 @@ export function RegistrationLayout({
 
           {/* Right Column - Order Summary */}
           <div className="lg:col-span-4 mt-8 lg:mt-0">
-            <div className="sticky top-24">
+            <div className="sticky" style={{ top: `${stickyContentTop + 16}px` }}>
               <OrderSummary
                 campSession={campSession}
                 availableAddOns={availableAddOns}

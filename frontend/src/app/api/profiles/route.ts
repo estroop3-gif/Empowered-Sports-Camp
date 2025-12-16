@@ -10,6 +10,7 @@ import { getAuthenticatedUserFromRequest } from '@/lib/auth/cognito-server'
 import {
   fetchProfileById,
   fetchProfileByEmail,
+  fetchProfileWithAthletes,
   createProfile,
   updateProfile,
   completeOnboarding,
@@ -32,11 +33,11 @@ export async function GET(request: NextRequest) {
     switch (action) {
       case 'byId': {
         if (!profileId) return NextResponse.json({ error: 'profileId required' }, { status: 400 })
-        // Users can only fetch their own profile unless admin
-        if (!isAdmin && profileId !== user.id) {
-          return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-        }
-        const { data, error } = await fetchProfileById(profileId)
+        // Admin can fetch any profile
+        // Non-admin users can only fetch their own - we use user.id (profile ID) for the query
+        // This handles the Cognito sub vs Profile ID mismatch
+        const queryProfileId = isAdmin ? profileId : user.id
+        const { data, error } = await fetchProfileById(queryProfileId)
         if (error) return NextResponse.json({ error: error.message }, { status: 500 })
         return NextResponse.json({ data })
       }
@@ -48,6 +49,13 @@ export async function GET(request: NextRequest) {
         }
         if (!email) return NextResponse.json({ error: 'email required' }, { status: 400 })
         const { data, error } = await fetchProfileByEmail(email)
+        if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+        return NextResponse.json({ data })
+      }
+
+      case 'withAthletes': {
+        // Get own profile with athletes (for registration flow)
+        const { data, error } = await fetchProfileWithAthletes(user.id)
         if (error) return NextResponse.json({ error: error.message }, { status: 500 })
         return NextResponse.json({ data })
       }
@@ -87,11 +95,11 @@ export async function POST(request: NextRequest) {
       case 'update': {
         const { profileId, ...updates } = data
         if (!profileId) return NextResponse.json({ error: 'profileId required' }, { status: 400 })
-        // Users can only update their own profile unless admin
-        if (!isAdmin && profileId !== user.id) {
-          return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-        }
-        const { data: profile, error } = await updateProfile(profileId, updates)
+        // Admin can update any profile
+        // Non-admin users can only update their own - we use user.id (profile ID)
+        // This handles the Cognito sub vs Profile ID mismatch
+        const queryProfileId = isAdmin ? profileId : user.id
+        const { data: profile, error } = await updateProfile(queryProfileId, updates)
         if (error) return NextResponse.json({ error: error.message }, { status: 500 })
         return NextResponse.json({ data: profile })
       }
@@ -99,11 +107,11 @@ export async function POST(request: NextRequest) {
       case 'completeOnboarding': {
         const { profileId } = data
         if (!profileId) return NextResponse.json({ error: 'profileId required' }, { status: 400 })
-        // Users can only complete their own onboarding
-        if (!isAdmin && profileId !== user.id) {
-          return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-        }
-        const { error } = await completeOnboarding(profileId)
+        // Admin can complete any profile's onboarding
+        // Non-admin users can only complete their own - we use user.id (profile ID)
+        // This handles the Cognito sub vs Profile ID mismatch
+        const queryProfileId = isAdmin ? profileId : user.id
+        const { error } = await completeOnboarding(queryProfileId)
         if (error) return NextResponse.json({ error: error.message }, { status: 500 })
         return NextResponse.json({ success: true })
       }

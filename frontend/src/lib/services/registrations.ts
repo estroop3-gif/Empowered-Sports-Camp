@@ -277,6 +277,7 @@ export async function createRegistration(params: {
   discountCents: number
   promoDiscountCents: number
   addonsTotalCents: number
+  taxCents?: number
   promoCodeId?: string | null
   shirtSize?: string | null
   specialConsiderations?: string | null
@@ -292,13 +293,14 @@ export async function createRegistration(params: {
       discountCents,
       promoDiscountCents,
       addonsTotalCents,
+      taxCents = 0,
       promoCodeId,
       shirtSize,
       specialConsiderations,
       friendRequests,
     } = params
 
-    const totalPriceCents = basePriceCents - discountCents - promoDiscountCents + addonsTotalCents
+    const totalPriceCents = basePriceCents - discountCents - promoDiscountCents + addonsTotalCents + taxCents
 
     const registration = await prisma.registration.create({
       data: {
@@ -310,6 +312,7 @@ export async function createRegistration(params: {
         discountCents,
         promoDiscountCents,
         addonsTotalCents,
+        taxCents,
         totalPriceCents,
         promoCodeId,
         shirtSize,

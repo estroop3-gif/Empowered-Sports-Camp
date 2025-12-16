@@ -14,6 +14,8 @@ import {
   respondToSquadInvite,
   getSquadsForParent,
   claimPendingSquadInvites,
+  getOtherRegisteredCampers,
+  requestSquadWithCamper,
 } from '@/lib/services/campSquads'
 
 export async function GET(request: NextRequest) {
@@ -45,6 +47,23 @@ export async function GET(request: NextRequest) {
         const { data, error } = await getSquadInvitesForParent({
           parentId: user.id,
           campId: campId || undefined,
+        })
+
+        if (error) {
+          return NextResponse.json({ error: error.message }, { status: 500 })
+        }
+
+        return NextResponse.json({ data })
+      }
+
+      case 'otherCampers': {
+        if (!campId) {
+          return NextResponse.json({ error: 'campId required' }, { status: 400 })
+        }
+
+        const { data, error } = await getOtherRegisteredCampers({
+          campId,
+          excludeParentId: user.id,
         })
 
         if (error) {
@@ -188,6 +207,31 @@ export async function POST(request: NextRequest) {
         const { data, error } = await claimPendingSquadInvites({
           email,
           userId: user.id,
+        })
+
+        if (error) {
+          return NextResponse.json({ error: error.message }, { status: 500 })
+        }
+
+        return NextResponse.json({ data })
+      }
+
+      case 'requestSquad': {
+        const { campId, tenantId, athleteIds, targetAthleteId } = body
+
+        if (!campId || !tenantId || !targetAthleteId) {
+          return NextResponse.json(
+            { error: 'campId, tenantId, and targetAthleteId required' },
+            { status: 400 }
+          )
+        }
+
+        const { data, error } = await requestSquadWithCamper({
+          campId,
+          tenantId,
+          requestingParentId: user.id,
+          requestingAthleteIds: athleteIds || [],
+          targetAthleteId,
         })
 
         if (error) {

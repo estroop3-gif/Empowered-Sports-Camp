@@ -855,6 +855,201 @@ export async function getSquadsForParent(params: {
 }
 
 /**
+ * Get other registered campers for a camp (for squad building).
+ * Excludes the current user's athletes.
+ */
+export async function getOtherRegisteredCampers(params: {
+  campId: string
+  excludeParentId: string
+}): Promise<{
+  data: Array<{
+    athleteId: string
+    athleteName: string
+    grade: string | null
+    parentName: string
+    parentId: string
+  }> | null
+  error: Error | null
+}> {
+  try {
+    const { campId, excludeParentId } = params
+
+    // Get confirmed/pending registrations for this camp, excluding current user's athletes
+    const registrations = await prisma.registration.findMany({
+      where: {
+        campId,
+        status: { in: ['pending', 'confirmed'] },
+        athlete: {
+          parentId: { not: excludeParentId },
+        },
+      },
+      include: {
+        athlete: {
+          include: {
+            parent: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: {
+        athlete: {
+          firstName: 'asc',
+        },
+      },
+    })
+
+    const campers = registrations.map((r) => ({
+      athleteId: r.athlete.id,
+      athleteName: `${r.athlete.firstName} ${r.athlete.lastName}`,
+      grade: r.athlete.grade,
+      parentName: [r.athlete.parent?.firstName, r.athlete.parent?.lastName].filter(Boolean).join(' ') || 'Parent',
+      parentId: r.athlete.parentId,
+    }))
+
+    return { data: campers, error: null }
+  } catch (error) {
+    console.error('[CampSquads] Failed to get other registered campers:', error)
+    return { data: null, error: error as Error }
+  }
+}
+
+/**
+ * Request to join another camper's squad or create a squad request.
+ */
+export async function requestSquadWithCamper(params: {
+  campId: string
+  tenantId: string
+  requestingParentId: string
+  requestingAthleteIds: string[]
+  targetAthleteId: string
+}): Promise<{ data: { requestSent: boolean; squadId?: string } | null; error: Error | null }> {
+  try {
+    const { campId, tenantId, requestingParentId, requestingAthleteIds, targetAthleteId } = params
+
+    // Get target athlete's parent
+    const targetAthlete = await prisma.athlete.findUnique({
+      where: { id: targetAthleteId },
+      include: { parent: true },
+    })
+
+    if (!targetAthlete || !targetAthlete.parent) {
+      return { data: null, error: new Error('Target athlete not found') }
+    }
+
+    const targetParentId = targetAthlete.parentId
+
+    // Check if target parent already has a squad for this camp
+    let squad = await prisma.campFriendSquad.findUnique({
+      where: {
+        campId_createdByParentId: {
+          campId,
+          createdByParentId: targetParentId,
+        },
+      },
+    })
+
+    // If not, check if requesting parent has one
+    if (!squad) {
+      squad = await prisma.campFriendSquad.findUnique({
+        where: {
+          campId_createdByParentId: {
+            campId,
+            createdByParentId: requestingParentId,
+          },
+        },
+      })
+    }
+
+    // If neither has a squad, create one for the requesting parent
+    if (!squad) {
+      const requestingParent = await prisma.profile.findUnique({
+        where: { id: requestingParentId },
+      })
+      const label = [requestingParent?.firstName, "'s Squad"].filter(Boolean).join('') || 'New Squad'
+
+      squad = await prisma.campFriendSquad.create({
+        data: {
+          campId,
+          tenantId,
+          createdByParentId: requestingParentId,
+          label,
+        },
+      })
+
+      // Add requesting parent's athletes as accepted members
+      for (const athleteId of requestingAthleteIds) {
+        await prisma.campFriendSquadMember.create({
+          data: {
+            squadId: squad.id,
+            parentId: requestingParentId,
+            athleteId,
+            status: 'accepted',
+            respondedAt: new Date(),
+          },
+        })
+      }
+    }
+
+    // Add target athlete as a requested member (pending acceptance by their parent)
+    const existingMember = await prisma.campFriendSquadMember.findUnique({
+      where: {
+        squadId_athleteId: {
+          squadId: squad.id,
+          athleteId: targetAthleteId,
+        },
+      },
+    })
+
+    if (!existingMember) {
+      await prisma.campFriendSquadMember.create({
+        data: {
+          squadId: squad.id,
+          parentId: targetParentId,
+          athleteId: targetAthleteId,
+          status: 'requested',
+        },
+      })
+    }
+
+    // Send notification to target parent
+    const requestingParent = await prisma.profile.findUnique({
+      where: { id: requestingParentId },
+    })
+    const camp = await prisma.camp.findUnique({
+      where: { id: campId },
+    })
+
+    const requestingName = [requestingParent?.firstName, requestingParent?.lastName].filter(Boolean).join(' ') || 'A parent'
+
+    await createNotification({
+      userId: targetParentId,
+      tenantId,
+      type: 'squad_invite_received',
+      title: `${requestingName} wants to squad up!`,
+      body: `${requestingName} has requested that ${targetAthlete.firstName} be grouped with their athlete(s) for ${camp?.name || 'camp'}. Accept to keep them together!`,
+      category: 'camp',
+      severity: 'info',
+      actionUrl: `/portal/squads`,
+      data: {
+        squadId: squad.id,
+        campId,
+        campName: camp?.name || 'Camp',
+      },
+    })
+
+    return { data: { requestSent: true, squadId: squad.id }, error: null }
+  } catch (error) {
+    console.error('[CampSquads] Failed to request squad with camper:', error)
+    return { data: null, error: error as Error }
+  }
+}
+
+/**
  * Claim pending squad invites after user signs up.
  * Call this after a new user creates an account.
  */

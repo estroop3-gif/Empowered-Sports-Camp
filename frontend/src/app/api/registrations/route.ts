@@ -31,13 +31,22 @@ export async function GET(request: NextRequest) {
 
   try {
     switch (action) {
+      case 'myRegistrations': {
+        // Use the authenticated user's profile ID directly (no param needed)
+        // This handles the Cognito sub vs Profile ID mismatch issue
+        const { data, error } = await fetchRegistrationsByParent(user.id)
+        if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+        return NextResponse.json({ data })
+      }
+
       case 'byParent': {
         if (!parentId) return NextResponse.json({ error: 'parentId required' }, { status: 400 })
-        // Parents can only fetch their own registrations; staff can fetch any
-        if (!isStaff && parentId !== user.id) {
-          return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-        }
-        const { data, error } = await fetchRegistrationsByParent(parentId)
+        // Staff can fetch any parent's registrations
+        // Non-staff can only fetch their own - we ignore the passed parentId and use user.id
+        // This handles the Cognito sub vs Profile ID mismatch (client sends Cognito sub,
+        // but server has mapped user.id to the profile ID)
+        const queryParentId = isStaff ? parentId : user.id
+        const { data, error } = await fetchRegistrationsByParent(queryParentId)
         if (error) return NextResponse.json({ error: error.message }, { status: 500 })
         return NextResponse.json({ data })
       }

@@ -134,6 +134,8 @@ export type CheckoutStep = 'camp' | 'campers' | 'squad' | 'addons' | 'payment' |
 
 export interface CamperFormData {
   id: string // Temporary client-side ID
+  existingAthleteId: string | null // Links to existing athlete record
+  isNewAthlete: boolean // Whether this is a new athlete or using existing
   firstName: string
   lastName: string
   dateOfBirth: string // YYYY-MM-DD

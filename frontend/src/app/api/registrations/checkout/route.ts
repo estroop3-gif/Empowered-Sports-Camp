@@ -9,10 +9,22 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/client'
 import { createRegistration, addRegistrationAddon } from '@/lib/services/registrations'
 import { createStripeCheckoutSession } from '@/lib/services/payments'
+import { getAuthenticatedUserFromRequest } from '@/lib/auth/cognito-server'
 import type { RegistrationPayload } from '@/types/registration'
+
+// Helper to check if a string is a valid UUID
+function isValidUUID(str: string): boolean {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+  return uuidRegex.test(str)
+}
 
 export async function POST(request: NextRequest) {
   try {
+    // Get authenticated user - their Cognito sub will be used as profile ID
+    const authUser = await getAuthenticatedUserFromRequest(request)
+    // Note: We don't require authentication for checkout, but if user is authenticated,
+    // we use their ID for the profile to ensure dashboard queries work correctly
+
     const body = (await request.json()) as RegistrationPayload
     const {
       campId,
@@ -31,14 +43,23 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Verify camp exists and has spots
-    const camp = await prisma.camp.findFirst({
-      where: { id: campId, tenantId },
-    })
+    // Verify camp exists and has spots, also get tenant for tax rate
+    const [camp, tenant] = await Promise.all([
+      prisma.camp.findFirst({
+        where: { id: campId, tenantId },
+      }),
+      prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { taxRatePercent: true },
+      }),
+    ])
 
     if (!camp) {
       return NextResponse.json({ error: 'Camp not found' }, { status: 404 })
     }
+
+    // Get tax rate (default to 0 if not set)
+    const taxRatePercent = tenant?.taxRatePercent ? Number(tenant.taxRatePercent) : 0
 
     // Get current registration count
     const currentCount = await prisma.registration.count({
@@ -53,24 +74,62 @@ export async function POST(request: NextRequest) {
     }
 
     // Find or create parent profile
-    // Profile is linked to auth, so we look up by email
+    // Profile is linked to auth, so we look up by email first
+    // If user is authenticated, we also check by their Cognito sub (user ID)
     let parentProfile = await prisma.profile.findFirst({
       where: {
         email: parent.email.toLowerCase(),
       },
     })
 
+    // Get the profile ID to use - prefer authUser.id (Cognito sub) for consistency with dashboard
+    // The auth helper may have already mapped the ID to profile.id, but we want the original Cognito sub
+    // for new profiles so dashboard queries work correctly
+    const profileIdToUse = authUser?.id || crypto.randomUUID()
+
     if (!parentProfile) {
-      // Create a new profile with a generated UUID
+      // Create a new profile - use authUser's ID (Cognito sub) if authenticated
+      // This ensures the profile ID matches what the dashboard queries use
+      console.log(`[Checkout] Creating new profile with ID: ${profileIdToUse} for email: ${parent.email}`)
       parentProfile = await prisma.profile.create({
         data: {
-          id: crypto.randomUUID(),
+          id: profileIdToUse,
           email: parent.email.toLowerCase(),
           firstName: parent.firstName,
           lastName: parent.lastName,
           phone: parent.phone,
+          addressLine1: parent.addressLine1 || null,
+          addressLine2: parent.addressLine2 || null,
+          city: parent.city || null,
+          state: parent.state || null,
+          zipCode: parent.zipCode || null,
+          emergencyContactName: parent.emergencyContactName || null,
+          emergencyContactPhone: parent.emergencyContactPhone || null,
+          emergencyContactRelationship: parent.emergencyContactRelationship || null,
         },
       })
+    } else {
+      // Update existing profile with billing address if provided
+      // Only update fields that were provided and not empty
+      const updateData: Record<string, string | null> = {}
+      if (parent.firstName) updateData.firstName = parent.firstName
+      if (parent.lastName) updateData.lastName = parent.lastName
+      if (parent.phone) updateData.phone = parent.phone
+      if (parent.addressLine1) updateData.addressLine1 = parent.addressLine1
+      if (parent.addressLine2 !== undefined) updateData.addressLine2 = parent.addressLine2 || null
+      if (parent.city) updateData.city = parent.city
+      if (parent.state) updateData.state = parent.state
+      if (parent.zipCode) updateData.zipCode = parent.zipCode
+      if (parent.emergencyContactName) updateData.emergencyContactName = parent.emergencyContactName
+      if (parent.emergencyContactPhone) updateData.emergencyContactPhone = parent.emergencyContactPhone
+      if (parent.emergencyContactRelationship) updateData.emergencyContactRelationship = parent.emergencyContactRelationship
+
+      if (Object.keys(updateData).length > 0) {
+        parentProfile = await prisma.profile.update({
+          where: { id: parentProfile.id },
+          data: updateData,
+        })
+      }
     }
 
     // Look up promo code if provided
@@ -83,6 +142,17 @@ export async function POST(request: NextRequest) {
           isActive: true,
         },
       })
+    }
+
+    // Fetch addon taxability for tax calculation
+    const addonIds = addOns.filter(a => isValidUUID(a.addonId)).map(a => a.addonId)
+    const taxableAddonsMap = new Map<string, boolean>()
+    if (addonIds.length > 0) {
+      const addonsWithTaxInfo = await prisma.addon.findMany({
+        where: { id: { in: addonIds } },
+        select: { id: true, isTaxable: true },
+      })
+      addonsWithTaxInfo.forEach(a => taxableAddonsMap.set(a.id, a.isTaxable))
     }
 
     // Calculate per-camper pricing
@@ -113,18 +183,52 @@ export async function POST(request: NextRequest) {
 
       // Calculate addons for this camper
       const camperAddOns = addOns.filter(a => a.camperId === camperData.id || !a.camperId)
-      const addonsTotalCents = i === 0
-        ? addOns.reduce((sum, a) => sum + a.unitPrice * a.quantity, 0)
-        : camperAddOns.filter(a => a.camperId === camperData.id).reduce((sum, a) => sum + a.unitPrice * a.quantity, 0)
+      const relevantAddOns = i === 0 ? addOns : camperAddOns.filter(a => a.camperId === camperData.id)
+      const addonsTotalCents = relevantAddOns.reduce((sum, a) => sum + a.unitPrice * a.quantity, 0)
+
+      // Calculate tax on taxable addons (physical products like t-shirts)
+      // Camp registration fees are services and typically not taxed
+      const taxableAmount = relevantAddOns
+        .filter(a => isValidUUID(a.addonId) && taxableAddonsMap.get(a.addonId) === true)
+        .reduce((sum, a) => sum + a.unitPrice * a.quantity, 0)
+      const taxCents = taxRatePercent > 0 ? Math.round(taxableAmount * (taxRatePercent / 100)) : 0
 
       // Find or create athlete profile
-      let athlete = await prisma.athlete.findFirst({
-        where: {
-          parentId: parentProfile.id,
-          firstName: camperData.firstName,
-          lastName: camperData.lastName,
-        },
-      })
+      let athlete = null
+
+      // If existingAthleteId is provided, use that athlete
+      if (camperData.existingAthleteId) {
+        athlete = await prisma.athlete.findFirst({
+          where: {
+            id: camperData.existingAthleteId,
+            parentId: parentProfile.id, // Ensure the athlete belongs to this parent
+          },
+        })
+
+        // Update athlete with any new info (like grade, t-shirt size)
+        if (athlete) {
+          athlete = await prisma.athlete.update({
+            where: { id: athlete.id },
+            data: {
+              grade: camperData.grade || athlete.grade,
+              tShirtSize: camperData.tshirtSize || athlete.tShirtSize,
+              medicalNotes: camperData.medicalNotes || athlete.medicalNotes,
+              allergies: camperData.allergies || athlete.allergies,
+            },
+          })
+        }
+      }
+
+      // If no existing athlete, find by name or create new
+      if (!athlete) {
+        athlete = await prisma.athlete.findFirst({
+          where: {
+            parentId: parentProfile.id,
+            firstName: camperData.firstName,
+            lastName: camperData.lastName,
+          },
+        })
+      }
 
       if (!athlete) {
         // dateOfBirth is required - use a default if not provided
@@ -139,6 +243,7 @@ export async function POST(request: NextRequest) {
             lastName: camperData.lastName,
             dateOfBirth: dob,
             grade: camperData.grade || null,
+            tShirtSize: camperData.tshirtSize || null,
             medicalNotes: camperData.medicalNotes || null,
             allergies: camperData.allergies || null,
           },
@@ -154,7 +259,8 @@ export async function POST(request: NextRequest) {
         basePriceCents,
         discountCents,
         promoDiscountCents,
-        addonsTotalCents: i === 0 ? addonsTotalCents : camperAddOns.filter(a => a.camperId === camperData.id).reduce((sum, a) => sum + a.unitPrice * a.quantity, 0),
+        addonsTotalCents,
+        taxCents,
         promoCodeId: isFirstCamper ? promoCodeRecord?.id : null,
         shirtSize: camperData.tshirtSize || null,
         specialConsiderations: camperData.specialConsiderations || null,
@@ -167,8 +273,14 @@ export async function POST(request: NextRequest) {
       registrationIds.push(regData.registrationId)
 
       // Add addons for this registration
+      // Only add addons with valid UUIDs (skip default/fallback addons with non-UUID IDs)
       for (const addon of camperAddOns) {
         if (addon.camperId === camperData.id || (addon.camperId === null && i === 0)) {
+          // Skip addons with non-UUID IDs (these are default/fallback addons)
+          if (!isValidUUID(addon.addonId)) {
+            console.log(`[Checkout] Skipping addon with non-UUID ID: ${addon.addonId}`)
+            continue
+          }
           await addRegistrationAddon({
             registrationId: regData.registrationId,
             addonId: addon.addonId,

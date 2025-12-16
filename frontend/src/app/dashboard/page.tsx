@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import Image from 'next/image'
 import {
   Calendar,
   Crown,
@@ -14,13 +13,12 @@ import {
   CheckCircle,
   AlertCircle,
   Zap,
-  Bell,
   User,
   Loader2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { LogoutButton, UserMenu } from '@/components/layout/user-menu'
+import { LogoutButton } from '@/components/layout/user-menu'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth/context'
 // Types (no longer imported from services)
@@ -214,57 +212,6 @@ export default function ParentDashboard() {
 
   return (
     <div className="min-h-screen bg-black">
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-black border-b border-white/10">
-        <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r from-neon via-magenta to-purple" />
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="flex h-20 items-center justify-between">
-            {/* Logo */}
-            <Link href="/" className="flex items-center gap-3">
-              <div className="relative h-10 w-10">
-                <Image
-                  src="/images/logo.png"
-                  alt="Empowered Athletes"
-                  fill
-                  className="object-contain"
-                />
-              </div>
-              <div className="hidden sm:block">
-                <span className="text-lg font-black uppercase tracking-wider text-white">Empowered</span>
-                <span className="text-lg font-light uppercase tracking-wider text-neon ml-2">Athletes</span>
-              </div>
-            </Link>
-
-            {/* Navigation */}
-            <nav className="hidden md:flex items-center gap-1">
-              <Link
-                href="/dashboard"
-                className="px-4 py-2 text-sm font-semibold uppercase tracking-wider text-neon"
-              >
-                Dashboard
-              </Link>
-              <Link
-                href="/camps"
-                className="px-4 py-2 text-sm font-semibold uppercase tracking-wider text-white/60 hover:text-white transition-colors"
-              >
-                Find Camps
-              </Link>
-            </nav>
-
-            {/* User menu */}
-            <div className="flex items-center gap-4">
-              <button className="relative p-2 text-white/50 hover:text-white transition-colors">
-                <Bell className="h-5 w-5" />
-                {upcomingRegistrations.some(r => r.status === 'pending_payment') && (
-                  <span className="absolute top-1 right-1 h-2 w-2 bg-magenta rounded-full" />
-                )}
-              </button>
-              <UserMenu variant="header" />
-            </div>
-          </div>
-        </div>
-      </header>
-
       {/* Main Content */}
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         {/* Welcome Section */}
@@ -401,13 +348,14 @@ export default function ParentDashboard() {
                   ) : (
                     <div className="space-y-4">
                       {upcomingRegistrations.map((reg) => (
-                        <div
+                        <Link
                           key={reg.id}
+                          href={`/dashboard/registrations/${reg.id}`}
                           className={cn(
-                            'p-4 border transition-all',
+                            'block p-4 border transition-all cursor-pointer hover:border-neon/50',
                             reg.status === 'pending_payment'
-                              ? 'bg-magenta/5 border-magenta/30'
-                              : 'bg-black/50 border-white/10'
+                              ? 'bg-magenta/5 border-magenta/30 hover:bg-magenta/10'
+                              : 'bg-black/50 border-white/10 hover:bg-neon/5'
                           )}
                         >
                           <div className="flex items-start justify-between gap-4">
@@ -448,14 +396,10 @@ export default function ParentDashboard() {
                             </div>
                             <div className="text-right">
                               <p className="font-black text-neon">{formatCurrency(reg.camps.price_cents)}</p>
-                              {reg.status === 'pending_payment' && (
-                                <Button variant="neon" size="sm" className="mt-2">
-                                  Pay Now
-                                </Button>
-                              )}
+                              <p className="text-xs text-white/40 mt-1">Click to view details</p>
                             </div>
                           </div>
-                        </div>
+                        </Link>
                       ))}
                     </div>
                   )
@@ -468,7 +412,11 @@ export default function ParentDashboard() {
                   ) : (
                     <div className="space-y-4">
                       {pastRegistrations.map((reg) => (
-                        <div key={reg.id} className="p-4 bg-black/30 border border-white/5">
+                        <Link
+                          key={reg.id}
+                          href={`/dashboard/registrations/${reg.id}`}
+                          className="block p-4 bg-black/30 border border-white/5 hover:border-white/20 hover:bg-black/40 transition-all"
+                        >
                           <div className="flex items-center justify-between">
                             <div>
                               <h4 className="font-bold text-white/70">{reg.camps.name}</h4>
@@ -483,7 +431,7 @@ export default function ParentDashboard() {
                               Completed
                             </span>
                           </div>
-                        </div>
+                        </Link>
                       ))}
                     </div>
                   )

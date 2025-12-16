@@ -25,6 +25,7 @@ import {
   Palette,
   ChevronDown,
   RotateCcw,
+  Receipt,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -60,6 +61,7 @@ const SETTINGS_SECTIONS = [
   { id: 'notifications', label: 'Notifications', icon: Bell, accent: 'neon' },
   { id: 'storage', label: 'Storage & Media', icon: Upload, accent: 'magenta' },
   { id: 'payments', label: 'Payments', icon: CreditCard, accent: 'purple' },
+  { id: 'taxes', label: 'Tax Settings', icon: Receipt, accent: 'neon' },
   { id: 'developer', label: 'Developer Mode', icon: Code, accent: 'amber' },
 ]
 
@@ -81,6 +83,14 @@ export default function AdminSettingsPage() {
   const [selectedTenant, setSelectedTenant] = useState<Tenant | null>(null)
   const [tenants, setTenants] = useState<Tenant[]>([])
   const [tenantOverrides, setTenantOverrides] = useState<Set<string>>(new Set())
+
+  // Tax settings state
+  const [taxRatePercent, setTaxRatePercent] = useState<number>(0)
+  const [taxTenantName, setTaxTenantName] = useState<string>('')
+  const [taxLoading, setTaxLoading] = useState(false)
+  const [taxSaving, setTaxSaving] = useState(false)
+  const [taxError, setTaxError] = useState<string | null>(null)
+  const [taxSuccess, setTaxSuccess] = useState(false)
 
   const userName = user?.firstName || user?.email?.split('@')[0] || 'Admin'
 
@@ -151,10 +161,77 @@ export default function AdminSettingsPage() {
     }
   }, [])
 
+  // Load tax settings for selected tenant
+  const loadTaxSettings = useCallback(async (tenantId: string) => {
+    try {
+      setTaxLoading(true)
+      setTaxError(null)
+      const res = await fetch(`/api/admin/settings/taxes?tenantId=${tenantId}`)
+      const json = await res.json()
+
+      if (!res.ok) {
+        throw new Error(json.error || 'Failed to load tax settings')
+      }
+
+      setTaxRatePercent(json.data.taxRatePercent || 0)
+      setTaxTenantName(json.data.tenantName || '')
+    } catch (err) {
+      setTaxError(err instanceof Error ? err.message : 'Failed to load tax settings')
+    } finally {
+      setTaxLoading(false)
+    }
+  }, [])
+
+  // Save tax settings
+  const saveTaxSettings = async () => {
+    if (!selectedTenant && tenants.length === 0) return
+
+    const targetTenantId = selectedTenant?.id || tenants[0]?.id
+    if (!targetTenantId) return
+
+    setTaxSaving(true)
+    setTaxError(null)
+    setTaxSuccess(false)
+
+    try {
+      const res = await fetch('/api/admin/settings/taxes', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tenantId: targetTenantId,
+          taxRatePercent,
+        }),
+      })
+
+      const json = await res.json()
+
+      if (!res.ok) {
+        throw new Error(json.error || 'Failed to save tax settings')
+      }
+
+      setTaxSuccess(true)
+      setTimeout(() => setTaxSuccess(false), 3000)
+    } catch (err) {
+      setTaxError(err instanceof Error ? err.message : 'Failed to save')
+    } finally {
+      setTaxSaving(false)
+    }
+  }
+
   useEffect(() => {
     loadSettings()
     loadTenants()
   }, [loadSettings, loadTenants])
+
+  // Load tax settings when section is active and tenant is available
+  useEffect(() => {
+    if (activeSection === 'taxes') {
+      const targetTenantId = selectedTenant?.id || tenants[0]?.id
+      if (targetTenantId) {
+        loadTaxSettings(targetTenantId)
+      }
+    }
+  }, [activeSection, selectedTenant, tenants, loadTaxSettings])
 
   // Handle setting change
   const handleSettingChange = (key: string, value: unknown) => {
@@ -530,6 +607,116 @@ export default function AdminSettingsPage() {
               </ContentCard>
             )
           })}
+
+          {/* Tax Settings Section */}
+          {activeSection === 'taxes' && (
+            <ContentCard title="Tax Settings" accent="neon">
+              <div className="p-4 bg-neon/10 border border-neon/30 mb-6">
+                <div className="flex items-center gap-3">
+                  <Receipt className="h-6 w-6 text-neon" />
+                  <div>
+                    <p className="font-bold text-neon">Sales Tax Configuration</p>
+                    <p className="text-xs text-white/60">
+                      Configure sales tax rates for physical products (like t-shirts).
+                      Camp registrations (services) are typically not subject to sales tax.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {taxLoading ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="h-8 w-8 animate-spin text-neon" />
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {taxError && (
+                    <div className="p-3 bg-magenta/10 border border-magenta/30 text-magenta text-sm flex items-center gap-2">
+                      <AlertCircle className="h-4 w-4" />
+                      {taxError}
+                    </div>
+                  )}
+
+                  {taxSuccess && (
+                    <div className="p-3 bg-neon/10 border border-neon/30 text-neon text-sm flex items-center gap-2">
+                      <Check className="h-4 w-4" />
+                      Tax settings saved successfully!
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    <label className="block text-sm font-bold uppercase tracking-wider text-white">
+                      Tenant
+                    </label>
+                    <p className="text-xs text-white/40 mb-2">
+                      Select the tenant to configure tax settings for
+                    </p>
+                    <select
+                      value={selectedTenant?.id || tenants[0]?.id || ''}
+                      onChange={(e) => {
+                        const tenant = tenants.find((t) => t.id === e.target.value)
+                        if (tenant) {
+                          setSelectedTenant(tenant)
+                          loadTaxSettings(tenant.id)
+                        }
+                      }}
+                      className="w-full max-w-xs bg-black border border-white/20 text-white px-4 py-2 focus:border-neon focus:outline-none"
+                    >
+                      {tenants.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="block text-sm font-bold uppercase tracking-wider text-white">
+                      Sales Tax Rate (%)
+                    </label>
+                    <p className="text-xs text-white/40 mb-2">
+                      The tax rate applied to taxable items (physical products like merchandise)
+                    </p>
+                    <div className="flex items-center gap-4">
+                      <Input
+                        type="number"
+                        min="0"
+                        max="25"
+                        step="0.01"
+                        value={taxRatePercent}
+                        onChange={(e) => setTaxRatePercent(parseFloat(e.target.value) || 0)}
+                        className="max-w-32"
+                      />
+                      <span className="text-white/60">%</span>
+                    </div>
+                    <p className="text-xs text-white/40 mt-2">
+                      Common rates: Florida 6%, California 7.25%, Texas 6.25%, New York 8%
+                    </p>
+                  </div>
+
+                  <div className="pt-4 border-t border-white/10">
+                    <Button
+                      variant="neon"
+                      onClick={saveTaxSettings}
+                      disabled={taxSaving}
+                    >
+                      {taxSaving ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="h-4 w-4 mr-2" />
+                          Save Tax Settings
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </ContentCard>
+          )}
 
           {/* Developer Mode Special Section */}
           {activeSection === 'developer' && (
