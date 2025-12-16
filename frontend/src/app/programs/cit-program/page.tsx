@@ -29,7 +29,7 @@ export default function CITProgramPage() {
         titleAccent="(CIT) Program"
         subtitle="Hands-on leadership experience and career-ready certifications for high school girls."
         description="Giving girls equal opportunity and access in the world of sports, this CIT Program offers leadership training, hands-on coaching experience, and real career certifications that shine on resumes and college applications. Open to all high school female athletes who see themselves as leaders within the field of athletics."
-        primaryCta={{ label: 'Apply as a CIT', href: '/cit/apply' }}
+        primaryCta={{ label: 'Apply as a CIT', href: '/programs/cit-program/apply' }}
         secondaryCta={{ label: 'Learn More', href: '#what-cits-do' }}
         accentColor="magenta"
       />
@@ -252,7 +252,7 @@ export default function CITProgramPage() {
           </p>
           <div className="flex flex-wrap justify-center gap-4">
             <Link
-              href="/cit/apply"
+              href="/programs/cit-program/apply"
               className={buttonVariants({ variant: 'magenta', size: 'lg' })}
             >
               Start Your Application

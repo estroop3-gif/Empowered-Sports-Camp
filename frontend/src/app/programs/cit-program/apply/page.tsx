@@ -1,7 +1,8 @@
 /**
- * CIT Application Page
+ * CIT Application Page (Public)
  *
  * Application form for the Coaches-In-Training program.
+ * This page is public and does not require authentication.
  */
 
 import { Metadata } from 'next'
