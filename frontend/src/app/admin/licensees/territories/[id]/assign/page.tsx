@@ -59,8 +59,8 @@ export default function AssignLicenseePage() {
 
       try {
         const [territoryRes, tenantsRes] = await Promise.all([
-          fetch(`/api/admin/territories/${territoryId}`),
-          fetch('/api/admin/territories'),
+          fetch(`/api/admin/territories/${territoryId}`, { credentials: 'include' }),
+          fetch('/api/admin/territories', { credentials: 'include' }),
         ])
 
         const territoryResult = await territoryRes.json()
@@ -118,6 +118,7 @@ export default function AssignLicenseePage() {
       const response = await fetch(`/api/admin/territories/${territoryId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ tenant_id: selectedTenant, status: 'assigned' }),
       })
 

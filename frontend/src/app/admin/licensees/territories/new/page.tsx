@@ -92,7 +92,9 @@ export default function NewTerritoryPage() {
   useEffect(() => {
     async function fetchTenants() {
       try {
-        const response = await fetch('/api/admin/territories')
+        const response = await fetch('/api/admin/territories', {
+          credentials: 'include',
+        })
         const result = await response.json()
         if (result.data?.tenants) {
           setTenants(result.data.tenants)
@@ -159,6 +161,7 @@ export default function NewTerritoryPage() {
       const response = await fetch('/api/admin/territories', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify(input),
       })
 

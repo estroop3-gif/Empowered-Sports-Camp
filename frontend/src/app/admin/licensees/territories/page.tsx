@@ -118,7 +118,7 @@ export default function TerritoriesPage() {
       setError(null)
 
       try {
-        const response = await fetch('/api/admin/territories')
+        const response = await fetch('/api/admin/territories', { credentials: 'include' })
         const result = await response.json()
 
         if (!response.ok) {
