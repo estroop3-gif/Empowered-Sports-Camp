@@ -7,6 +7,7 @@ import { CheckoutProvider, useCheckout } from '@/lib/checkout/context'
 import {
   RegistrationLayout,
   CamperForm,
+  BuildHerSquadStep,
   AddOnSelector,
   PaymentStep,
   ConfirmationStep,
@@ -196,7 +197,7 @@ const DEFAULT_ADDONS: AddOn[] = [
 ]
 
 function RegistrationContent({ camp, addons }: { camp: CampSession; addons: AddOn[] }) {
-  const { state, setStep, setCamp, nextStep, prevStep } = useCheckout()
+  const { state, setStep, setCamp, setSquad, nextStep, prevStep } = useCheckout()
   const [confirmationNumber, setConfirmationNumber] = useState<string | null>(null)
 
   // Set camp on mount
@@ -222,6 +223,15 @@ function RegistrationContent({ camp, addons }: { camp: CampSession; addons: AddO
     setStep('confirmation')
   }
 
+  // Build registered athletes from campers for squad feature
+  const registeredAthletes = state.campers
+    .filter((c) => c.firstName && c.lastName)
+    .map((c) => ({
+      id: c.id,
+      firstName: c.firstName,
+      lastName: c.lastName,
+    }))
+
   const renderStep = () => {
     switch (state.step) {
       case 'camp':
@@ -233,6 +243,21 @@ function RegistrationContent({ camp, addons }: { camp: CampSession; addons: AddO
           <CamperForm
             campSession={camp}
             onContinue={nextStep}
+          />
+        )
+
+      case 'squad':
+        return (
+          <BuildHerSquadStep
+            campId={camp.id}
+            campName={camp.name}
+            tenantId={camp.tenantId}
+            registeredAthletes={registeredAthletes}
+            parentName={`${state.parentInfo.firstName} ${state.parentInfo.lastName}`.trim()}
+            parentEmail={state.parentInfo.email}
+            onContinue={nextStep}
+            onBack={prevStep}
+            onSquadUpdate={setSquad}
           />
         )
 

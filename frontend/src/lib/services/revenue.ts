@@ -160,7 +160,7 @@ export async function getSessionRevenueDashboard(params: {
       : 0
 
     // Get royalty rate from tenant settings (default 8%)
-    const royaltyRate = camp.tenant.royaltyRate
+    const royaltyRate = camp.tenant?.royaltyRate
       ? Number(camp.tenant.royaltyRate)
       : 0.08
     const estimatedRoyalty = grossRevenue * royaltyRate
@@ -192,8 +192,8 @@ export async function getSessionRevenueDashboard(params: {
       data: {
         sessionId: camp.id,
         sessionName: camp.name,
-        tenantId: camp.tenantId,
-        tenantName: camp.tenant.name,
+        tenantId: camp.tenantId || '',
+        tenantName: camp.tenant?.name || 'Unknown Tenant',
         period: {
           startDate: camp.startDate.toISOString(),
           endDate: camp.endDate.toISOString(),

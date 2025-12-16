@@ -35,7 +35,7 @@ interface CampWithAssignment {
   sport: string
   start_date: string
   end_date: string
-  tenant_id: string
+  tenant_id: string | null
   assigned_template_id?: string
   assigned_template_name?: string
 }

@@ -190,6 +190,7 @@ model Camp {
   sessionComplaints        SessionComplaint[]
   sessionSurveys           SessionSurvey[]
   testimonies              Testimony[]
+  friendSquads             CampFriendSquad[]
 
   @@unique([tenantId, slug])
   @@index([tenantId])
@@ -244,6 +245,8 @@ model Profile {
   userRoles                     UserRoleAssignment[]
   volunteerCertifications       VolunteerCertification[]      @relation("Owner")
   certificationsReviewed        VolunteerCertification[]      @relation("Reviewer")
+  createdSquads                 CampFriendSquad[]             @relation("SquadCreator")
+  squadMemberships              CampFriendSquadMember[]       @relation("SquadMemberParent")
 
   @@map("profiles")
 }
@@ -299,6 +302,7 @@ model Athlete {
   parentOnboarding             ParentOnboarding[]
   pickupTokens                 PickupToken[]
   registrations                Registration[]
+  squadMemberships             CampFriendSquadMember[]
 
   @@index([parentId])
   @@index([tenantId])
@@ -306,32 +310,34 @@ model Athlete {
 }
 
 model Registration {
-  id                    String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId              String              @map("tenant_id") @db.Uuid
-  campId                String              @map("camp_id") @db.Uuid
-  athleteId             String              @map("athlete_id") @db.Uuid
-  parentId              String              @map("parent_id") @db.Uuid
-  basePriceCents        Int                 @map("base_price_cents")
-  discountCents         Int                 @default(0) @map("discount_cents")
-  addonsTotalCents      Int                 @default(0) @map("addons_total_cents")
-  totalPriceCents       Int                 @map("total_price_cents")
-  paymentStatus         PaymentStatus       @default(pending) @map("payment_status")
-  paymentMethod         String?             @map("payment_method")
-  stripePaymentIntentId String?             @map("stripe_payment_intent_id")
-  paidAt                DateTime?           @map("paid_at") @db.Timestamptz(6)
-  friendRequests        String[]            @default([]) @map("friend_requests")
-  specialConsiderations String?             @map("special_considerations")
-  shirtSize             String?             @map("shirt_size")
-  promoCodeId           String?             @map("promo_code_id") @db.Uuid
-  promoDiscountCents    Int                 @default(0) @map("promo_discount_cents")
-  waiverSigned          Boolean             @default(false) @map("waiver_signed")
-  waiverSignedAt        DateTime?           @map("waiver_signed_at") @db.Timestamptz(6)
-  waiverSignedBy        String?             @map("waiver_signed_by")
-  status                RegistrationStatus  @default(pending)
-  cancelledAt           DateTime?           @map("cancelled_at") @db.Timestamptz(6)
-  cancellationReason    String?             @map("cancellation_reason")
-  createdAt             DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt             DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                       String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId                 String              @map("tenant_id") @db.Uuid
+  campId                   String              @map("camp_id") @db.Uuid
+  athleteId                String              @map("athlete_id") @db.Uuid
+  parentId                 String              @map("parent_id") @db.Uuid
+  basePriceCents           Int                 @map("base_price_cents")
+  discountCents            Int                 @default(0) @map("discount_cents")
+  addonsTotalCents         Int                 @default(0) @map("addons_total_cents")
+  totalPriceCents          Int                 @map("total_price_cents")
+  paymentStatus            PaymentStatus       @default(pending) @map("payment_status")
+  paymentMethod            String?             @map("payment_method")
+  stripePaymentIntentId    String?             @map("stripe_payment_intent_id")
+  stripeCheckoutSessionId  String?             @map("stripe_checkout_session_id")
+  paidAt                   DateTime?           @map("paid_at") @db.Timestamptz(6)
+  friendRequests           String[]            @default([]) @map("friend_requests")
+  friendSquadId            String?             @map("friend_squad_id") @db.Uuid
+  specialConsiderations    String?             @map("special_considerations")
+  shirtSize                String?             @map("shirt_size")
+  promoCodeId              String?             @map("promo_code_id") @db.Uuid
+  promoDiscountCents       Int                 @default(0) @map("promo_discount_cents")
+  waiverSigned             Boolean             @default(false) @map("waiver_signed")
+  waiverSignedAt           DateTime?           @map("waiver_signed_at") @db.Timestamptz(6)
+  waiverSignedBy           String?             @map("waiver_signed_by")
+  status                   RegistrationStatus  @default(pending)
+  cancelledAt              DateTime?           @map("cancelled_at") @db.Timestamptz(6)
+  cancellationReason       String?             @map("cancellation_reason")
+  createdAt                DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   attendance            CampAttendance[]
   camperSessionData     CamperSessionData?
   registrationAddons    RegistrationAddon[]
@@ -486,6 +492,71 @@ model FriendGroup {
   @@unique([campId, groupNumber])
   @@index([campId])
   @@map("friend_groups")
+}
+
+// =============================================================================
+// CAMP FRIEND SQUAD - "Build Her Squad" feature for parent-initiated friend grouping
+// =============================================================================
+
+model CampFriendSquad {
+  id                    String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId              String                  @map("tenant_id") @db.Uuid
+  campId                String                  @map("camp_id") @db.Uuid
+  label                 String                  @default("Her Squad")
+  createdByParentId     String                  @map("created_by_parent_id") @db.Uuid
+  createdAt             DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime                @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  camp                  Camp                    @relation(fields: [campId], references: [id], onDelete: Cascade)
+  createdByParent       Profile                 @relation("SquadCreator", fields: [createdByParentId], references: [id], onDelete: Cascade)
+  members               CampFriendSquadMember[]
+
+  @@unique([campId, createdByParentId])
+  @@index([campId])
+  @@index([tenantId])
+  @@index([createdByParentId])
+  @@map("camp_friend_squads")
+}
+
+model CampFriendSquadMember {
+  id              String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  squadId         String                   @map("squad_id") @db.Uuid
+  parentId        String                   @map("parent_id") @db.Uuid
+  athleteId       String                   @map("athlete_id") @db.Uuid
+  status          SquadMemberStatus        @default(requested)
+  invitedByEmail  String?                  @map("invited_by_email")
+  respondedAt     DateTime?                @map("responded_at") @db.Timestamptz(6)
+  createdAt       DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime                 @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  squad           CampFriendSquad          @relation(fields: [squadId], references: [id], onDelete: Cascade)
+  parent          Profile                  @relation("SquadMemberParent", fields: [parentId], references: [id], onDelete: Cascade)
+  athlete         Athlete                  @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+
+  @@unique([squadId, athleteId])
+  @@index([squadId])
+  @@index([parentId])
+  @@index([athleteId])
+  @@index([status])
+  @@map("camp_friend_squad_members")
+}
+
+// Pending squad invite for users who don't have an account yet
+model PendingSquadInvite {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  squadId         String   @map("squad_id") @db.Uuid
+  invitedEmail    String   @map("invited_email")
+  invitedByName   String?  @map("invited_by_name")
+  campName        String   @map("camp_name")
+  campId          String   @map("camp_id") @db.Uuid
+  tenantId        String   @map("tenant_id") @db.Uuid
+  expiresAt       DateTime @map("expires_at") @db.Timestamptz(6)
+  claimedAt       DateTime? @map("claimed_at") @db.Timestamptz(6)
+  claimedByUserId String?  @map("claimed_by_user_id") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([invitedEmail])
+  @@index([squadId])
+  @@index([expiresAt])
+  @@map("pending_squad_invites")
 }
 
 model CampGroup {
@@ -2498,6 +2569,9 @@ enum NotificationType {
   testimony_submitted
   testimony_approved
   testimony_rejected
+  squad_invite_received
+  squad_invite_accepted
+  squad_invite_declined
 }
 
 enum NotificationCategory {
@@ -2550,6 +2624,13 @@ enum ComplaintStatus {
   investigating
   resolved
   dismissed
+}
+
+enum SquadMemberStatus {
+  requested
+  accepted
+  declined
+  removed
 }
 
 enum EmailType {

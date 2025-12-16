@@ -79,6 +79,7 @@ const initialState: CheckoutState = {
   selectedAddOns: [],
   promoCode: null,
   totals: initialTotals,
+  squadId: null,
 }
 
 // =====================================================
@@ -92,6 +93,7 @@ type CheckoutAction =
   | { type: 'REMOVE_CAMPER'; camperId: string }
   | { type: 'UPDATE_CAMPER'; camperId: string; data: Partial<CamperFormData> }
   | { type: 'UPDATE_PARENT'; data: Partial<ParentFormData> }
+  | { type: 'SET_SQUAD'; squadId: string | null }
   | { type: 'ADD_ADDON'; addon: SelectedAddOn }
   | { type: 'REMOVE_ADDON'; addonId: string; variantId: string | null; camperId: string | null }
   | { type: 'UPDATE_ADDON_QUANTITY'; addonId: string; variantId: string | null; camperId: string | null; quantity: number }
@@ -170,6 +172,12 @@ function checkoutReducer(state: CheckoutState, action: CheckoutAction): Checkout
       return {
         ...state,
         parentInfo: { ...state.parentInfo, ...action.data },
+      }
+
+    case 'SET_SQUAD':
+      return {
+        ...state,
+        squadId: action.squadId,
       }
 
     case 'ADD_ADDON': {
@@ -276,6 +284,9 @@ interface CheckoutContextValue {
   // Parent
   updateParent: (data: Partial<ParentFormData>) => void
 
+  // Squad
+  setSquad: (squadId: string | null) => void
+
   // Add-ons
   addAddOn: (addon: SelectedAddOn) => void
   removeAddOn: (addonId: string, variantId: string | null, camperId: string | null) => void
@@ -305,7 +316,7 @@ const CheckoutContext = createContext<CheckoutContextValue | undefined>(undefine
 // PROVIDER
 // =====================================================
 
-const STEP_ORDER: CheckoutStep[] = ['camp', 'campers', 'addons', 'payment', 'confirmation']
+const STEP_ORDER: CheckoutStep[] = ['camp', 'campers', 'squad', 'addons', 'payment', 'confirmation']
 
 export function CheckoutProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(checkoutReducer, initialState)
@@ -400,6 +411,9 @@ export function CheckoutProvider({ children }: { children: ReactNode }) {
           state.parentInfo.phone.trim() !== ''
         )
 
+      case 'squad':
+        return true // Squad is optional
+
       case 'addons':
         return true // Add-ons are optional
 
@@ -435,6 +449,11 @@ export function CheckoutProvider({ children }: { children: ReactNode }) {
   // Parent
   const updateParent = useCallback((data: Partial<ParentFormData>) => {
     dispatch({ type: 'UPDATE_PARENT', data })
+  }, [])
+
+  // Squad
+  const setSquad = useCallback((squadId: string | null) => {
+    dispatch({ type: 'SET_SQUAD', squadId })
   }, [])
 
   // Add-ons
@@ -500,6 +519,7 @@ export function CheckoutProvider({ children }: { children: ReactNode }) {
     removeCamper,
     updateCamper,
     updateParent,
+    setSquad,
     addAddOn,
     removeAddOn,
     updateAddOnQuantity,

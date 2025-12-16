@@ -87,7 +87,7 @@ export default function CurriculumPage() {
     sport: string
     start_date: string
     end_date: string
-    tenant_id: string
+    tenant_id: string | null
     assigned_template_id?: string
     assigned_template_name?: string
   }>>([])
@@ -703,7 +703,7 @@ function AssignmentsTab({
     sport: string
     start_date: string
     end_date: string
-    tenant_id: string
+    tenant_id: string | null
     assigned_template_id?: string
     assigned_template_name?: string
   }>

@@ -178,7 +178,7 @@ export interface AdminRevenueSessionItem {
   campName: string
   programType: string
   programName: string
-  licenseeId: string
+  licenseeId: string | null
   licenseeName: string
   startDate: Date
   endDate: Date
@@ -1699,7 +1699,7 @@ export async function getAdminRevenueSessions(
         programType: camp.programType,
         programName: getProgramDisplayName(camp.programType),
         licenseeId: camp.tenantId,
-        licenseeName: camp.tenant.name,
+        licenseeName: camp.tenant?.name || 'Unknown Tenant',
         startDate: camp.startDate,
         endDate: camp.endDate,
         status: camp.status,

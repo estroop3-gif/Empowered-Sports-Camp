@@ -237,7 +237,7 @@ export async function generateSessionPdfReport(params: {
     // Generate PDF
     const doc = new jsPDF()
 
-    addHeader(doc, 'SESSION REPORT', `${camp.name} | ${camp.tenant.name}`)
+    addHeader(doc, 'SESSION REPORT', `${camp.name} | ${camp.tenant?.name || 'Unknown Tenant'}`)
 
     let yPos = 45
 

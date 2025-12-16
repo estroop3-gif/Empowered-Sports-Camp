@@ -60,7 +60,7 @@ export interface GroupingGroup {
 export interface GroupingState {
   camp_id: string
   camp_name: string
-  tenant_id: string
+  tenant_id: string | null
   status: string
   max_group_size: number
   num_groups: number
@@ -304,9 +304,15 @@ export async function getCampGroupingState(
     })
 
     // Create missing groups
-    if (existingGroups.length < numGroups) {
+    if (existingGroups.length < numGroups && camp.tenantId) {
       const existingNumbers = new Set(existingGroups.map(g => g.groupNumber))
-      const groupsToCreate = []
+      const groupsToCreate: Array<{
+        campId: string
+        tenantId: string
+        groupNumber: number
+        groupName: string
+        groupColor: string
+      }> = []
 
       for (let i = 1; i <= numGroups; i++) {
         if (!existingNumbers.has(i)) {
@@ -556,9 +562,15 @@ export async function autoGroupCampers(
     })
 
     // Ensure we have enough groups
-    if (groups.length < numGroups) {
+    if (groups.length < numGroups && camp.tenantId) {
       const existingNumbers = new Set(groups.map(g => g.groupNumber))
-      const groupsToCreate = []
+      const groupsToCreate: Array<{
+        campId: string
+        tenantId: string
+        groupNumber: number
+        groupName: string
+        groupColor: string
+      }> = []
 
       for (let i = 1; i <= numGroups; i++) {
         if (!existingNumbers.has(i)) {
@@ -791,28 +803,30 @@ export async function autoGroupCampers(
 
     // Create grouping run record
     const executionTimeMs = Date.now() - startTime
-    await prisma.groupingRun.create({
-      data: {
-        campId,
-        tenantId: camp.tenantId,
-        runType: 'initial',
-        triggeredBy: userId,
-        triggerReason: 'Auto-group button clicked',
-        totalCampers: allCampers.length,
-        totalFriendGroups: friendGroups.length,
-        maxGroupSize,
-        numGroups,
-        maxGradeSpread,
-        algorithmVersion: '2.0',
-        executionTimeMs,
-        campersAutoPlaced: assignedCamperIds.size,
-        friendGroupsPlacedIntact: friendGroupsIntact,
-        friendGroupsSplit: friendGroupsSplit,
-        constraintViolations: warnings.length,
-        success: true,
-        warnings: warnings.map(w => w.message),
-      },
-    })
+    if (camp.tenantId) {
+      await prisma.groupingRun.create({
+        data: {
+          campId,
+          tenantId: camp.tenantId,
+          runType: 'initial',
+          triggeredBy: userId,
+          triggerReason: 'Auto-group button clicked',
+          totalCampers: allCampers.length,
+          totalFriendGroups: friendGroups.length,
+          maxGroupSize,
+          numGroups,
+          maxGradeSpread,
+          algorithmVersion: '2.0',
+          executionTimeMs,
+          campersAutoPlaced: assignedCamperIds.size,
+          friendGroupsPlacedIntact: friendGroupsIntact,
+          friendGroupsSplit: friendGroupsSplit,
+          constraintViolations: warnings.length,
+          success: true,
+          warnings: warnings.map(w => w.message),
+        },
+      })
+    }
 
     // Build result
     const resultGroups: GroupingGroup[] = groups.map(group => {
@@ -1123,37 +1137,39 @@ export async function finalizeGrouping(
       select: { tenantId: true },
     })
 
-    await prisma.groupReportSnapshot.create({
-      data: {
-        campId,
-        tenantId: camp!.tenantId,
-        reportType: 'final',
-        version: 1,
-        groupsSnapshot: groups.map(g => ({
-          id: g.id,
-          groupNumber: g.groupNumber,
-          groupName: g.groupName,
-          camperCount: g.camperCount,
-          minGrade: g.minGrade,
-          maxGrade: g.maxGrade,
-        })),
-        campersSnapshot: groups.flatMap(g =>
-          g.camperSessionData.map(c => ({
-            id: c.id,
-            name: `${c.athlete.firstName} ${c.athlete.lastName}`,
-            grade: c.gradeValidated,
-            groupId: g.id,
+    if (camp?.tenantId) {
+      await prisma.groupReportSnapshot.create({
+        data: {
+          campId,
+          tenantId: camp.tenantId,
+          reportType: 'final',
+          version: 1,
+          groupsSnapshot: groups.map(g => ({
+            id: g.id,
             groupNumber: g.groupNumber,
-          }))
-        ),
-        statsSnapshot: {
-          totalCampers: state.data?.total_campers,
-          groupedCampers: state.data?.total_campers,
-          friendGroupsCount: state.data?.friend_groups_count,
+            groupName: g.groupName,
+            camperCount: g.camperCount,
+            minGrade: g.minGrade,
+            maxGrade: g.maxGrade,
+          })),
+          campersSnapshot: groups.flatMap(g =>
+            g.camperSessionData.map(c => ({
+              id: c.id,
+              name: `${c.athlete.firstName} ${c.athlete.lastName}`,
+              grade: c.gradeValidated,
+              groupId: g.id,
+              groupNumber: g.groupNumber,
+            }))
+          ),
+          statsSnapshot: {
+            totalCampers: state.data?.total_campers,
+            groupedCampers: state.data?.total_campers,
+            friendGroupsCount: state.data?.friend_groups_count,
+          },
+          generatedBy: userId,
         },
-        generatedBy: userId,
-      },
-    })
+      })
+    }
 
     return { data: { success: true }, error: null }
   } catch (error) {

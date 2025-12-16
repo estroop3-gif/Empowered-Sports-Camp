@@ -35,7 +35,7 @@ export interface PublicCampCard {
   sports_offered: string[]
   featured: boolean
   status: string
-  tenant_id: string
+  tenant_id: string | null
   // Location fields (legacy, populated from location or venue)
   location_id: string | null
   location_name: string | null

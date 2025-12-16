@@ -121,7 +121,7 @@ export interface CampSessionCurriculum {
     sport: string
     start_date: string
     end_date: string
-    tenant_id: string
+    tenant_id: string | null
   }
   template?: CurriculumTemplate
 }
@@ -1260,7 +1260,7 @@ export async function getCampsForAssignment(): Promise<{
     sport: string
     start_date: string
     end_date: string
-    tenant_id: string
+    tenant_id: string | null
     assigned_template_id?: string
     assigned_template_name?: string
   }> | null

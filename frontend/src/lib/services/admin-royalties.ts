@@ -492,7 +492,7 @@ export async function generateRoyaltyInvoiceForSession(params: {
     }
 
     // Calculate royalty rate from tenant settings
-    const royaltyRateBps = camp.tenant.royaltyRate
+    const royaltyRateBps = camp.tenant?.royaltyRate
       ? Math.round(Number(camp.tenant.royaltyRate) * 10000)
       : DEFAULT_ROYALTY_RATE_BPS
 
@@ -544,9 +544,14 @@ export async function generateRoyaltyInvoiceForSession(params: {
     const netRevenue = grossRevenue - refunds
     const royaltyDue = Math.round(netRevenue * bpsToDecimal(royaltyRateBps))
 
-    const invoiceNumber = generateInvoiceNumber(camp.tenant.slug, campId)
+    const invoiceNumber = generateInvoiceNumber(camp.tenant?.slug || 'unknown', campId)
     const dueDate = new Date()
     dueDate.setDate(dueDate.getDate() + dueInDays)
+
+    // Validate tenantId exists
+    if (!camp.tenantId) {
+      return { data: null, error: new Error('Camp has no tenant assigned') }
+    }
 
     // Create invoice with line items
     const invoice = await prisma.royaltyInvoice.create({
@@ -799,7 +804,7 @@ export async function getCampsWithoutRoyaltyInvoices(params: {
     const result = camps.map(camp => ({
       id: camp.id,
       name: camp.name,
-      tenantName: camp.tenant.name,
+      tenantName: camp.tenant?.name || 'Unknown Tenant',
       startDate: camp.startDate.toISOString(),
       endDate: camp.endDate.toISOString(),
       status: camp.status,

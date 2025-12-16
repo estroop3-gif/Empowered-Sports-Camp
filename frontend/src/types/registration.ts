@@ -127,9 +127,10 @@ export interface CheckoutState {
   selectedAddOns: SelectedAddOn[]
   promoCode: AppliedPromoCode | null
   totals: CheckoutTotals
+  squadId: string | null // "Build Her Squad" feature
 }
 
-export type CheckoutStep = 'camp' | 'campers' | 'addons' | 'payment' | 'confirmation'
+export type CheckoutStep = 'camp' | 'campers' | 'squad' | 'addons' | 'payment' | 'confirmation'
 
 export interface CamperFormData {
   id: string // Temporary client-side ID

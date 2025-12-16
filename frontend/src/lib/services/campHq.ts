@@ -27,7 +27,7 @@ export interface CampHqOverview {
     max_age: number
     capacity: number
     status: string
-    tenant_id: string
+    tenant_id: string | null
     tenant_name: string | null
   }
   location: {

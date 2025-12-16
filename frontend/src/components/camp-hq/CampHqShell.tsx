@@ -1398,7 +1398,7 @@ function IncentivesTab({
     <div>
       <IncentiveSummaryPanel
         campId={campId}
-        tenantId={overview.camp.tenant_id}
+        tenantId={overview.camp.tenant_id || undefined}
         canEdit={canEdit}
         isAdmin={isAdmin}
       />

@@ -29,9 +29,10 @@ interface StepConfig {
 const STEPS: StepConfig[] = [
   { id: 'camp', label: 'SELECT CAMP', number: 1 },
   { id: 'campers', label: 'CAMPER INFO', number: 2 },
-  { id: 'addons', label: 'ADD-ONS', number: 3 },
-  { id: 'payment', label: 'PAYMENT', number: 4 },
-  { id: 'confirmation', label: 'CONFIRMED', number: 5 },
+  { id: 'squad', label: 'HER SQUAD', number: 3 },
+  { id: 'addons', label: 'ADD-ONS', number: 4 },
+  { id: 'payment', label: 'PAYMENT', number: 5 },
+  { id: 'confirmation', label: 'CONFIRMED', number: 6 },
 ]
 
 export function RegistrationStepper({
@@ -43,7 +44,7 @@ export function RegistrationStepper({
   if (variant === 'horizontal') {
     return (
       <div className="flex items-center justify-between">
-        {STEPS.slice(0, 4).map((step, index) => {
+        {STEPS.slice(0, 5).map((step, index) => {
           const isCompleted = index < currentIndex
           const isCurrent = step.id === currentStep
           const isUpcoming = index > currentIndex
@@ -80,7 +81,7 @@ export function RegistrationStepper({
               </div>
 
               {/* Connector line */}
-              {index < STEPS.length - 2 && (
+              {index < 4 && (
                 <div
                   className={cn(
                     'flex-1 h-[2px] mx-2',

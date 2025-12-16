@@ -279,7 +279,7 @@ export async function getAdminDashboardData(params: {
     for (const camp of recentCamps) {
       recentActivity.push({
         type: 'camp',
-        message: `${camp.name} ${camp.status === 'registration_open' ? 'opened for registration' : 'created'} - ${camp.tenant.name}`,
+        message: `${camp.name} ${camp.status === 'registration_open' ? 'opened for registration' : 'created'} - ${camp.tenant?.name || 'Unknown Tenant'}`,
         time: getRelativeTime(camp.createdAt),
         timestamp: camp.createdAt,
       })

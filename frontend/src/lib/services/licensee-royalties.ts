@@ -342,7 +342,7 @@ export async function getLicenseeCampRevenue(params: {
       return { data: null, error: new Error('Camp not found') }
     }
 
-    const royaltyRateBps = camp.tenant.royaltyRate
+    const royaltyRateBps = camp.tenant?.royaltyRate
       ? Math.round(Number(camp.tenant.royaltyRate) * 10000)
       : DEFAULT_ROYALTY_RATE_BPS
 
@@ -443,7 +443,7 @@ export async function generateRoyaltyInvoice(params: {
       }
     }
 
-    const royaltyRateBps = camp.tenant.royaltyRate
+    const royaltyRateBps = camp.tenant?.royaltyRate
       ? Math.round(Number(camp.tenant.royaltyRate) * 10000)
       : DEFAULT_ROYALTY_RATE_BPS
 

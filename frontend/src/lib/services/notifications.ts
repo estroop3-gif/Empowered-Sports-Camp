@@ -1606,3 +1606,98 @@ export async function notifyTestimonyRejected(
     }).catch((err) => console.error('[Notifications] Failed to send testimony rejection email:', err))
   }
 }
+
+// =============================================================================
+// Squad Notification Helpers (Build Her Squad Feature)
+// =============================================================================
+
+/**
+ * Notify parent when they receive a squad invite
+ */
+export async function notifySquadInviteReceived(params: {
+  userId: string
+  tenantId: string
+  squadId: string
+  inviterName: string
+  campName: string
+  campId: string
+}): Promise<void> {
+  const { userId, tenantId, squadId, inviterName, campName, campId } = params
+
+  await createNotification({
+    userId,
+    tenantId,
+    type: 'squad_invite_received',
+    category: 'camp',
+    severity: 'info',
+    title: 'Squad Invitation',
+    body: `${inviterName} invited you to join their squad for ${campName}. Accept to have your athletes grouped together!`,
+    actionUrl: `/portal/squads?campId=${campId}`,
+    data: { squadId, inviterName, campName, campId },
+  })
+
+  // Also send email notification
+  const email = await getUserEmail(userId)
+  if (email) {
+    sendTransactionalEmail({
+      templateCode: 'SYSTEM_ALERT',
+      to: email,
+      context: {
+        title: 'You\'ve Been Invited to Join a Squad!',
+        message: `${inviterName} wants your athletes to be grouped with theirs at ${campName}. Log in to accept or decline this invitation.`,
+      },
+      tenantId,
+    }).catch((err) => console.error('[Notifications] Failed to send squad invite email:', err))
+  }
+}
+
+/**
+ * Notify squad creator when someone accepts their invite
+ */
+export async function notifySquadInviteAccepted(params: {
+  userId: string
+  tenantId: string
+  squadId: string
+  accepterName: string
+  athleteName: string
+  campName: string
+}): Promise<void> {
+  const { userId, tenantId, squadId, accepterName, athleteName, campName } = params
+
+  await createNotification({
+    userId,
+    tenantId,
+    type: 'squad_invite_accepted',
+    category: 'camp',
+    severity: 'success',
+    title: 'Squad Invitation Accepted!',
+    body: `${accepterName} accepted your squad invitation. ${athleteName} will be grouped with your athlete at ${campName}!`,
+    actionUrl: `/portal/squads`,
+    data: { squadId, accepterName, athleteName, campName },
+  })
+}
+
+/**
+ * Notify squad creator when someone declines their invite
+ */
+export async function notifySquadInviteDeclined(params: {
+  userId: string
+  tenantId: string
+  squadId: string
+  declinerName: string
+  campName: string
+}): Promise<void> {
+  const { userId, tenantId, squadId, declinerName, campName } = params
+
+  await createNotification({
+    userId,
+    tenantId,
+    type: 'squad_invite_declined',
+    category: 'camp',
+    severity: 'info',
+    title: 'Squad Invitation Declined',
+    body: `${declinerName} declined your squad invitation for ${campName}.`,
+    actionUrl: `/portal/squads`,
+    data: { squadId, declinerName, campName },
+  })
+}

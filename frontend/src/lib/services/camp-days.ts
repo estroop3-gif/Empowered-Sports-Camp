@@ -43,7 +43,7 @@ export interface CampDayWithStats extends CampDay {
     end_date: string
     start_time: string | null
     end_time: string | null
-    tenant_id: string
+    tenant_id: string | null
   }
   location: {
     id: string
@@ -599,7 +599,7 @@ export async function markCampDayComplete(
     })
 
     // Save or update recap data if provided
-    if (recapData && Object.keys(recapData).length > 0) {
+    if (recapData && Object.keys(recapData).length > 0 && tenantId) {
       await prisma.campDayRecap.upsert({
         where: { campDayId },
         create: {
@@ -624,20 +624,22 @@ export async function markCampDayComplete(
     const isLastDay = existingCampDay.dayNumber === totalDays
 
     // Send daily recap emails to parents (async - don't block completion)
-    sendDailyRecapEmail({
-      campDayId,
-      tenantId,
-      recapData: recapData || {},
-    }).then(({ error }) => {
-      if (error) {
-        console.error('[markCampDayComplete] Failed to send daily recap emails:', error)
-      } else {
-        console.log('[markCampDayComplete] Daily recap emails sent for camp day:', campDayId)
-      }
-    })
+    if (tenantId) {
+      sendDailyRecapEmail({
+        campDayId,
+        tenantId,
+        recapData: recapData || {},
+      }).then(({ error }) => {
+        if (error) {
+          console.error('[markCampDayComplete] Failed to send daily recap emails:', error)
+        } else {
+          console.log('[markCampDayComplete] Daily recap emails sent for camp day:', campDayId)
+        }
+      })
+    }
 
     // If this is the last day, also send session recap emails
-    if (isLastDay) {
+    if (isLastDay && tenantId) {
       sendSessionRecapEmail({
         campId: existingCampDay.camp.id,
         tenantId,
