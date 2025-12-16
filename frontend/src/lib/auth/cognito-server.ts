@@ -81,6 +81,7 @@ export async function verifyToken(token: string): Promise<VerifiedUser | null> {
 
 /**
  * Get authenticated user from cookies (for server components)
+ * Also looks up the user's role from the database for accurate permissions
  */
 export async function getAuthenticatedUser(): Promise<VerifiedUser | null> {
   const cookieStore = await cookies()
@@ -90,7 +91,42 @@ export async function getAuthenticatedUser(): Promise<VerifiedUser | null> {
     return null
   }
 
-  return verifyToken(token)
+  let user = await verifyToken(token)
+
+  // If user is authenticated, look up their role from the database
+  if (user) {
+    try {
+      const { default: prisma } = await import('@/lib/db/client')
+
+      // Find the user's profile by email
+      const profile = await prisma.profile.findFirst({
+        where: { email: user.email },
+      })
+
+      if (profile) {
+        // Get active role assignment
+        const roleAssignment = await prisma.userRoleAssignment.findFirst({
+          where: {
+            userId: profile.id,
+            isActive: true,
+          },
+        })
+
+        if (roleAssignment) {
+          user.role = roleAssignment.role
+          user.tenantId = roleAssignment.tenantId || undefined
+        }
+
+        // Update user id to match profile id
+        user.id = profile.id
+      }
+    } catch (error) {
+      console.error('Error looking up user role from database:', error)
+      // Continue with Cognito role if database lookup fails
+    }
+  }
+
+  return user
 }
 
 /**

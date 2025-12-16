@@ -6,7 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getAuthUser } from '@/lib/auth/server'
+import { getAuthUserFromRequest } from '@/lib/auth/server'
 import {
   getAllTerritories,
   getTerritoryStats,
@@ -17,7 +17,7 @@ import {
 
 export async function GET(request: NextRequest) {
   try {
-    const user = await getAuthUser()
+    const user = await getAuthUserFromRequest(request)
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
@@ -61,7 +61,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await getAuthUser()
+    const user = await getAuthUserFromRequest(request)
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
