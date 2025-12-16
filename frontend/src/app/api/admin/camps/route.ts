@@ -3,12 +3,13 @@
  *
  * GET /api/admin/camps - Get all camps for admin dashboard
  * POST /api/admin/camps?action=duplicate&id=xxx - Duplicate a camp
+ * POST /api/admin/camps?action=create - Create a new camp (with JSON body)
  * DELETE /api/admin/camps?id=xxx - Delete a camp
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedUserFromRequest } from '@/lib/auth/cognito-server'
-import { fetchAdminCamps, duplicateCamp, deleteCamp } from '@/lib/services/admin-camps'
+import { fetchAdminCamps, duplicateCamp, deleteCamp, createCamp, type CampFormData } from '@/lib/services/admin-camps'
 
 export async function GET(request: NextRequest) {
   try {
@@ -68,6 +69,24 @@ export async function POST(request: NextRequest) {
 
     if (action === 'duplicate' && id) {
       const camp = await duplicateCamp(id)
+      return NextResponse.json({ camp })
+    }
+
+    if (action === 'create') {
+      const body = await request.json()
+      const formData: CampFormData = body
+
+      // Validate required fields
+      if (!formData.name || !formData.tenant_id || !formData.start_date || !formData.end_date) {
+        return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+      }
+
+      // For non-HQ admins, ensure they're creating camps for their own tenant
+      if (userRole !== 'hq_admin' && user.tenantId !== formData.tenant_id) {
+        return NextResponse.json({ error: 'Cannot create camps for other tenants' }, { status: 403 })
+      }
+
+      const camp = await createCamp(formData)
       return NextResponse.json({ camp })
     }
 

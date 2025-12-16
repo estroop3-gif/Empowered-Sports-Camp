@@ -14,21 +14,51 @@ import {
   Users,
   DollarSign,
   Clock,
-  Save,
-  Eye,
   Zap,
   AlertCircle,
   Loader2,
 } from 'lucide-react'
-import {
-  createCamp,
-  getCurrentUserRole,
-  fetchTenants,
-  fetchLocations,
-  type CampFormData,
-  type Tenant,
-  type Location,
-} from '@/lib/services/admin-camps'
+
+// Types (defined locally to avoid Prisma imports in client component)
+interface CampFormData {
+  name: string
+  slug: string
+  description: string
+  sport: string
+  location_id: string | null
+  tenant_id: string
+  start_date: string
+  end_date: string
+  start_time: string
+  end_time: string
+  age_min: number
+  age_max: number
+  capacity: number
+  price: number
+  early_bird_price: number | null
+  early_bird_deadline: string | null
+  status: 'draft' | 'published' | 'open' | 'closed'
+  featured: boolean
+  image_url: string | null
+}
+
+interface Tenant {
+  id: string
+  name: string
+  slug: string
+  city: string | null
+  state: string | null
+}
+
+interface Location {
+  id: string
+  name: string
+  address: string | null
+  city: string | null
+  state: string | null
+  zip: string | null
+  tenant_id: string
+}
 
 const SPORTS = [
   'Multi-Sport',
@@ -101,18 +131,26 @@ export default function CreateCampPage() {
       return
     }
     try {
-      const roleData = await getCurrentUserRole(user.id)
-      if (!roleData) {
-        setError('Not authenticated')
+      // Fetch user role from API
+      const roleResponse = await fetch('/api/admin/camps/user-role')
+      if (!roleResponse.ok) {
+        const errorData = await roleResponse.json()
+        setError(errorData.error || 'Not authenticated')
+        setLoading(false)
         return
       }
+      const roleData = await roleResponse.json()
 
       setUserRole(roleData.role)
       setUserTenantId(roleData.tenant_id)
 
       if (roleData.role === 'hq_admin') {
-        const tenantList = await fetchTenants()
-        setTenants(tenantList)
+        // Fetch tenants for HQ admin
+        const tenantsResponse = await fetch('/api/admin/camps/tenants')
+        if (tenantsResponse.ok) {
+          const tenantsData = await tenantsResponse.json()
+          setTenants(tenantsData.tenants || [])
+        }
       } else if (roleData.tenant_id) {
         setFormData(prev => ({ ...prev, tenant_id: roleData.tenant_id! }))
         await loadLocations(roleData.tenant_id)
@@ -127,8 +165,11 @@ export default function CreateCampPage() {
 
   async function loadLocations(tenantId: string) {
     try {
-      const locationList = await fetchLocations(tenantId)
-      setLocations(locationList)
+      const response = await fetch(`/api/admin/camps/locations?tenantId=${tenantId}`)
+      if (response.ok) {
+        const data = await response.json()
+        setLocations(data.locations || [])
+      }
     } catch (err) {
       console.error('Failed to load locations:', err)
     }
@@ -166,9 +207,21 @@ export default function CreateCampPage() {
     }
 
     try {
-      const newCamp = await createCamp(formData)
+      // Create camp via API
+      const response = await fetch('/api/admin/camps?action=create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to create camp')
+      }
+
+      const data = await response.json()
       // Navigate to Step 2: Curriculum & Schedule
-      router.replace(`/portal/camps/${newCamp.id}/schedule`)
+      router.replace(`/portal/camps/${data.camp.id}/schedule`)
     } catch (err) {
       console.error('Failed to create camp:', err)
       setError(err instanceof Error ? err.message : 'Failed to create camp')

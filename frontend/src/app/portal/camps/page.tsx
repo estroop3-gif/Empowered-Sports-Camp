@@ -3,12 +3,11 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { AdminLayout, PageHeader, ContentCard } from '@/components/admin/admin-layout'
-import { DataTable, TableBadge } from '@/components/ui/data-table'
+import { TableBadge } from '@/components/ui/data-table'
 import { useAuth } from '@/lib/auth/context'
 import {
   Calendar,
   MapPin,
-  Users,
   Plus,
   Search,
   Filter,
@@ -19,13 +18,44 @@ import {
   Eye,
   Loader2,
 } from 'lucide-react'
-import {
-  fetchAdminCamps,
-  getCurrentUserRole,
-  duplicateCamp,
-  deleteCamp,
-  type AdminCamp,
-} from '@/lib/services/admin-camps'
+
+// Types (defined locally to avoid Prisma imports in client component)
+interface AdminCamp {
+  id: string
+  name: string
+  slug: string
+  description: string | null
+  sport: string | null
+  start_date: string
+  end_date: string
+  start_time: string | null
+  end_time: string | null
+  age_min: number
+  age_max: number
+  capacity: number
+  price: number
+  early_bird_price: number | null
+  early_bird_deadline: string | null
+  status: string
+  featured: boolean
+  image_url: string | null
+  tenant_id: string
+  location_id: string | null
+  created_at: string
+  updated_at: string
+  location?: {
+    id: string
+    name: string
+    city: string | null
+    state: string | null
+  } | null
+  tenant?: {
+    id: string
+    name: string
+    slug: string
+  } | null
+  registration_count?: number
+}
 
 const STATUS_COLORS: Record<string, 'success' | 'warning' | 'danger' | 'default'> = {
   open: 'success',
@@ -60,27 +90,36 @@ export default function CampsListPage() {
     setError(null)
 
     try {
-      const roleData = await getCurrentUserRole(user.id)
-      if (!roleData) {
-        setError('Not authenticated')
+      // Fetch user role from API
+      const roleResponse = await fetch('/api/admin/camps/user-role')
+      if (!roleResponse.ok) {
+        const errorData = await roleResponse.json()
+        setError(errorData.error || 'Not authenticated')
+        setLoading(false)
         return
       }
+      const roleData = await roleResponse.json()
 
       setUserRole(roleData.role)
       setTenantId(roleData.tenant_id)
 
-      const options: { tenantId?: string; status?: string } = {}
-
+      // Build query params for camps API
+      const params = new URLSearchParams()
       if (roleData.role !== 'hq_admin' && roleData.tenant_id) {
-        options.tenantId = roleData.tenant_id
+        params.set('tenantId', roleData.tenant_id)
       }
-
       if (statusFilter) {
-        options.status = statusFilter
+        params.set('status', statusFilter)
       }
 
-      const { camps: campData } = await fetchAdminCamps(options)
-      setCamps(campData)
+      // Fetch camps from API
+      const campsResponse = await fetch(`/api/admin/camps?${params.toString()}`)
+      if (campsResponse.ok) {
+        const campsData = await campsResponse.json()
+        setCamps(campsData.camps || [])
+      } else {
+        setError('Failed to load camps')
+      }
     } catch (err) {
       console.error('Failed to load camps:', err)
       setError('Failed to load camps')
@@ -91,8 +130,12 @@ export default function CampsListPage() {
 
   async function handleDuplicate(id: string) {
     try {
-      await duplicateCamp(id)
-      loadUserAndCamps()
+      const response = await fetch(`/api/admin/camps?action=duplicate&id=${id}`, {
+        method: 'POST',
+      })
+      if (response.ok) {
+        loadUserAndCamps()
+      }
       setActionMenuOpen(null)
     } catch (err) {
       console.error('Failed to duplicate:', err)
@@ -103,8 +146,12 @@ export default function CampsListPage() {
     if (!confirm('Are you sure you want to delete this camp? This cannot be undone.')) return
 
     try {
-      await deleteCamp(id)
-      loadUserAndCamps()
+      const response = await fetch(`/api/admin/camps?id=${id}`, {
+        method: 'DELETE',
+      })
+      if (response.ok) {
+        loadUserAndCamps()
+      }
       setActionMenuOpen(null)
     } catch (err) {
       console.error('Failed to delete:', err)

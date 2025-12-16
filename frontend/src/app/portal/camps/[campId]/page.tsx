@@ -19,16 +19,75 @@ import {
   Loader2,
   ExternalLink,
 } from 'lucide-react'
-import {
-  fetchCampById,
-  updateCamp,
-  deleteCamp,
-  getCurrentUserRole,
-  fetchLocations,
-  type AdminCamp,
-  type CampFormData,
-  type Location,
-} from '@/lib/services/admin-camps'
+
+// Types (defined locally to avoid Prisma imports in client component)
+interface AdminCamp {
+  id: string
+  name: string
+  slug: string
+  description: string | null
+  sport: string | null
+  start_date: string
+  end_date: string
+  start_time: string | null
+  end_time: string | null
+  age_min: number
+  age_max: number
+  capacity: number
+  price: number
+  early_bird_price: number | null
+  early_bird_deadline: string | null
+  status: string
+  featured: boolean
+  image_url: string | null
+  tenant_id: string
+  location_id: string | null
+  created_at: string
+  updated_at: string
+  location?: {
+    id: string
+    name: string
+    city: string | null
+    state: string | null
+  } | null
+  tenant?: {
+    id: string
+    name: string
+    slug: string
+  } | null
+}
+
+interface CampFormData {
+  name: string
+  slug: string
+  description: string
+  sport: string
+  location_id: string | null
+  tenant_id: string
+  start_date: string
+  end_date: string
+  start_time: string
+  end_time: string
+  age_min: number
+  age_max: number
+  capacity: number
+  price: number
+  early_bird_price: number | null
+  early_bird_deadline: string | null
+  status: 'draft' | 'published' | 'open' | 'closed'
+  featured: boolean
+  image_url: string | null
+}
+
+interface Location {
+  id: string
+  name: string
+  address: string | null
+  city: string | null
+  state: string | null
+  zip: string | null
+  tenant_id: string
+}
 
 const SPORTS = [
   'Multi-Sport',
@@ -81,18 +140,26 @@ export default function EditCampPage({ params }: PageProps) {
       return
     }
     try {
-      const roleData = await getCurrentUserRole(user.id)
-      if (!roleData) {
-        setError('Not authenticated')
+      // Fetch user role from API
+      const roleResponse = await fetch('/api/admin/camps/user-role')
+      if (!roleResponse.ok) {
+        const errorData = await roleResponse.json()
+        setError(errorData.error || 'Not authenticated')
+        setLoading(false)
         return
       }
+      const roleData = await roleResponse.json()
       setUserRole(roleData.role)
 
-      const campData = await fetchCampById(campId)
-      if (!campData) {
-        setError('Camp not found')
+      // Fetch camp data from API
+      const campResponse = await fetch(`/api/admin/camps/${campId}`)
+      if (!campResponse.ok) {
+        const errorData = await campResponse.json()
+        setError(errorData.error || 'Camp not found')
+        setLoading(false)
         return
       }
+      const { camp: campData } = await campResponse.json()
 
       setCamp(campData)
       setFormData({
@@ -116,8 +183,12 @@ export default function EditCampPage({ params }: PageProps) {
         image_url: campData.image_url,
       })
 
-      const locationList = await fetchLocations(campData.tenant_id)
-      setLocations(locationList)
+      // Fetch locations from API
+      const locationsResponse = await fetch(`/api/admin/camps/locations?tenantId=${campData.tenant_id}`)
+      if (locationsResponse.ok) {
+        const locationsData = await locationsResponse.json()
+        setLocations(locationsData.locations || [])
+      }
     } catch (err) {
       console.error('Failed to load camp:', err)
       setError('Failed to load camp')
@@ -132,7 +203,17 @@ export default function EditCampPage({ params }: PageProps) {
     setError(null)
 
     try {
-      await updateCamp(campId, formData)
+      const response = await fetch(`/api/admin/camps/${campId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to update camp')
+      }
+
       router.push('/portal/camps')
     } catch (err) {
       console.error('Failed to update camp:', err)
@@ -147,7 +228,15 @@ export default function EditCampPage({ params }: PageProps) {
 
     setDeleting(true)
     try {
-      await deleteCamp(campId)
+      const response = await fetch(`/api/admin/camps/${campId}`, {
+        method: 'DELETE',
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to delete camp')
+      }
+
       router.push('/portal/camps')
     } catch (err) {
       console.error('Failed to delete camp:', err)
