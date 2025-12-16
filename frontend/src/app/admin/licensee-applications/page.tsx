@@ -22,6 +22,12 @@ import {
   Phone,
   CalendarCheck,
   Users,
+  X,
+  Mail,
+  MapPin,
+  Calendar,
+  Briefcase,
+  MessageSquare,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -81,6 +87,7 @@ export default function LicenseeApplicationsPage() {
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [selectedApplication, setSelectedApplication] = useState<LicenseeApplication | null>(null)
 
   const userName = user?.firstName || user?.email?.split('@')[0] || 'Admin'
 
@@ -309,13 +316,13 @@ export default function LicenseeApplicationsPage() {
                         {formatDate(app.created_at)}
                       </td>
                       <td className="px-4 py-4 text-right">
-                        <Link
-                          href={`/admin/licensee-applications/${app.id}`}
+                        <button
+                          onClick={() => setSelectedApplication(app)}
                           className="inline-flex items-center gap-1 text-sm text-neon hover:text-neon/80 transition-colors"
                         >
                           View
                           <ChevronRight className="h-4 w-4" />
-                        </Link>
+                        </button>
                       </td>
                     </tr>
                   )
@@ -331,6 +338,126 @@ export default function LicenseeApplicationsPage() {
         <p>Showing {filteredApplications.length} of {applications.length} applications</p>
         <p>Last updated: just now</p>
       </div>
+
+      {/* Application Modal */}
+      {selectedApplication && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+            onClick={() => setSelectedApplication(null)}
+          />
+          <div className="relative w-full max-w-2xl bg-dark-100 border border-white/10 shadow-2xl max-h-[90vh] overflow-y-auto">
+            {/* Modal Header */}
+            <div className="sticky top-0 bg-dark-100 border-b border-white/10 px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 bg-neon/10 border border-neon/30 flex items-center justify-center">
+                  <span className="text-neon font-black">
+                    {selectedApplication.first_name?.[0]?.toUpperCase() || 'L'}
+                  </span>
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-white">
+                    {selectedApplication.first_name} {selectedApplication.last_name}
+                  </h2>
+                  <p className="text-xs text-white/50">Licensee Application</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedApplication(null)}
+                className="p-2 hover:bg-white/10 transition-colors"
+              >
+                <X className="h-5 w-5 text-white/60" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-6">
+              {/* Status Badge */}
+              <div className="flex items-center gap-4 flex-wrap">
+                {(() => {
+                  const statusConfig = STATUS_CONFIG[selectedApplication.status] || STATUS_CONFIG.submitted
+                  const StatusIcon = statusConfig.icon
+                  return (
+                    <span className={cn(
+                      'inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold uppercase tracking-wider border',
+                      statusConfig.color
+                    )}>
+                      <StatusIcon className="h-3 w-3" />
+                      {statusConfig.label}
+                    </span>
+                  )
+                })()}
+              </div>
+
+              {/* Contact Details */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-black/30 border border-white/5 p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Mail className="h-4 w-4 text-neon" />
+                    <span className="text-xs font-bold uppercase tracking-wider text-white/40">Email</span>
+                  </div>
+                  <p className="text-white">{selectedApplication.email}</p>
+                </div>
+                <div className="bg-black/30 border border-white/5 p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Phone className="h-4 w-4 text-neon" />
+                    <span className="text-xs font-bold uppercase tracking-wider text-white/40">Phone</span>
+                  </div>
+                  <p className="text-white">{selectedApplication.phone || 'Not provided'}</p>
+                </div>
+              </div>
+
+              {/* Company Details */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-black/30 border border-white/5 p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Briefcase className="h-4 w-4 text-neon" />
+                    <span className="text-xs font-bold uppercase tracking-wider text-white/40">Company</span>
+                  </div>
+                  <p className="text-white">{selectedApplication.company_name || 'Not provided'}</p>
+                </div>
+                <div className="bg-black/30 border border-white/5 p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <MapPin className="h-4 w-4 text-neon" />
+                    <span className="text-xs font-bold uppercase tracking-wider text-white/40">Location</span>
+                  </div>
+                  <p className="text-white">
+                    {[selectedApplication.city, selectedApplication.state].filter(Boolean).join(', ') || 'Not provided'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Territory Interest */}
+              <div className="bg-black/30 border border-white/5 p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Building2 className="h-4 w-4 text-neon" />
+                  <span className="text-xs font-bold uppercase tracking-wider text-white/40">Territory Interest</span>
+                </div>
+                <p className="text-white/80">{selectedApplication.territory_interest || 'Not specified'}</p>
+              </div>
+
+              {/* Date */}
+              <div className="bg-black/30 border border-white/5 p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Calendar className="h-4 w-4 text-neon" />
+                  <span className="text-xs font-bold uppercase tracking-wider text-white/40">Applied</span>
+                </div>
+                <p className="text-white">{formatDate(selectedApplication.created_at)}</p>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="border-t border-white/10 px-6 py-4">
+              <button
+                onClick={() => setSelectedApplication(null)}
+                className="w-full py-3 bg-neon text-dark font-bold uppercase tracking-wider hover:bg-neon/80 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AdminLayout>
   )
 }

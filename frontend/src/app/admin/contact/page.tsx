@@ -8,7 +8,6 @@
  */
 
 import { useState, useEffect } from 'react'
-import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { AdminLayout, PageHeader, ContentCard } from '@/components/admin/admin-layout'
 import { useAuth } from '@/lib/auth/context'
@@ -18,7 +17,6 @@ import {
   Mail,
   CheckCircle,
   Archive,
-  ChevronRight,
   Loader2,
   Eye,
   Heart,
@@ -27,6 +25,12 @@ import {
   XCircle,
   Camera,
   Video,
+  X,
+  Phone,
+  Calendar,
+  User,
+  ChevronRight,
+  MapPin,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
@@ -162,6 +166,10 @@ export default function AdminInboxPage() {
   // Testimony state
   const [testimonies, setTestimonies] = useState<Testimony[]>([])
   const [testimonyCounts, setTestimonyCounts] = useState<TestimonyCounts | null>(null)
+
+  // Modal state
+  const [selectedContact, setSelectedContact] = useState<ContactSubmission | null>(null)
+  const [selectedTestimony, setSelectedTestimony] = useState<Testimony | null>(null)
 
   const userName = user?.firstName || user?.email?.split('@')[0] || 'Admin'
 
@@ -508,13 +516,13 @@ export default function AdminInboxPage() {
                         </td>
                         <td className="px-4 py-4 text-sm text-white/40">{formatDate(sub.created_at)}</td>
                         <td className="px-4 py-4 text-right">
-                          <Link
-                            href={`/admin/contact/${sub.id}`}
+                          <button
+                            onClick={() => setSelectedContact(sub)}
                             className="inline-flex items-center gap-1 text-sm text-purple hover:text-purple/80 transition-colors"
                           >
                             View
                             <ChevronRight className="h-4 w-4" />
-                          </Link>
+                          </button>
                         </td>
                       </tr>
                     )
@@ -627,13 +635,13 @@ export default function AdminInboxPage() {
                       </td>
                       <td className="px-4 py-4 text-sm text-white/40">{formatDate(t.created_at)}</td>
                       <td className="px-4 py-4 text-right">
-                        <Link
-                          href={`/admin/contact/testimonies/${t.id}`}
+                        <button
+                          onClick={() => setSelectedTestimony(t)}
                           className="inline-flex items-center gap-1 text-sm text-magenta hover:text-magenta/80 transition-colors"
                         >
                           View
                           <ChevronRight className="h-4 w-4" />
-                        </Link>
+                        </button>
                       </td>
                     </tr>
                   )
@@ -654,6 +662,268 @@ export default function AdminInboxPage() {
         </p>
         <p>Last updated: just now</p>
       </div>
+
+      {/* Contact Message Modal */}
+      {selectedContact && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+            onClick={() => setSelectedContact(null)}
+          />
+          <div className="relative w-full max-w-2xl bg-dark-100 border border-white/10 shadow-2xl max-h-[90vh] overflow-y-auto">
+            {/* Modal Header */}
+            <div className="sticky top-0 bg-dark-100 border-b border-white/10 px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 bg-purple/10 border border-purple/30 flex items-center justify-center">
+                  <span className="text-purple font-black">
+                    {selectedContact.name?.[0]?.toUpperCase() || 'C'}
+                  </span>
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-white">{selectedContact.name}</h2>
+                  <p className="text-xs text-white/50">Contact Message</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedContact(null)}
+                className="p-2 hover:bg-white/10 transition-colors"
+              >
+                <X className="h-5 w-5 text-white/60" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-6">
+              {/* Status Badge */}
+              <div className="flex items-center gap-4 flex-wrap">
+                {(() => {
+                  const statusConfig = CONTACT_STATUS_CONFIG[selectedContact.status] || CONTACT_STATUS_CONFIG.new
+                  const StatusIcon = statusConfig.icon
+                  return (
+                    <span className={cn(
+                      'inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold uppercase tracking-wider border',
+                      statusConfig.color
+                    )}>
+                      <StatusIcon className="h-3 w-3" />
+                      {statusConfig.label}
+                    </span>
+                  )
+                })()}
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white/5 border border-white/10 text-xs text-white/60">
+                  {INQUIRY_LABELS[selectedContact.inquiry_type] || selectedContact.inquiry_type}
+                </span>
+              </div>
+
+              {/* Contact Details */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-black/30 border border-white/5 p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Mail className="h-4 w-4 text-purple" />
+                    <span className="text-xs font-bold uppercase tracking-wider text-white/40">Email</span>
+                  </div>
+                  <p className="text-white">{selectedContact.email}</p>
+                </div>
+                <div className="bg-black/30 border border-white/5 p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Phone className="h-4 w-4 text-purple" />
+                    <span className="text-xs font-bold uppercase tracking-wider text-white/40">Phone</span>
+                  </div>
+                  <p className="text-white">{selectedContact.phone || 'Not provided'}</p>
+                </div>
+              </div>
+
+              {/* Date */}
+              <div className="bg-black/30 border border-white/5 p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Calendar className="h-4 w-4 text-purple" />
+                  <span className="text-xs font-bold uppercase tracking-wider text-white/40">Received</span>
+                </div>
+                <p className="text-white">{formatDate(selectedContact.created_at)}</p>
+              </div>
+
+              {/* Message */}
+              <div className="bg-black/30 border border-white/5 p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <MessageSquare className="h-4 w-4 text-purple" />
+                  <span className="text-xs font-bold uppercase tracking-wider text-white/40">Message</span>
+                </div>
+                <p className="text-white/80 leading-relaxed whitespace-pre-wrap">{selectedContact.message}</p>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="border-t border-white/10 px-6 py-4">
+              <button
+                onClick={() => setSelectedContact(null)}
+                className="w-full py-3 bg-purple text-white font-bold uppercase tracking-wider hover:bg-purple/80 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Testimony Modal */}
+      {selectedTestimony && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+            onClick={() => setSelectedTestimony(null)}
+          />
+          <div className="relative w-full max-w-2xl bg-dark-100 border border-white/10 shadow-2xl max-h-[90vh] overflow-y-auto">
+            {/* Modal Header */}
+            <div className="sticky top-0 bg-dark-100 border-b border-white/10 px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 bg-magenta/10 border border-magenta/30 flex items-center justify-center relative">
+                  <span className="text-magenta font-black">
+                    {selectedTestimony.author_name?.[0]?.toUpperCase() || 'T'}
+                  </span>
+                  {selectedTestimony.is_featured && (
+                    <div className="absolute -top-1 -right-1 p-0.5 bg-neon">
+                      <Star className="h-2 w-2 text-black fill-current" />
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-white">{selectedTestimony.author_name}</h2>
+                  <p className="text-xs text-white/50">Testimony Submission</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedTestimony(null)}
+                className="p-2 hover:bg-white/10 transition-colors"
+              >
+                <X className="h-5 w-5 text-white/60" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-6">
+              {/* Status Badge */}
+              <div className="flex items-center gap-4 flex-wrap">
+                {(() => {
+                  const statusConfig = TESTIMONY_STATUS_CONFIG[selectedTestimony.status] || TESTIMONY_STATUS_CONFIG.pending_review
+                  const StatusIcon = statusConfig.icon
+                  return (
+                    <span className={cn(
+                      'inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold uppercase tracking-wider border',
+                      statusConfig.color
+                    )}>
+                      <StatusIcon className="h-3 w-3" />
+                      {statusConfig.label}
+                    </span>
+                  )
+                })()}
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white/5 border border-white/10 text-xs text-white/60">
+                  {ROLE_LABELS[selectedTestimony.author_role] || selectedTestimony.author_role}
+                </span>
+                {selectedTestimony.is_featured && (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-neon/10 border border-neon/30 text-xs text-neon font-bold uppercase tracking-wider">
+                    <Star className="h-3 w-3" />
+                    Featured
+                  </span>
+                )}
+              </div>
+
+              {/* Author Details */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {selectedTestimony.author_email && (
+                  <div className="bg-black/30 border border-white/5 p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Mail className="h-4 w-4 text-magenta" />
+                      <span className="text-xs font-bold uppercase tracking-wider text-white/40">Email</span>
+                    </div>
+                    <p className="text-white">{selectedTestimony.author_email}</p>
+                  </div>
+                )}
+                {selectedTestimony.camp_name && (
+                  <div className="bg-black/30 border border-white/5 p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <MapPin className="h-4 w-4 text-magenta" />
+                      <span className="text-xs font-bold uppercase tracking-wider text-white/40">Camp</span>
+                    </div>
+                    <p className="text-white">{selectedTestimony.camp_name}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Date */}
+              <div className="bg-black/30 border border-white/5 p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Calendar className="h-4 w-4 text-magenta" />
+                  <span className="text-xs font-bold uppercase tracking-wider text-white/40">Submitted</span>
+                </div>
+                <p className="text-white">{formatDate(selectedTestimony.created_at)}</p>
+              </div>
+
+              {/* Headline */}
+              {selectedTestimony.headline && (
+                <div className="bg-black/30 border border-white/5 p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Star className="h-4 w-4 text-magenta" />
+                    <span className="text-xs font-bold uppercase tracking-wider text-white/40">Headline</span>
+                  </div>
+                  <p className="text-xl font-bold text-white">&ldquo;{selectedTestimony.headline}&rdquo;</p>
+                </div>
+              )}
+
+              {/* Body */}
+              <div className="bg-black/30 border border-white/5 p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <Heart className="h-4 w-4 text-magenta" />
+                  <span className="text-xs font-bold uppercase tracking-wider text-white/40">Testimony</span>
+                </div>
+                <p className="text-white/80 leading-relaxed whitespace-pre-wrap">{selectedTestimony.body}</p>
+              </div>
+
+              {/* Media */}
+              {(selectedTestimony.photo_url || selectedTestimony.video_url) && (
+                <div className="bg-black/30 border border-white/5 p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Camera className="h-4 w-4 text-magenta" />
+                    <span className="text-xs font-bold uppercase tracking-wider text-white/40">Media</span>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    {selectedTestimony.photo_url && (
+                      <a
+                        href={selectedTestimony.photo_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 text-purple hover:text-purple/80 transition-colors"
+                      >
+                        <Camera className="h-4 w-4" />
+                        View Photo
+                      </a>
+                    )}
+                    {selectedTestimony.video_url && (
+                      <a
+                        href={selectedTestimony.video_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 text-purple hover:text-purple/80 transition-colors"
+                      >
+                        <Video className="h-4 w-4" />
+                        View Video
+                      </a>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="border-t border-white/10 px-6 py-4">
+              <button
+                onClick={() => setSelectedTestimony(null)}
+                className="w-full py-3 bg-magenta text-white font-bold uppercase tracking-wider hover:bg-magenta/80 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AdminLayout>
   )
 }
