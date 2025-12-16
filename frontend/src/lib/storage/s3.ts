@@ -341,6 +341,8 @@ export async function getFileInfo(key: string): Promise<FileInfo | null> {
 export const STORAGE_FOLDERS = {
   /** Profile avatars */
   AVATARS: 'avatars',
+  /** Athlete profile photos */
+  ATHLETE_PHOTOS: 'athletes',
   /** Camp images */
   CAMP_IMAGES: 'camps',
   /** Shop product images */

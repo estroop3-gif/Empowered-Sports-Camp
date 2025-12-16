@@ -32,6 +32,7 @@ import {
   Briefcase,
   Trophy,
   Mail,
+  Heart,
 } from 'lucide-react'
 import { ViewAsControl } from './view-as-control'
 
@@ -118,6 +119,12 @@ const licensorNavItems: NavItem[] = [
       { label: 'All Venues', href: '/admin/venues' },
       { label: 'Add Venue', href: '/admin/venues/new' },
     ],
+  },
+  {
+    label: 'Athletes',
+    href: '/admin/athletes',
+    icon: Heart,
+    roles: ['hq_admin'],
   },
   {
     label: 'Global Analytics',
@@ -245,9 +252,9 @@ const licenseeNavItems: NavItem[] = [
   },
   {
     label: 'Athletes',
-    href: '/portal/athletes',
-    icon: Crown,
-    roles: ['licensee_owner', 'director', 'coach'],
+    href: '/licensee/athletes',
+    icon: Heart,
+    roles: ['licensee_owner', 'director'],
   },
   {
     label: 'Staff',

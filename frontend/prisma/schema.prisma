@@ -64,6 +64,7 @@ model Tenant {
   userRoles                UserRoleAssignment[]
   venues                   Venue[]
   volunteerCertifications  VolunteerCertification[]
+  athletes                 Athlete[]
 
   @@map("tenants")
 }
@@ -266,6 +267,7 @@ model UserRoleAssignment {
 model Athlete {
   id                           String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   parentId                     String              @map("parent_id") @db.Uuid
+  tenantId                     String?             @map("tenant_id") @db.Uuid
   firstName                    String              @map("first_name")
   lastName                     String              @map("last_name")
   dateOfBirth                  DateTime            @map("date_of_birth") @db.Date
@@ -278,9 +280,18 @@ model Athlete {
   emergencyContactPhone        String?             @map("emergency_contact_phone")
   emergencyContactRelationship String?             @map("emergency_contact_relationship")
   photoUrl                     String?             @map("photo_url")
+  tShirtSize                   String?             @map("t_shirt_size")
+  jerseyNumberPreference       String?             @map("jersey_number_preference")
+  primarySportInterest         String?             @map("primary_sport_interest")
+  secondarySportInterest       String?             @map("secondary_sport_interest")
+  pickupNotes                  String?             @map("pickup_notes")
+  isActive                     Boolean             @default(true) @map("is_active")
+  riskFlag                     AthleteRiskFlag?    @map("risk_flag")
+  internalNotes                String?             @map("internal_notes")
   createdAt                    DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt                    DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   parent                       Profile             @relation(fields: [parentId], references: [id], onDelete: Cascade)
+  tenant                       Tenant?             @relation(fields: [tenantId], references: [id], onDelete: SetNull)
   authorizedPickups            AuthorizedPickup[]
   attendance                   CampAttendance[]
   incidents                    CampIncident[]
@@ -290,6 +301,7 @@ model Athlete {
   registrations                Registration[]
 
   @@index([parentId])
+  @@index([tenantId])
   @@map("athletes")
 }
 
@@ -2115,6 +2127,12 @@ enum Gender {
   female
   other
   prefer_not_to_say
+}
+
+enum AthleteRiskFlag {
+  none
+  monitor
+  restricted
 }
 
 enum PaymentStatus {

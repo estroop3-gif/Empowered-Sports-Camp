@@ -44,6 +44,7 @@ import {
   UserPlus,
   Star,
   Percent,
+  Heart,
 } from 'lucide-react'
 
 export type UserRole = 'parent' | 'coach' | 'director' | 'licensee_owner' | 'hq_admin' | 'cit_volunteer'
@@ -165,6 +166,7 @@ export const ROLE_NAV_ITEMS: Record<UserRole, NavItem[]> = {
     { label: 'Inbox', href: '/admin/cit', icon: Inbox },
     { label: 'Licensees', href: '/admin/licensees', icon: Building2 },
     { label: 'Camp Manager', href: '/admin/camps', icon: Calendar },
+    { label: 'Athletes', href: '/admin/athletes', icon: Heart },
     { label: 'Venues', href: '/admin/venues', icon: MapPin },
     { label: 'Camp HQ', href: '/admin/camp-hq', icon: LayoutDashboard },
     { label: 'Analytics', href: '/admin/analytics', icon: BarChart3 },
@@ -180,6 +182,7 @@ export const ROLE_NAV_ITEMS: Record<UserRole, NavItem[]> = {
   licensee_owner: [
     { label: 'Dashboard', href: '/licensee/dashboard', icon: LayoutDashboard },
     { label: 'My Camps', href: '/licensee/camps', icon: Calendar },
+    { label: 'Athletes', href: '/licensee/athletes', icon: Heart },
     { label: 'Venues', href: '/licensee/venues', icon: MapPin },
     { label: 'Analytics', href: '/licensee/analytics', icon: BarChart3 },
     { label: 'Royalties', href: '/licensee/reports/royalties', icon: Percent },
@@ -205,6 +208,7 @@ export const ROLE_NAV_ITEMS: Record<UserRole, NavItem[]> = {
   coach: [
     { label: 'Dashboard', href: '/coach', icon: LayoutDashboard },
     { label: 'My Camps', href: '/coach/camps', icon: Calendar },
+    { label: 'Athletes', href: '/coach/athletes', icon: Heart },
     { label: 'Today', href: '/coach/today', icon: Clipboard },
     { label: 'EmpowerU', href: '/coach/empoweru', icon: GraduationCap },
     { label: 'Curriculum', href: '/coach/curriculum', icon: BookOpen },

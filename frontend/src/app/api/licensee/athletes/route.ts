@@ -1,13 +1,13 @@
 /**
- * Admin Athletes API
+ * Licensee Athletes API
  *
- * GET /api/admin/athletes - List all athletes with filters
+ * GET /api/licensee/athletes - List athletes scoped to licensee's tenant
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUserFromRequest } from '@/lib/auth/server'
 import {
-  listAthletesForAdmin,
+  listAthletesForLicensee,
   getAthleteStats,
   getAvailableGrades,
 } from '@/lib/services/athletes-admin'
@@ -19,18 +19,22 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Only HQ admins can access this endpoint
-    if (user.role !== 'hq_admin') {
+    // Licensee owners and directors can access
+    const allowedRoles = ['licensee_owner', 'director']
+    if (!allowedRoles.includes(user.role)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
+    if (!user.tenantId) {
+      return NextResponse.json({ error: 'No tenant associated' }, { status: 400 })
     }
 
     const searchParams = request.nextUrl.searchParams
     const action = searchParams.get('action')
 
-    // Get stats
+    // Get stats for this tenant
     if (action === 'stats') {
-      const tenantId = searchParams.get('tenantId') || undefined
-      const { data, error } = await getAthleteStats({ tenantId })
+      const { data, error } = await getAthleteStats({ tenantId: user.tenantId })
 
       if (error) {
         return NextResponse.json({ error: error.message }, { status: 500 })
@@ -39,7 +43,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(data)
     }
 
-    // Get available grades for filter dropdown
+    // Get available grades
     if (action === 'grades') {
       const { data, error } = await getAvailableGrades()
 
@@ -50,15 +54,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ grades: data })
     }
 
-    // List athletes with filters
+    // List athletes scoped to tenant
     const params = {
-      tenantId: searchParams.get('tenantId') || undefined,
       search: searchParams.get('search') || undefined,
       grade: searchParams.get('grade') || undefined,
       minAge: searchParams.get('minAge') ? parseInt(searchParams.get('minAge')!) : undefined,
       maxAge: searchParams.get('maxAge') ? parseInt(searchParams.get('maxAge')!) : undefined,
-      city: searchParams.get('city') || undefined,
-      state: searchParams.get('state') || undefined,
       campId: searchParams.get('campId') || undefined,
       isActive: searchParams.get('isActive') !== null
         ? searchParams.get('isActive') === 'true'
@@ -70,7 +71,7 @@ export async function GET(request: NextRequest) {
         : (parseInt(searchParams.get('page') || '1') - 1) * parseInt(searchParams.get('pageSize') || '50'),
     }
 
-    const { data, error } = await listAthletesForAdmin(params)
+    const { data, error } = await listAthletesForLicensee(user.tenantId, params)
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })
@@ -86,7 +87,7 @@ export async function GET(request: NextRequest) {
       totalPages: Math.ceil(data!.total / params.limit),
     })
   } catch (error) {
-    console.error('[API] GET /api/admin/athletes error:', error)
+    console.error('[API] GET /api/licensee/athletes error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
