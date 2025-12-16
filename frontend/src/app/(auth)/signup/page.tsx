@@ -1,13 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { signUp } from '@/lib/auth/cognito-client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Zap, Mail, Lock, User, Phone, ArrowRight, Crown, MapPin } from 'lucide-react'
+import { Zap, Mail, Lock, User, Phone, ArrowRight, Crown, MapPin, ChevronDown, Check } from 'lucide-react'
 
 const HOW_HEARD_OPTIONS = [
   'Friend or family referral',
@@ -27,6 +27,12 @@ const US_STATES = [
   'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY'
 ]
 
+interface LocationOption {
+  city: string
+  state: string
+  display: string
+}
+
 export default function SignUpPage() {
   const router = useRouter()
 
@@ -44,6 +50,97 @@ export default function SignUpPage() {
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Location autocomplete state
+  const [locations, setLocations] = useState<LocationOption[]>([])
+  const [locationSearch, setLocationSearch] = useState('')
+  const [showLocationDropdown, setShowLocationDropdown] = useState(false)
+  const [filteredLocations, setFilteredLocations] = useState<LocationOption[]>([])
+  const locationRef = useRef<HTMLDivElement>(null)
+
+  // Fetch available locations on mount
+  useEffect(() => {
+    async function fetchLocations() {
+      try {
+        // Fetch cities from camps API
+        const citiesRes = await fetch('/api/camps?action=cities')
+        const citiesData = await citiesRes.json()
+        const cities: string[] = citiesData.data || []
+
+        // Fetch states from camps API
+        const statesRes = await fetch('/api/camps?action=states')
+        const statesData = await statesRes.json()
+        const states: string[] = statesData.data || []
+
+        // Create location options - combine cities with their likely states
+        // For now, just create city options since we don't have city-state mapping
+        const locationOptions: LocationOption[] = []
+
+        // Add each city as an option
+        cities.forEach(city => {
+          if (city) {
+            locationOptions.push({
+              city,
+              state: '',
+              display: city,
+            })
+          }
+        })
+
+        // Add state options for broader selection
+        states.forEach(state => {
+          if (state) {
+            locationOptions.push({
+              city: '',
+              state,
+              display: `Any city in ${state}`,
+            })
+          }
+        })
+
+        setLocations(locationOptions)
+      } catch (err) {
+        console.error('Failed to fetch locations:', err)
+      }
+    }
+    fetchLocations()
+  }, [])
+
+  // Filter locations based on search
+  useEffect(() => {
+    if (locationSearch.trim()) {
+      const search = locationSearch.toLowerCase()
+      const filtered = locations.filter(loc =>
+        loc.display.toLowerCase().includes(search) ||
+        loc.city.toLowerCase().includes(search) ||
+        loc.state.toLowerCase().includes(search)
+      )
+      setFilteredLocations(filtered)
+    } else {
+      setFilteredLocations(locations)
+    }
+  }, [locationSearch, locations])
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (locationRef.current && !locationRef.current.contains(event.target as Node)) {
+        setShowLocationDropdown(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const handleLocationSelect = (location: LocationOption) => {
+    setFormData(prev => ({
+      ...prev,
+      city: location.city,
+      state: location.state,
+    }))
+    setLocationSearch(location.display)
+    setShowLocationDropdown(false)
+  }
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setFormData(prev => ({
@@ -283,41 +380,83 @@ export default function SignUpPage() {
                 </div>
 
                 {/* Location */}
-                <div>
+                <div ref={locationRef}>
                   <label className="block text-xs font-bold uppercase tracking-wider text-white/50 mb-2">
                     <MapPin className="h-4 w-4 inline mr-1" />
-                    Location
+                    Location *
                   </label>
-                  <div className="grid grid-cols-5 gap-2">
-                    <Input
+                  <div className="relative">
+                    <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-white/30 z-10" />
+                    <input
                       type="text"
-                      name="city"
-                      value={formData.city}
-                      onChange={handleChange}
-                      placeholder="City"
-                      className="col-span-2"
+                      value={locationSearch}
+                      onChange={(e) => {
+                        setLocationSearch(e.target.value)
+                        setShowLocationDropdown(true)
+                      }}
+                      onFocus={() => setShowLocationDropdown(true)}
+                      placeholder="Search for your city or state..."
+                      required
+                      className="w-full bg-black border border-white/20 text-white pl-12 pr-10 py-3 focus:border-neon focus:outline-none"
                     />
-                    <select
-                      name="state"
-                      value={formData.state}
-                      onChange={handleChange}
-                      className="bg-black border border-white/20 text-white px-3 py-2 focus:border-neon focus:outline-none"
-                    >
-                      <option value="">State</option>
-                      {US_STATES.map(state => (
-                        <option key={state} value={state}>{state}</option>
-                      ))}
-                    </select>
-                    <Input
-                      type="text"
-                      name="zipCode"
-                      value={formData.zipCode}
-                      onChange={handleChange}
-                      placeholder="ZIP"
-                      className="col-span-2"
-                      maxLength={10}
-                    />
+                    <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 h-5 w-5 text-white/30" />
+
+                    {/* Dropdown */}
+                    {showLocationDropdown && (
+                      <div className="absolute z-50 w-full mt-1 bg-dark-100 border border-white/20 max-h-60 overflow-y-auto">
+                        {filteredLocations.length === 0 ? (
+                          <div className="px-4 py-3 text-white/50 text-sm">
+                            {locations.length === 0 ? 'Loading locations...' : 'No locations found'}
+                          </div>
+                        ) : (
+                          filteredLocations.slice(0, 10).map((loc, index) => (
+                            <button
+                              key={index}
+                              type="button"
+                              onClick={() => handleLocationSelect(loc)}
+                              className="w-full px-4 py-3 text-left text-white hover:bg-neon/10 flex items-center justify-between transition-colors"
+                            >
+                              <span>{loc.display}</span>
+                              {(formData.city === loc.city && formData.state === loc.state) && (
+                                <Check className="h-4 w-4 text-neon" />
+                              )}
+                            </button>
+                          ))
+                        )}
+                        {/* Manual entry option */}
+                        <div className="border-t border-white/10 px-4 py-2">
+                          <p className="text-xs text-white/40 mb-2">Or enter manually:</p>
+                          <div className="grid grid-cols-2 gap-2">
+                            <Input
+                              type="text"
+                              name="city"
+                              value={formData.city}
+                              onChange={handleChange}
+                              placeholder="City"
+                              className="text-sm"
+                            />
+                            <select
+                              name="state"
+                              value={formData.state}
+                              onChange={handleChange}
+                              className="bg-black border border-white/20 text-white text-sm px-2 py-2 focus:border-neon focus:outline-none"
+                            >
+                              <option value="">State</option>
+                              {US_STATES.map(state => (
+                                <option key={state} value={state}>{state}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
+                  {/* Show selected location */}
+                  {(formData.city || formData.state) && !showLocationDropdown && (
+                    <p className="mt-1 text-xs text-neon">
+                      Selected: {[formData.city, formData.state].filter(Boolean).join(', ')}
+                    </p>
+                  )}
                 </div>
 
                 {/* How did you hear about us */}
