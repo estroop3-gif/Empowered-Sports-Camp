@@ -22,6 +22,8 @@ import {
   User,
   Mail,
   ExternalLink,
+  CheckCircle,
+  AlertCircle,
 } from 'lucide-react'
 import { buttonVariants } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -258,18 +260,6 @@ export default function TestimonyDetailPage() {
 
       {/* Content */}
       <div className="mx-auto max-w-5xl px-4 sm:px-6 py-8">
-        {/* Messages */}
-        {error && (
-          <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
-            {error}
-          </div>
-        )}
-        {successMessage && (
-          <div className="mb-6 p-4 bg-neon/10 border border-neon/30 text-neon text-sm">
-            {successMessage}
-          </div>
-        )}
-
         <div className="grid lg:grid-cols-3 gap-8">
           {/* Main Content */}
           <div className="lg:col-span-2 space-y-6">
@@ -488,6 +478,20 @@ export default function TestimonyDetailPage() {
               </h2>
 
               <div className="space-y-3">
+                {/* Success/Error feedback */}
+                {successMessage && (
+                  <div className="flex items-center gap-2 p-3 bg-neon/10 border border-neon/30 text-neon text-sm animate-pulse">
+                    <CheckCircle className="h-4 w-4 flex-shrink-0" />
+                    {successMessage}
+                  </div>
+                )}
+                {error && (
+                  <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
+                    <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                    {error}
+                  </div>
+                )}
+
                 <button
                   onClick={handleSave}
                   disabled={isSaving}
