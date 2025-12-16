@@ -50,6 +50,17 @@ interface Tenant {
   state: string | null
 }
 
+interface Territory {
+  id: string
+  name: string
+  country: string
+  state_region: string
+  city: string | null
+  status: string
+  tenant_id: string | null
+  tenant_name: string | null
+}
+
 interface Location {
   id: string
   name: string
@@ -88,7 +99,9 @@ export default function AdminCreateCampPage() {
 
   const [userRole, setUserRole] = useState<string | null>(null)
   const [tenants, setTenants] = useState<Tenant[]>([])
+  const [territories, setTerritories] = useState<Territory[]>([])
   const [locations, setLocations] = useState<Location[]>([])
+  const [selectedTerritoryId, setSelectedTerritoryId] = useState<string>('')
 
   const [formData, setFormData] = useState<CampFormData>({
     name: '',
@@ -131,7 +144,7 @@ export default function AdminCreateCampPage() {
     }
     try {
       // Fetch user role from API
-      const roleResponse = await fetch('/api/admin/camps/user-role')
+      const roleResponse = await fetch('/api/admin/camps/user-role', { credentials: 'include' })
       if (!roleResponse.ok) {
         const errorData = await roleResponse.json()
         setError(errorData.error || 'Not authenticated')
@@ -143,14 +156,32 @@ export default function AdminCreateCampPage() {
       setUserRole(roleData.role)
 
       if (roleData.role === 'hq_admin') {
-        // Fetch tenants for HQ admin
-        const tenantsResponse = await fetch('/api/admin/camps/tenants')
+        // Fetch territories for HQ admin
+        const territoriesResponse = await fetch('/api/admin/camps/territories', {
+          credentials: 'include',
+        })
+        if (territoriesResponse.ok) {
+          const territoriesData = await territoriesResponse.json()
+          setTerritories(territoriesData.territories || [])
+        }
+        // Also fetch tenants for reference
+        const tenantsResponse = await fetch('/api/admin/camps/tenants', {
+          credentials: 'include',
+        })
         if (tenantsResponse.ok) {
           const tenantsData = await tenantsResponse.json()
           setTenants(tenantsData.tenants || [])
         }
       } else if (roleData.tenant_id) {
         setFormData(prev => ({ ...prev, tenant_id: roleData.tenant_id! }))
+        // Fetch territories for this tenant
+        const territoriesResponse = await fetch('/api/admin/camps/territories', {
+          credentials: 'include',
+        })
+        if (territoriesResponse.ok) {
+          const territoriesData = await territoriesResponse.json()
+          setTerritories(territoriesData.territories || [])
+        }
         await loadLocations(roleData.tenant_id)
       }
     } catch (err) {
@@ -163,7 +194,7 @@ export default function AdminCreateCampPage() {
 
   async function loadLocations(tenantId: string) {
     try {
-      const response = await fetch(`/api/admin/camps/locations?tenantId=${tenantId}`)
+      const response = await fetch(`/api/admin/camps/locations?tenantId=${tenantId}`, { credentials: 'include' })
       if (response.ok) {
         const data = await response.json()
         setLocations(data.locations || [])
@@ -186,8 +217,14 @@ export default function AdminCreateCampPage() {
     setSaving(true)
     setError(null)
 
-    if (!formData.tenant_id) {
+    if (!selectedTerritoryId && isHqAdmin) {
       setError('Please select a territory')
+      setSaving(false)
+      return
+    }
+
+    if (!formData.tenant_id) {
+      setError('The selected territory is not assigned to a licensee. Please select a territory with an assigned licensee.')
       setSaving(false)
       return
     }
@@ -209,6 +246,7 @@ export default function AdminCreateCampPage() {
       const response = await fetch('/api/admin/camps?action=create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify(formData),
       })
 
@@ -278,15 +316,33 @@ export default function AdminCreateCampPage() {
                     </label>
                     <select
                       required
-                      value={formData.tenant_id}
-                      onChange={(e) => setFormData(prev => ({ ...prev, tenant_id: e.target.value, location_id: null }))}
+                      value={selectedTerritoryId}
+                      onChange={(e) => {
+                        const territoryId = e.target.value
+                        setSelectedTerritoryId(territoryId)
+                        // Find the selected territory and get its tenant_id
+                        const territory = territories.find(t => t.id === territoryId)
+                        if (territory?.tenant_id) {
+                          setFormData(prev => ({ ...prev, tenant_id: territory.tenant_id!, location_id: null }))
+                          loadLocations(territory.tenant_id)
+                        } else {
+                          setFormData(prev => ({ ...prev, tenant_id: '', location_id: null }))
+                          setLocations([])
+                        }
+                      }}
                       className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-neon focus:outline-none"
                     >
                       <option value="">Select a territory...</option>
-                      {tenants.map(tenant => (
-                        <option key={tenant.id} value={tenant.id}>{tenant.name}</option>
+                      {territories.map(territory => (
+                        <option key={territory.id} value={territory.id}>
+                          {territory.name} - {territory.city ? `${territory.city}, ` : ''}{territory.state_region}
+                          {territory.tenant_name ? ` (${territory.tenant_name})` : ' (Unassigned)'}
+                        </option>
                       ))}
                     </select>
+                    {territories.length === 0 && (
+                      <p className="mt-2 text-sm text-white/40">No territories found. Create a territory first.</p>
+                    )}
                   </div>
                 )}
 
