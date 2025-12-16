@@ -26,6 +26,7 @@ export function Navbar() {
   const pathname = usePathname()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
+  const [developerModeEnabled, setDeveloperModeEnabled] = useState(false)
   const { user, loading, isHqAdmin, isLicenseeOwner, isDirector, isCoach, isViewingAsOtherRole } = useAuth()
 
   // Check if on admin/portal pages
@@ -46,12 +47,39 @@ export function Navbar() {
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
 
+  // Check developer mode status for navbar positioning
+  useEffect(() => {
+    async function checkDeveloperMode() {
+      try {
+        const res = await fetch('/api/settings/developer-mode')
+        if (res.ok) {
+          const data = await res.json()
+          setDeveloperModeEnabled(data.enabled === true)
+        }
+      } catch {
+        // Silently fail
+      }
+    }
+    checkDeveloperMode()
+    // Re-check periodically
+    const interval = setInterval(checkDeveloperMode, 30000)
+    return () => clearInterval(interval)
+  }, [])
+
+  // Calculate top offset based on active banners
+  const getTopOffset = () => {
+    let offset = 0
+    if (developerModeEnabled) offset += 36 // Developer mode banner height
+    if (isViewingAsOtherRole) offset += 36 // View-as banner height
+    return offset
+  }
+
+  const topOffset = getTopOffset()
+
   return (
     <header
-      className={cn(
-        "fixed left-0 right-0 z-50 transition-all duration-300 bg-black/95 backdrop-blur-md",
-        isViewingAsOtherRole ? "top-[36px]" : "top-0"
-      )}
+      className="fixed left-0 right-0 z-50 transition-all duration-300 bg-black/95 backdrop-blur-md"
+      style={{ top: `${topOffset}px` }}
     >
       {/* Gradient border */}
       <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r from-neon via-magenta to-purple" />
