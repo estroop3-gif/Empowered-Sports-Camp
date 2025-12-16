@@ -101,7 +101,22 @@ export default function AdminSettingsPage() {
         throw new Error(json.error || 'Failed to load settings')
       }
 
-      setSettings(json.data.settings || {})
+      // Transform settings to key-value object
+      // Global scope returns array of {key, value, ...}, effective scope returns {key: value, ...}
+      const settingsData = json.data.settings
+      let settingsObject: Record<string, unknown> = {}
+
+      if (Array.isArray(settingsData)) {
+        // Global/tenant scope - transform array to object
+        for (const setting of settingsData) {
+          settingsObject[setting.key] = setting.value
+        }
+      } else if (settingsData && typeof settingsData === 'object') {
+        // Effective scope - already an object
+        settingsObject = settingsData
+      }
+
+      setSettings(settingsObject)
       if (json.schema) {
         setSchema(json.schema)
       }

@@ -5,6 +5,7 @@ import { Navbar } from "@/components/layout/navbar"
 import { Footer } from "@/components/layout/footer"
 import { AuthProvider } from "@/lib/auth/context"
 import { ViewingAsBanner } from "@/components/admin/view-as-control"
+import { GlobalDeveloperModeBanner } from "@/components/admin/DeveloperModeBanner"
 import { RoleDashboardRouter } from "@/components/role-dashboard-router"
 
 const poppins = Poppins({
@@ -62,6 +63,7 @@ export default function RootLayout({
     <html lang="en" className={poppins.variable}>
       <body className="min-h-screen bg-black text-white font-sans antialiased">
         <AuthProvider>
+          <GlobalDeveloperModeBanner />
           <ViewingAsBanner />
           <RoleDashboardRouter>
             <Navbar />
