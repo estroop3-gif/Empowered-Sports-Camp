@@ -66,6 +66,7 @@ model Tenant {
   volunteerCertifications  VolunteerCertification[]
   athletes                 Athlete[]
   settings                 Setting[]
+  jobApplications          JobApplication[]
 
   @@map("tenants")
 }
@@ -1307,6 +1308,107 @@ model JobPosting {
   @@index([createdAt])
   @@index([priority])
   @@map("job_postings")
+
+  applications JobApplication[]
+}
+
+model JobApplication {
+  id                          String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId                    String?              @map("tenant_id") @db.Uuid
+  jobId                       String               @map("job_id") @db.Uuid
+  firstName                   String               @map("first_name")
+  lastName                    String               @map("last_name")
+  email                       String
+  phone                       String?
+  city                        String?
+  state                       String?
+  age                         Int?
+  resumeUrl                   String?              @map("resume_url")
+  coverLetter                 String?              @map("cover_letter")
+  linkedinUrl                 String?              @map("linkedin_url")
+  howHeard                    String?              @map("how_heard")
+  availabilityJson            Json?                @map("availability_json")
+  certificationsJson          Json?                @map("certifications_json")
+  applicantNotes              String?              @map("applicant_notes")
+  backgroundCheckAcknowledged Boolean              @default(false) @map("background_check_acknowledged")
+  status                      JobApplicationStatus @default(submitted)
+  reviewedByUserId            String?              @map("reviewed_by_user_id") @db.Uuid
+  reviewedAt                  DateTime?            @map("reviewed_at") @db.Timestamptz(6)
+  createdAt                   DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                   DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant        Tenant?                       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  job           JobPosting                    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  attachments   JobApplicationAttachment[]
+  internalNotes JobApplicationInternalNote[]
+  statusChanges JobApplicationStatusChange[]
+
+  @@index([tenantId])
+  @@index([jobId])
+  @@index([status])
+  @@index([email])
+  @@index([createdAt])
+  @@map("job_applications")
+}
+
+model JobApplicationAttachment {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  applicationId String   @map("application_id") @db.Uuid
+  fileName      String   @map("file_name")
+  fileType      String   @map("file_type")
+  fileSize      Int      @map("file_size")
+  s3Key         String   @map("s3_key")
+  uploadedAt    DateTime @default(now()) @map("uploaded_at") @db.Timestamptz(6)
+
+  application JobApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+  @@map("job_application_attachments")
+}
+
+model JobApplicationInternalNote {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  applicationId String   @map("application_id") @db.Uuid
+  authorUserId  String   @map("author_user_id") @db.Uuid
+  authorName    String   @map("author_name")
+  content       String
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  application JobApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+  @@index([createdAt])
+  @@map("job_application_internal_notes")
+}
+
+model JobApplicationStatusChange {
+  id            String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  applicationId String               @map("application_id") @db.Uuid
+  fromStatus    JobApplicationStatus @map("from_status")
+  toStatus      JobApplicationStatus @map("to_status")
+  changedByUserId String             @map("changed_by_user_id") @db.Uuid
+  changedByName String               @map("changed_by_name")
+  reason        String?
+  createdAt     DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  application JobApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+  @@index([createdAt])
+  @@map("job_application_status_changes")
+}
+
+enum JobApplicationStatus {
+  submitted
+  under_review
+  phone_screen
+  interview_scheduled
+  interview_completed
+  offer_extended
+  hired
+  rejected
+  withdrawn
 }
 
 model CampDay {

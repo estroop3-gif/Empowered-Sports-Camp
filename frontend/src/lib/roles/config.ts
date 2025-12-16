@@ -191,6 +191,7 @@ export const ROLE_NAV_ITEMS: Record<UserRole, NavItem[]> = {
     { label: 'Incentives', href: '/licensee/incentives', icon: Trophy },
     { label: 'EmpowerU', href: '/licensee/empoweru', icon: GraduationCap },
     { label: 'CIT Applications', href: '/licensee/cit-applications', icon: UserPlus },
+    { label: 'Job Submissions', href: '/licensee/job-submissions', icon: Inbox },
     { label: 'Job Board', href: '/licensee/jobs', icon: Briefcase },
     { label: 'Shop', href: '/licensee/shop', icon: ShoppingBag },
     { label: 'Settings', href: '/licensee/settings', icon: Settings },

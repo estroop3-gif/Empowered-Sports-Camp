@@ -3,7 +3,7 @@
 /**
  * Job Detail Page
  *
- * Displays full details of a job posting.
+ * Displays full details of a job posting with in-app application form.
  */
 
 import { useState, useEffect } from 'react'
@@ -19,9 +19,14 @@ import {
   Mail,
   ExternalLink,
   Loader2,
+  CheckCircle,
+  User,
+  Phone,
+  Linkedin,
 } from 'lucide-react'
 import { buttonVariants } from '@/components/ui/button'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 
 interface JobPosting {
   id: string
@@ -56,6 +61,14 @@ const COMP_FREQUENCY_LABELS: Record<string, string> = {
   stipend: 'stipend',
 }
 
+const US_STATES = [
+  'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA',
+  'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD',
+  'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ',
+  'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC',
+  'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY'
+]
+
 export default function JobDetailPage() {
   const params = useParams()
   const slug = params.slug as string
@@ -63,6 +76,23 @@ export default function JobDetailPage() {
   const [job, setJob] = useState<JobPosting | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // Application form state
+  const [showForm, setShowForm] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [submitted, setSubmitted] = useState(false)
+  const [formError, setFormError] = useState<string | null>(null)
+  const [formData, setFormData] = useState({
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: '',
+    city: '',
+    state: '',
+    coverLetter: '',
+    linkedinUrl: '',
+    howHeard: '',
+  })
 
   useEffect(() => {
     if (slug) {
@@ -89,6 +119,35 @@ export default function JobDetailPage() {
       setError('Unable to load job posting. Please try again later.')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setSubmitting(true)
+    setFormError(null)
+
+    try {
+      const res = await fetch(`/api/jobs/${slug}/apply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      })
+
+      const result = await res.json()
+
+      if (result.error) {
+        setFormError(result.error)
+        setSubmitting(false)
+        return
+      }
+
+      setSubmitted(true)
+    } catch (err) {
+      console.error('Error submitting application:', err)
+      setFormError('Failed to submit application. Please try again.')
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -126,16 +185,6 @@ export default function JobDetailPage() {
     }
 
     return compString
-  }
-
-  const getApplicationUrl = () => {
-    if (job?.application_url) {
-      return job.application_url
-    }
-    if (job?.application_email) {
-      return `mailto:${job.application_email}?subject=Application for ${encodeURIComponent(job.title)}`
-    }
-    return `mailto:info@empoweredsportscamp.com?subject=Application for ${encodeURIComponent(job?.title || 'Position')}`
   }
 
   if (loading) {
@@ -261,39 +310,202 @@ export default function JobDetailPage() {
               <div className="sticky top-8 space-y-6">
                 {/* Apply card */}
                 <div className="p-6 bg-dark-100/50 border border-neon/20">
-                  <h3 className="text-lg font-bold text-white mb-4">
-                    Ready to Apply?
-                  </h3>
+                  {submitted ? (
+                    // Success state
+                    <div className="text-center py-4">
+                      <div className="mx-auto w-16 h-16 bg-neon/10 border border-neon/30 flex items-center justify-center mb-4">
+                        <CheckCircle className="h-8 w-8 text-neon" />
+                      </div>
+                      <h3 className="text-lg font-bold text-white mb-2">
+                        Application Submitted!
+                      </h3>
+                      <p className="text-sm text-white/60">
+                        Thank you for your interest. We&apos;ll review your application and be in touch soon.
+                      </p>
+                    </div>
+                  ) : showForm ? (
+                    // Application form
+                    <form onSubmit={handleSubmit} className="space-y-4">
+                      <h3 className="text-lg font-bold text-white mb-2">
+                        Apply for this Position
+                      </h3>
 
-                  {job.application_instructions && (
-                    <p className="text-sm text-white/60 mb-4">
-                      {job.application_instructions}
-                    </p>
-                  )}
+                      {formError && (
+                        <div className="p-3 bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
+                          {formError}
+                        </div>
+                      )}
 
-                  <a
-                    href={getApplicationUrl()}
-                    target={job.application_url ? '_blank' : undefined}
-                    rel={job.application_url ? 'noopener noreferrer' : undefined}
-                    className={buttonVariants({ variant: 'neon', size: 'lg', className: 'w-full justify-center' })}
-                  >
-                    {job.application_url ? (
-                      <>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-bold uppercase tracking-wider text-white/50 mb-1">
+                            First Name *
+                          </label>
+                          <Input
+                            type="text"
+                            required
+                            value={formData.firstName}
+                            onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                            placeholder="Jane"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold uppercase tracking-wider text-white/50 mb-1">
+                            Last Name *
+                          </label>
+                          <Input
+                            type="text"
+                            required
+                            value={formData.lastName}
+                            onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+                            placeholder="Doe"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-white/50 mb-1">
+                          Email *
+                        </label>
+                        <Input
+                          type="email"
+                          required
+                          value={formData.email}
+                          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                          placeholder="jane@example.com"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-white/50 mb-1">
+                          Phone
+                        </label>
+                        <Input
+                          type="tel"
+                          value={formData.phone}
+                          onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                          placeholder="(555) 123-4567"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-bold uppercase tracking-wider text-white/50 mb-1">
+                            City
+                          </label>
+                          <Input
+                            type="text"
+                            value={formData.city}
+                            onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                            placeholder="Columbus"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold uppercase tracking-wider text-white/50 mb-1">
+                            State
+                          </label>
+                          <select
+                            value={formData.state}
+                            onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                            className="w-full h-10 bg-dark-100 border border-white/10 text-white px-3 text-sm focus:border-neon focus:outline-none"
+                          >
+                            <option value="">Select...</option>
+                            {US_STATES.map((state) => (
+                              <option key={state} value={state}>{state}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-white/50 mb-1">
+                          LinkedIn URL
+                        </label>
+                        <Input
+                          type="url"
+                          value={formData.linkedinUrl}
+                          onChange={(e) => setFormData({ ...formData, linkedinUrl: e.target.value })}
+                          placeholder="https://linkedin.com/in/..."
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-white/50 mb-1">
+                          Cover Letter
+                        </label>
+                        <textarea
+                          value={formData.coverLetter}
+                          onChange={(e) => setFormData({ ...formData, coverLetter: e.target.value })}
+                          rows={4}
+                          placeholder="Tell us why you're interested in this position..."
+                          className="w-full bg-dark-100 border border-white/10 px-3 py-2 text-white placeholder:text-white/30 focus:border-neon focus:outline-none resize-none text-sm"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-white/50 mb-1">
+                          How did you hear about us?
+                        </label>
+                        <Input
+                          type="text"
+                          value={formData.howHeard}
+                          onChange={(e) => setFormData({ ...formData, howHeard: e.target.value })}
+                          placeholder="Social media, referral, etc."
+                        />
+                      </div>
+
+                      <div className="pt-2 space-y-2">
+                        <Button
+                          type="submit"
+                          variant="neon"
+                          className="w-full"
+                          disabled={submitting}
+                        >
+                          {submitting ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                              Submitting...
+                            </>
+                          ) : (
+                            'Submit Application'
+                          )}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          className="w-full text-white/60"
+                          onClick={() => setShowForm(false)}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </form>
+                  ) : (
+                    // Apply button
+                    <>
+                      <h3 className="text-lg font-bold text-white mb-4">
+                        Ready to Apply?
+                      </h3>
+
+                      {job.application_instructions && (
+                        <p className="text-sm text-white/60 mb-4">
+                          {job.application_instructions}
+                        </p>
+                      )}
+
+                      <Button
+                        variant="neon"
+                        size="lg"
+                        className="w-full"
+                        onClick={() => setShowForm(true)}
+                      >
                         Apply Now
-                        <ExternalLink className="h-4 w-4 ml-2" />
-                      </>
-                    ) : (
-                      <>
-                        <Mail className="h-4 w-4 mr-2" />
-                        Apply via Email
-                      </>
-                    )}
-                  </a>
+                      </Button>
 
-                  {!job.application_instructions && (
-                    <p className="text-xs text-white/40 mt-4 text-center">
-                      Include your resume and a brief note about why you&apos;re interested.
-                    </p>
+                      <p className="text-xs text-white/40 mt-4 text-center">
+                        Fill out a quick application form to get started.
+                      </p>
+                    </>
                   )}
                 </div>
 
