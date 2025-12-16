@@ -772,32 +772,34 @@ export async function updateGlobalSettings(params: {
       const existing = await prisma.setting.findFirst({
         where: {
           scope: 'GLOBAL',
+          tenantId: null,
           key: update.key,
         },
       })
 
-      // Upsert the setting
-      const upserted = await prisma.setting.upsert({
-        where: {
-          scope_tenantId_key: {
-            scope: 'GLOBAL',
-            tenantId: null as unknown as string, // Prisma quirk for nullable unique
-            key: update.key,
+      // Create or update the setting (upsert doesn't work well with nullable unique fields)
+      let upserted
+      if (existing) {
+        upserted = await prisma.setting.update({
+          where: { id: existing.id },
+          data: {
+            valueJson: update.value as Prisma.InputJsonValue,
+            updatedByUserId: actingUserId,
           },
-        },
-        create: {
-          scope: 'GLOBAL',
-          key: update.key,
-          valueJson: update.value as Prisma.InputJsonValue,
-          valueType: schema.valueType,
-          description: schema.description,
-          updatedByUserId: actingUserId,
-        },
-        update: {
-          valueJson: update.value as Prisma.InputJsonValue,
-          updatedByUserId: actingUserId,
-        },
-      })
+        })
+      } else {
+        upserted = await prisma.setting.create({
+          data: {
+            scope: 'GLOBAL',
+            tenantId: null,
+            key: update.key,
+            valueJson: update.value as Prisma.InputJsonValue,
+            valueType: schema.valueType,
+            description: schema.description,
+            updatedByUserId: actingUserId,
+          },
+        })
+      }
 
       // Create audit log
       await prisma.settingsAuditLog.create({
