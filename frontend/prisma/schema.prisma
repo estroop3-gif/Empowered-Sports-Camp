@@ -345,6 +345,9 @@ model Tenant {
   emailTemplates          EmailTemplate[]
   campDayRecaps           CampDayRecap[]
 
+  // Testimony relations
+  testimonies             Testimony[]
+
   @@map("tenants")
 }
 
@@ -448,6 +451,9 @@ model Camp {
   sessionSurveys             SessionSurvey[]
   sessionComplaints          SessionComplaint[]
 
+  // Testimony relations
+  testimonies                Testimony[]
+
   @@unique([tenantId, slug])
   @@index([tenantId])
   @@index([startDate, endDate])
@@ -507,6 +513,10 @@ model Profile {
   // Email system relations
   emailLogs                   EmailLog[]
   submittedCampDayRecaps      CampDayRecap[]
+
+  // Testimony relations
+  createdTestimonies          Testimony[]                @relation("TestimonyCreator")
+  reviewedTestimonies         Testimony[]                @relation("TestimonyReviewer")
 
   @@map("profiles")
 }
@@ -1581,6 +1591,84 @@ model ContactSubmission {
 }
 
 // ============================================================================
+// TESTIMONIES (Public Submissions & Admin Moderation)
+// ============================================================================
+
+enum TestimonyStatus {
+  pending_review
+  approved
+  rejected
+  archived
+}
+
+enum TestimonyRole {
+  parent
+  athlete
+  coach
+  licensee
+  cit
+  volunteer
+  other
+}
+
+enum TestimonySourceType {
+  submitted      // Public submission via website
+  imported       // Imported from external source
+  internal       // Created by admin
+}
+
+model Testimony {
+  id                  String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId            String?             @map("tenant_id") @db.Uuid
+
+  // Author info
+  authorName          String              @map("author_name")
+  authorEmail         String?             @map("author_email")
+  authorRole          TestimonyRole       @map("author_role")
+  authorRelationship  String?             @map("author_relationship") // e.g., "Parent of 10-year-old camper"
+
+  // Content
+  headline            String?             // Short summary/title
+  body                String              @db.Text
+  photoUrl            String?             @map("photo_url")
+  videoUrl            String?             @map("video_url")
+
+  // Optional camp/program association
+  campSessionId       String?             @map("camp_session_id") @db.Uuid
+  programType         String?             @map("program_type")
+
+  // Status & moderation
+  status              TestimonyStatus     @default(pending_review)
+  sourceType          TestimonySourceType @default(submitted) @map("source_type")
+  isFeatured          Boolean             @default(false) @map("is_featured")
+  displayOrder        Int?                @map("display_order")
+
+  // Review tracking
+  reviewNotes         String?             @map("review_notes") @db.Text
+  reviewedBy          String?             @map("reviewed_by") @db.Uuid
+  reviewedAt          DateTime?           @map("reviewed_at") @db.Timestamptz
+
+  // Submitter tracking (if logged in)
+  createdByUserId     String?             @map("created_by_user_id") @db.Uuid
+
+  createdAt           DateTime            @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt           DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  tenant              Tenant?             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  camp                Camp?               @relation(fields: [campSessionId], references: [id], onDelete: SetNull)
+  createdByUser       Profile?            @relation("TestimonyCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  reviewedByUser      Profile?            @relation("TestimonyReviewer", fields: [reviewedBy], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([status])
+  @@index([isFeatured])
+  @@index([createdAt])
+  @@index([authorRole])
+  @@map("testimonies")
+}
+
+// ============================================================================
 // LICENSEE APPLICATIONS (Franchise Inquiries)
 // ============================================================================
 
@@ -2449,6 +2537,10 @@ enum NotificationType {
   certification_approved
   certification_rejected
   certification_expiring
+  // Testimonies
+  testimony_submitted
+  testimony_approved
+  testimony_rejected
   // System
   system_alert
   welcome
@@ -2463,6 +2555,7 @@ enum NotificationCategory {
   incentive
   job
   certification
+  marketing
   system
 }
 

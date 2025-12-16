@@ -6,14 +6,45 @@ import { CampCard } from '@/components/camps/camp-card'
 import { CampFilters } from '@/components/camps/camp-filters'
 import { Zap, Crown, Loader2 } from 'lucide-react'
 import type { CampCardData } from '@/types'
-import {
-  fetchPublicCamps,
-  fetchCampCities,
-  fetchProgramTypes,
-  getProgramTypeLabel,
-  type PublicCampCard,
-  type CampFilters as CampFilterParams,
-} from '@/lib/services/camps'
+
+// Program type labels for UI display
+const PROGRAM_TYPE_LABELS: Record<string, string> = {
+  all_girls_sports_camp: 'All-Girls Sports Camp',
+  cit_program: 'CIT Program',
+  soccer_strength: 'Soccer & Strength',
+  basketball_intensive: 'Basketball Intensive',
+  volleyball_clinic: 'Volleyball Clinic',
+  specialty_camp: 'Specialty Camp',
+}
+
+function getProgramTypeLabel(programType: string): string {
+  return PROGRAM_TYPE_LABELS[programType] || programType
+}
+
+interface PublicCampCard {
+  id: string
+  slug: string
+  name: string
+  program_type: string
+  start_date: string
+  end_date: string
+  min_age: number
+  max_age: number
+  current_price: number
+  spots_remaining: number
+  image_url: string | null
+  location_name: string | null
+  city: string | null
+  state: string | null
+}
+
+interface CampFilterParams {
+  city?: string
+  program_type?: string
+  search?: string
+  min_age?: number
+  max_age?: number
+}
 
 // Transform PublicCampCard to CampCardData for the UI
 function transformToCampCard(camp: PublicCampCard): CampCardData {
@@ -62,16 +93,20 @@ function CampsContent() {
     if (!isNaN(maxAge)) filters.max_age = maxAge
   }
 
-  // Load filter options on mount
+  // Load filter options on mount via API
   useEffect(() => {
     async function loadFilterOptions() {
       try {
-        const [citiesData, typesData] = await Promise.all([
-          fetchCampCities(),
-          fetchProgramTypes(),
+        const [citiesRes, typesRes] = await Promise.all([
+          fetch('/api/camps?action=cities'),
+          fetch('/api/camps?action=programTypes'),
         ])
-        setLocations(citiesData)
-        setProgramTypes(typesData.map(t => getProgramTypeLabel(t)))
+        const [citiesJson, typesJson] = await Promise.all([
+          citiesRes.json(),
+          typesRes.json(),
+        ])
+        setLocations(citiesJson.data || [])
+        setProgramTypes((typesJson.data || []).map((t: string) => getProgramTypeLabel(t)))
       } catch (err) {
         console.error('Failed to load filter options:', err)
         // Use fallback values
@@ -82,21 +117,29 @@ function CampsContent() {
     loadFilterOptions()
   }, [])
 
-  // Load camps when filters change
+  // Load camps when filters change via API
   const loadCamps = useCallback(async () => {
     setLoading(true)
     setError(null)
 
     try {
-      const result = await fetchPublicCamps(filters, {
-        page: 1,
-        pageSize: 50,
-        orderBy: 'start_date',
-        ascending: true,
-      })
+      const params = new URLSearchParams({ action: 'list', perPage: '50' })
+      if (filters.city) params.set('city', filters.city)
+      if (filters.program_type) params.set('programType', filters.program_type)
+      if (filters.min_age) params.set('minAge', String(filters.min_age))
+      if (filters.max_age) params.set('maxAge', String(filters.max_age))
+      if (filters.search) params.set('search', filters.search)
 
-      setCamps(result.camps.map(transformToCampCard))
-      setTotalCamps(result.total)
+      const res = await fetch(`/api/camps?${params.toString()}`)
+      const json = await res.json()
+
+      if (json.error) {
+        throw new Error(json.error)
+      }
+
+      const result = json.data
+      setCamps((result.camps || []).map(transformToCampCard))
+      setTotalCamps(result.total || 0)
     } catch (err) {
       console.error('Failed to load camps:', err)
       setError('Failed to load camps. Please try again.')

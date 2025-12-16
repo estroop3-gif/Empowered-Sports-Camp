@@ -1496,3 +1496,113 @@ export async function sendWelcomeEmail(params: {
     tenantId: tenantId || '',
   }).catch((err) => console.error('[Notifications] Failed to send welcome email:', err))
 }
+
+// =============================================================================
+// Testimony Notification Helpers
+// =============================================================================
+
+/**
+ * Notify HQ admins when a new testimony is submitted
+ */
+export async function notifyTestimonySubmitted(
+  testimonyId: string,
+  authorName: string,
+  headline?: string
+): Promise<void> {
+  const { data: adminIds } = await getHqAdminUserIds()
+  if (!adminIds || adminIds.length === 0) return
+
+  await createNotificationsForUsers({
+    userIds: adminIds,
+    type: 'testimony_submitted',
+    category: 'marketing',
+    severity: 'info',
+    title: 'New Testimony Submitted',
+    body: headline
+      ? `${authorName} submitted a testimony: "${headline}"`
+      : `${authorName} submitted a new testimony for review.`,
+    actionUrl: `/admin/contact?tab=testimonies&id=${testimonyId}`,
+    data: { testimonyId, authorName, headline },
+  })
+}
+
+/**
+ * Notify submitter when their testimony is approved
+ */
+export async function notifyTestimonyApproved(
+  testimonyId: string,
+  authorName: string,
+  userId?: string,
+  authorEmail?: string
+): Promise<void> {
+  // Only notify if we have a user ID (logged-in submitter)
+  if (!userId) return
+
+  await createNotification({
+    userId,
+    type: 'testimony_approved',
+    category: 'marketing',
+    severity: 'success',
+    title: 'Testimony Approved!',
+    body: 'Your testimony has been approved and may now appear on our Testimonies page. Thank you for sharing your story!',
+    actionUrl: '/testimonies',
+    data: { testimonyId, authorName },
+  })
+
+  // Optionally send email if we have their email
+  if (authorEmail) {
+    sendTransactionalEmail({
+      templateCode: 'SYSTEM_ALERT',
+      to: authorEmail,
+      context: {
+        title: 'Testimony Approved',
+        message: 'Your testimony has been approved and may now appear on our Testimonies page. Thank you for sharing your experience with Empowered Sports Camp!',
+        authorName,
+      },
+      tenantId: '',
+    }).catch((err) => console.error('[Notifications] Failed to send testimony approval email:', err))
+  }
+}
+
+/**
+ * Notify submitter when their testimony is rejected
+ */
+export async function notifyTestimonyRejected(
+  testimonyId: string,
+  authorName: string,
+  userId?: string,
+  authorEmail?: string,
+  reviewNotes?: string
+): Promise<void> {
+  // Only notify if we have a user ID (logged-in submitter)
+  if (!userId) return
+
+  await createNotification({
+    userId,
+    type: 'testimony_rejected',
+    category: 'marketing',
+    severity: 'info',
+    title: 'Testimony Submission Update',
+    body: reviewNotes
+      ? `Thank you for sharing your story. ${reviewNotes}`
+      : 'Thank you for taking the time to share your experience. Unfortunately, we are unable to publish your submission at this time.',
+    actionUrl: '/testimonies/submit',
+    data: { testimonyId, authorName },
+  })
+
+  // Optionally send email if we have their email
+  if (authorEmail) {
+    sendTransactionalEmail({
+      templateCode: 'SYSTEM_ALERT',
+      to: authorEmail,
+      context: {
+        title: 'Testimony Submission Update',
+        message: reviewNotes
+          ? `Thank you for sharing your experience with Empowered Sports Camp. ${reviewNotes}`
+          : 'Thank you for taking the time to share your experience with Empowered Sports Camp. Unfortunately, we are unable to publish your submission at this time.',
+        authorName,
+      },
+      tenantId: '',
+    }).catch((err) => console.error('[Notifications] Failed to send testimony rejection email:', err))
+  }
+}
