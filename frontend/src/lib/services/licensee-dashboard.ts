@@ -497,14 +497,17 @@ export async function getLicenseeQualityKpis(params: {
  * Get camps list for a licensee
  */
 export async function getLicenseeCamps(params: {
-  tenantId: string
+  tenantId?: string  // Optional - if undefined, returns all camps (for HQ admin)
   status?: string
   limit?: number
 }): Promise<{ data: LicenseeCampSummary[] | null; error: Error | null }> {
   try {
     const now = new Date()
-    const whereClause: Prisma.CampWhereInput = {
-      tenantId: params.tenantId,
+    const whereClause: Prisma.CampWhereInput = {}
+
+    // Filter by tenant if provided (HQ admins may not have a tenantId)
+    if (params.tenantId) {
+      whereClause.tenantId = params.tenantId
     }
 
     if (params.status === 'active') {

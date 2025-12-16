@@ -22,7 +22,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    if (!user.tenantId) {
+    // HQ admins can see all camps (no tenantId filter)
+    // Licensee owners must have a tenantId
+    const isHqAdmin = userRole === 'hq_admin'
+    if (!isHqAdmin && !user.tenantId) {
       return NextResponse.json({ error: 'No tenant associated with user' }, { status: 400 })
     }
 
@@ -32,7 +35,7 @@ export async function GET(request: NextRequest) {
       : undefined
 
     const { data, error } = await getLicenseeCamps({
-      tenantId: user.tenantId,
+      tenantId: isHqAdmin ? undefined : user.tenantId!, // HQ admin sees all, licensee sees own
       status,
       limit,
     })

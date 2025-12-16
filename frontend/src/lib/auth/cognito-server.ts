@@ -105,6 +105,7 @@ export async function getAuthenticatedUserFromRequest(
   // Try Authorization header first
   const authHeader = request.headers.get('Authorization')
   if (authHeader?.startsWith('Bearer ')) {
+    console.log('[auth] Found Authorization header')
     const token = authHeader.substring(7)
     user = await verifyToken(token)
   }
@@ -112,19 +113,26 @@ export async function getAuthenticatedUserFromRequest(
   // Fall back to cookie
   if (!user) {
     const cookieHeader = request.headers.get('cookie')
+    console.log('[auth] Checking cookies, header present:', !!cookieHeader)
     if (cookieHeader) {
       const cookies = Object.fromEntries(
-        cookieHeader.split('; ').map((c) => c.split('='))
+        cookieHeader.split('; ').map((c) => {
+          const [key, ...rest] = c.split('=')
+          return [key, rest.join('=')]
+        })
       )
       const token = cookies['id_token']
+      console.log('[auth] id_token cookie present:', !!token)
       if (token) {
         user = await verifyToken(token)
+        console.log('[auth] Token verification result:', user ? 'success' : 'failed')
       }
     }
   }
 
   // If user is authenticated, look up their role from the database
   if (user) {
+    console.log('[auth] User authenticated, email:', user.email)
     try {
       const { default: prisma } = await import('@/lib/db/client')
 
@@ -132,6 +140,7 @@ export async function getAuthenticatedUserFromRequest(
       const profile = await prisma.profile.findFirst({
         where: { email: user.email },
       })
+      console.log('[auth] Profile lookup result:', profile?.id || 'not found')
 
       if (profile) {
         // Get active role assignment
@@ -141,6 +150,7 @@ export async function getAuthenticatedUserFromRequest(
             isActive: true,
           },
         })
+        console.log('[auth] Role assignment:', roleAssignment?.role || 'not found')
 
         if (roleAssignment) {
           user.role = roleAssignment.role
@@ -154,6 +164,8 @@ export async function getAuthenticatedUserFromRequest(
       console.error('Error looking up user role from database:', error)
       // Continue with Cognito role if database lookup fails
     }
+  } else {
+    console.log('[auth] No user authenticated')
   }
 
   return user

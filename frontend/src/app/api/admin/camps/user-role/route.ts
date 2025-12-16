@@ -12,13 +12,19 @@ import { getAuthenticatedUserFromRequest } from '@/lib/auth/cognito-server'
 
 export async function GET(request: NextRequest) {
   try {
+    console.log('[user-role] Starting auth check...')
     const user = await getAuthenticatedUserFromRequest(request)
+
     if (!user) {
+      console.log('[user-role] No user returned from auth')
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    console.log('[user-role] User found:', { id: user.id, email: user.email, role: user.role })
+
     // Role is already looked up from database in getAuthenticatedUserFromRequest
     if (!user.role) {
+      console.log('[user-role] User has no role assigned')
       return NextResponse.json({ error: 'No role assigned' }, { status: 403 })
     }
 
