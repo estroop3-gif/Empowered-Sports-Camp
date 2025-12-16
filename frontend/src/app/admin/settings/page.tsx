@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { AdminLayout, PageHeader, ContentCard } from '@/components/admin/admin-layout'
 import { useAuth } from '@/lib/auth/context'
 import {
@@ -10,73 +10,409 @@ import {
   Mail,
   Bell,
   Shield,
-  Globe,
-  Palette,
   Users,
-  Key,
   Save,
   Check,
+  Loader2,
+  AlertCircle,
+  RefreshCw,
+  Code,
+  FlaskConical,
+  Upload,
+  FileText,
+  Heart,
+  Globe,
+  Palette,
+  ChevronDown,
+  RotateCcw,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
+import { DeveloperModeBanner } from '@/components/admin/DeveloperModeBanner'
 
 /**
  * Admin Settings Page
  *
- * Global system settings for HQ admins
+ * Fully functional settings management for HQ admins.
+ * Supports global settings and tenant-specific overrides.
  */
 
+interface SettingSchema {
+  key: string
+  category: string
+  label: string
+  description: string
+  valueType: 'STRING' | 'NUMBER' | 'BOOLEAN' | 'JSON'
+  default: unknown
+  tenantOverridable: boolean
+}
+
+interface Tenant {
+  id: string
+  name: string
+  slug: string
+}
+
 const SETTINGS_SECTIONS = [
-  { id: 'organization', label: 'Organization', icon: Building2 },
-  { id: 'payments', label: 'Payments', icon: CreditCard },
-  { id: 'email', label: 'Email', icon: Mail },
-  { id: 'notifications', label: 'Notifications', icon: Bell },
-  { id: 'security', label: 'Security', icon: Shield },
-  { id: 'branding', label: 'Branding', icon: Palette },
+  { id: 'platform', label: 'Platform', icon: Globe, accent: 'neon' },
+  { id: 'camps', label: 'Camps & Registration', icon: Users, accent: 'magenta' },
+  { id: 'friendPairing', label: 'Friend Pairing', icon: Heart, accent: 'purple' },
+  { id: 'notifications', label: 'Notifications', icon: Bell, accent: 'neon' },
+  { id: 'storage', label: 'Storage & Media', icon: Upload, accent: 'magenta' },
+  { id: 'payments', label: 'Payments', icon: CreditCard, accent: 'purple' },
+  { id: 'developer', label: 'Developer Mode', icon: Code, accent: 'amber' },
 ]
 
 export default function AdminSettingsPage() {
   const { user } = useAuth()
-  const [activeSection, setActiveSection] = useState('organization')
+  const [activeSection, setActiveSection] = useState('platform')
+  const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState(false)
+
+  // Settings state
+  const [settings, setSettings] = useState<Record<string, unknown>>({})
+  const [schema, setSchema] = useState<Record<string, SettingSchema>>({})
+  const [pendingChanges, setPendingChanges] = useState<Record<string, unknown>>({})
+
+  // Tenant override mode
+  const [tenantMode, setTenantMode] = useState(false)
+  const [selectedTenant, setSelectedTenant] = useState<Tenant | null>(null)
+  const [tenants, setTenants] = useState<Tenant[]>([])
+  const [tenantOverrides, setTenantOverrides] = useState<Set<string>>(new Set())
 
   const userName = user?.firstName || user?.email?.split('@')[0] || 'Admin'
 
+  // Load settings
+  const loadSettings = useCallback(async () => {
+    try {
+      setLoading(true)
+      setError(null)
+
+      const scope = tenantMode && selectedTenant ? 'effective' : 'global'
+      const tenantParam = selectedTenant ? `&tenantId=${selectedTenant.id}` : ''
+
+      const res = await fetch(`/api/admin/settings?scope=${scope}${tenantParam}&schema=true`)
+      const json = await res.json()
+
+      if (!res.ok) {
+        throw new Error(json.error || 'Failed to load settings')
+      }
+
+      setSettings(json.data.settings || {})
+      if (json.schema) {
+        setSchema(json.schema)
+      }
+
+      // Load tenant overrides if in tenant mode
+      if (tenantMode && selectedTenant) {
+        const overridesRes = await fetch(`/api/admin/settings?scope=tenant&tenantId=${selectedTenant.id}`)
+        const overridesJson = await overridesRes.json()
+        if (overridesRes.ok && overridesJson.data.settings) {
+          const overrideKeys = new Set<string>(overridesJson.data.settings.map((s: { key: string }) => s.key))
+          setTenantOverrides(overrideKeys)
+        }
+      }
+
+      setPendingChanges({})
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong')
+    } finally {
+      setLoading(false)
+    }
+  }, [tenantMode, selectedTenant])
+
+  // Load tenants for dropdown
+  const loadTenants = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/tenants')
+      if (res.ok) {
+        const json = await res.json()
+        setTenants(json.data || [])
+      }
+    } catch {
+      // Silently fail, tenants dropdown will be empty
+    }
+  }, [])
+
+  useEffect(() => {
+    loadSettings()
+    loadTenants()
+  }, [loadSettings, loadTenants])
+
+  // Handle setting change
+  const handleSettingChange = (key: string, value: unknown) => {
+    setPendingChanges((prev) => ({
+      ...prev,
+      [key]: value,
+    }))
+    setSettings((prev) => ({
+      ...prev,
+      [key]: value,
+    }))
+  }
+
+  // Save settings
   const handleSave = async () => {
+    if (Object.keys(pendingChanges).length === 0) return
+
     setSaving(true)
-    // Simulate save
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    setSaving(false)
+    setError(null)
+    setSuccess(false)
+
+    try {
+      const updates = Object.entries(pendingChanges).map(([key, value]) => ({
+        key,
+        value,
+      }))
+
+      const scope = tenantMode && selectedTenant ? 'tenant' : 'global'
+      const tenantParam = selectedTenant ? `&tenantId=${selectedTenant.id}` : ''
+
+      const res = await fetch(`/api/admin/settings?scope=${scope}${tenantParam}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ updates }),
+      })
+
+      const json = await res.json()
+
+      if (!res.ok) {
+        throw new Error(json.error || 'Failed to save settings')
+      }
+
+      setPendingChanges({})
+      setSuccess(true)
+      setTimeout(() => setSuccess(false), 3000)
+
+      // Reload to get fresh data
+      await loadSettings()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Get effective value for a setting
+  const getValue = (key: string) => {
+    if (key in pendingChanges) return pendingChanges[key]
+    if (key in settings) return settings[key]
+    return schema[key]?.default ?? ''
+  }
+
+  // Render a setting field based on its type
+  const renderSettingField = (key: string, settingSchema: SettingSchema) => {
+    const value = getValue(key)
+    const isOverridden = tenantMode && tenantOverrides.has(key)
+    const canOverride = tenantMode && settingSchema.tenantOverridable
+
+    if (tenantMode && !settingSchema.tenantOverridable) {
+      return (
+        <div className="opacity-50">
+          <div className="text-xs text-white/40 mb-1">Global only (cannot be overridden)</div>
+          <div className="px-4 py-3 bg-black/30 border border-white/10 text-white/50">
+            {String(value)}
+          </div>
+        </div>
+      )
+    }
+
+    const fieldContent = (() => {
+      switch (settingSchema.valueType) {
+        case 'BOOLEAN':
+          return (
+            <button
+              onClick={() => handleSettingChange(key, !value)}
+              className={cn(
+                'relative h-7 w-14 rounded-full transition-colors',
+                value ? 'bg-neon' : 'bg-white/20'
+              )}
+            >
+              <span
+                className={cn(
+                  'absolute top-1 h-5 w-5 bg-white rounded-full transition-transform',
+                  value ? 'left-8' : 'left-1'
+                )}
+              />
+            </button>
+          )
+
+        case 'NUMBER':
+          return (
+            <Input
+              type="number"
+              value={value as number}
+              onChange={(e) => handleSettingChange(key, parseFloat(e.target.value) || 0)}
+              className="max-w-48"
+            />
+          )
+
+        case 'JSON':
+          return (
+            <textarea
+              value={typeof value === 'string' ? value : JSON.stringify(value, null, 2)}
+              onChange={(e) => {
+                try {
+                  const parsed = JSON.parse(e.target.value)
+                  handleSettingChange(key, parsed)
+                } catch {
+                  // Keep as string if invalid JSON
+                }
+              }}
+              className="w-full bg-black border border-white/20 text-white px-4 py-3 focus:border-neon focus:outline-none font-mono text-sm min-h-24"
+            />
+          )
+
+        default: // STRING
+          return (
+            <Input
+              type="text"
+              value={value as string}
+              onChange={(e) => handleSettingChange(key, e.target.value)}
+            />
+          )
+      }
+    })()
+
+    return (
+      <div>
+        {isOverridden && (
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-xs text-purple font-bold uppercase">Tenant Override Active</span>
+            <button
+              onClick={async () => {
+                await fetch(`/api/admin/settings?scope=tenant&tenantId=${selectedTenant?.id}&key=${key}`, {
+                  method: 'DELETE',
+                })
+                await loadSettings()
+              }}
+              className="text-xs text-white/50 hover:text-white underline"
+            >
+              Reset to global
+            </button>
+          </div>
+        )}
+        {fieldContent}
+      </div>
+    )
+  }
+
+  // Filter settings by category
+  const getSettingsForCategory = (category: string) => {
+    return Object.entries(schema).filter(([_, s]) => s.category === category)
+  }
+
+  if (loading) {
+    return (
+      <AdminLayout userRole="hq_admin" userName={userName}>
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <Loader2 className="h-12 w-12 text-neon animate-spin" />
+        </div>
+      </AdminLayout>
+    )
   }
 
   return (
-    <AdminLayout
-      userRole="hq_admin"
-      userName={userName}
-    >
+    <AdminLayout userRole="hq_admin" userName={userName}>
+      <DeveloperModeBanner />
+
       <PageHeader
         title="Settings"
-        description="Configure global system settings"
+        description="Configure global system settings and tenant overrides"
         breadcrumbs={[
           { label: 'Admin', href: '/admin' },
           { label: 'Settings' },
         ]}
       >
-        <Button variant="neon" onClick={handleSave} disabled={saving}>
-          {saving ? (
-            <>
-              <span className="animate-spin mr-2">...</span>
-              Saving...
-            </>
-          ) : (
-            <>
-              <Save className="h-4 w-4 mr-2" />
-              Save Changes
-            </>
-          )}
-        </Button>
+        <div className="flex items-center gap-4">
+          {/* Tenant Mode Toggle */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                setTenantMode(!tenantMode)
+                if (!tenantMode) {
+                  setSelectedTenant(null)
+                }
+              }}
+              className={cn(
+                'px-3 py-1.5 text-xs font-bold uppercase tracking-wider border transition-colors',
+                tenantMode
+                  ? 'bg-purple/20 border-purple text-purple'
+                  : 'border-white/30 text-white/60 hover:border-white/50'
+              )}
+            >
+              {tenantMode ? 'Tenant Mode' : 'Global Mode'}
+            </button>
+
+            {tenantMode && (
+              <select
+                value={selectedTenant?.id || ''}
+                onChange={(e) => {
+                  const tenant = tenants.find((t) => t.id === e.target.value)
+                  setSelectedTenant(tenant || null)
+                }}
+                className="bg-black border border-white/20 text-white px-3 py-1.5 text-sm focus:border-neon focus:outline-none"
+              >
+                <option value="">Select Tenant...</option>
+                {tenants.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          {/* Save Button */}
+          <Button
+            variant="neon"
+            onClick={handleSave}
+            disabled={saving || Object.keys(pendingChanges).length === 0}
+          >
+            {saving ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Saving...
+              </>
+            ) : success ? (
+              <>
+                <Check className="h-4 w-4 mr-2" />
+                Saved!
+              </>
+            ) : (
+              <>
+                <Save className="h-4 w-4 mr-2" />
+                Save Changes
+                {Object.keys(pendingChanges).length > 0 && (
+                  <span className="ml-2 px-1.5 py-0.5 bg-black/30 text-xs rounded">
+                    {Object.keys(pendingChanges).length}
+                  </span>
+                )}
+              </>
+            )}
+          </Button>
+        </div>
       </PageHeader>
+
+      {error && (
+        <div className="mb-6 p-4 bg-magenta/10 border border-magenta/30 flex items-center gap-3">
+          <AlertCircle className="h-5 w-5 text-magenta" />
+          <span className="text-white">{error}</span>
+          <button onClick={loadSettings} className="ml-auto text-neon hover:underline text-sm">
+            Retry
+          </button>
+        </div>
+      )}
+
+      {tenantMode && !selectedTenant && (
+        <div className="mb-6 p-4 bg-purple/10 border border-purple/30 flex items-center gap-3">
+          <Users className="h-5 w-5 text-purple" />
+          <span className="text-white">Select a tenant to view and edit their settings overrides.</span>
+        </div>
+      )}
 
       <div className="grid gap-8 lg:grid-cols-4">
         {/* Settings Navigation */}
@@ -84,277 +420,135 @@ export default function AdminSettingsPage() {
           <nav className="space-y-1">
             {SETTINGS_SECTIONS.map((section) => {
               const Icon = section.icon
+              const settingsInSection = getSettingsForCategory(section.id)
+              const changesInSection = settingsInSection.filter(([key]) => key in pendingChanges)
+
               return (
                 <button
                   key={section.id}
                   onClick={() => setActiveSection(section.id)}
                   className={cn(
-                    'flex items-center gap-3 w-full px-4 py-3 text-left text-sm font-semibold uppercase tracking-wider transition-all',
+                    'flex items-center justify-between w-full px-4 py-3 text-left text-sm font-semibold uppercase tracking-wider transition-all',
                     activeSection === section.id
                       ? 'bg-neon/10 text-neon border-l-2 border-neon'
                       : 'text-white/60 hover:text-white hover:bg-white/5'
                   )}
                 >
-                  <Icon className="h-5 w-5" />
-                  {section.label}
+                  <span className="flex items-center gap-3">
+                    <Icon className="h-5 w-5" />
+                    {section.label}
+                  </span>
+                  {changesInSection.length > 0 && (
+                    <span className="px-1.5 py-0.5 bg-neon/20 text-neon text-xs rounded">
+                      {changesInSection.length}
+                    </span>
+                  )}
                 </button>
               )
             })}
           </nav>
+
+          {/* Pending Changes Summary */}
+          {Object.keys(pendingChanges).length > 0 && (
+            <div className="mt-6 p-4 bg-neon/5 border border-neon/30">
+              <p className="text-xs font-bold uppercase tracking-wider text-neon mb-2">
+                Unsaved Changes
+              </p>
+              <ul className="text-xs text-white/60 space-y-1">
+                {Object.keys(pendingChanges).map((key) => (
+                  <li key={key} className="flex items-center gap-2">
+                    <span className="w-2 h-2 bg-neon rounded-full" />
+                    {schema[key]?.label || key}
+                  </li>
+                ))}
+              </ul>
+              <button
+                onClick={() => {
+                  setPendingChanges({})
+                  loadSettings()
+                }}
+                className="mt-3 text-xs text-white/50 hover:text-white flex items-center gap-1"
+              >
+                <RotateCcw className="h-3 w-3" />
+                Discard changes
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Settings Content */}
         <div className="lg:col-span-3 space-y-6">
-          {activeSection === 'organization' && (
-            <ContentCard title="Organization Settings" accent="neon">
-              <div className="space-y-6">
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-white/50 mb-2">
-                    Organization Name
-                  </label>
-                  <Input
-                    type="text"
-                    defaultValue="Empowered Sports Camp"
-                    placeholder="Your organization name"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-white/50 mb-2">
-                    Primary Contact Email
-                  </label>
-                  <Input
-                    type="email"
-                    defaultValue=""
-                    placeholder="contact@example.com"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-white/50 mb-2">
-                    Support Phone
-                  </label>
-                  <Input
-                    type="tel"
-                    defaultValue=""
-                    placeholder="(555) 123-4567"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-white/50 mb-2">
-                    Website URL
-                  </label>
-                  <Input
-                    type="url"
-                    defaultValue=""
-                    placeholder="https://www.example.com"
-                  />
-                </div>
-              </div>
-            </ContentCard>
-          )}
+          {SETTINGS_SECTIONS.map((section) => {
+            if (activeSection !== section.id) return null
 
-          {activeSection === 'payments' && (
-            <ContentCard title="Payment Settings" accent="magenta">
-              <div className="space-y-6">
-                <div className="p-4 bg-magenta/5 border border-magenta/30">
-                  <div className="flex items-center gap-3">
-                    <CreditCard className="h-5 w-5 text-magenta" />
-                    <div>
-                      <p className="font-bold text-white">Stripe Integration</p>
-                      <p className="text-xs text-white/40">Connect your Stripe account to process payments</p>
-                    </div>
+            const sectionSettings = getSettingsForCategory(section.id)
+
+            return (
+              <ContentCard
+                key={section.id}
+                title={section.label + ' Settings'}
+                accent={section.accent as 'neon' | 'magenta' | 'purple'}
+              >
+                <div className="space-y-8">
+                  {sectionSettings.length === 0 ? (
+                    <p className="text-white/40 text-sm">No settings in this category.</p>
+                  ) : (
+                    sectionSettings.map(([key, settingSchema]) => (
+                      <div key={key} className="space-y-2">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <label className="block text-sm font-bold uppercase tracking-wider text-white mb-1">
+                              {settingSchema.label}
+                            </label>
+                            <p className="text-xs text-white/40 mb-2">
+                              {settingSchema.description}
+                            </p>
+                          </div>
+                          {settingSchema.tenantOverridable && (
+                            <span className="text-xs text-purple/60 uppercase">
+                              Tenant Override OK
+                            </span>
+                          )}
+                        </div>
+                        {renderSettingField(key, settingSchema)}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </ContentCard>
+            )
+          })}
+
+          {/* Developer Mode Special Section */}
+          {activeSection === 'developer' && (
+            <ContentCard title="Developer Mode" accent="neon">
+              <div className="p-4 bg-amber-500/10 border border-amber-500/30 mb-6">
+                <div className="flex items-center gap-3">
+                  <FlaskConical className="h-6 w-6 text-amber-400" />
+                  <div>
+                    <p className="font-bold text-amber-200">Warning: Developer Mode</p>
+                    <p className="text-xs text-amber-200/60">
+                      When enabled, all Stripe payments will be simulated. No real charges will occur.
+                      The platform will behave as if payments are processed, but no money will move.
+                    </p>
                   </div>
-                  <Button variant="outline-neon" size="sm" className="mt-4">
-                    Configure Stripe
-                  </Button>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-white/50 mb-2">
-                    Default Royalty Rate (%)
-                  </label>
-                  <Input
-                    type="number"
-                    defaultValue="10"
-                    min="0"
-                    max="100"
-                    placeholder="10"
-                  />
-                  <p className="text-xs text-white/30 mt-1">Percentage of registration fees collected as royalty</p>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-white/50 mb-2">
-                    Currency
-                  </label>
-                  <select className="w-full bg-black border border-white/20 text-white px-4 py-3 focus:border-neon focus:outline-none">
-                    <option value="USD">USD - US Dollar</option>
-                    <option value="CAD">CAD - Canadian Dollar</option>
-                  </select>
                 </div>
               </div>
-            </ContentCard>
-          )}
 
-          {activeSection === 'email' && (
-            <ContentCard title="Email Settings" accent="purple">
-              <div className="space-y-6">
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-white/50 mb-2">
-                    From Email Address
-                  </label>
-                  <Input
-                    type="email"
-                    defaultValue=""
-                    placeholder="noreply@example.com"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-white/50 mb-2">
-                    From Name
-                  </label>
-                  <Input
-                    type="text"
-                    defaultValue="Empowered Sports Camp"
-                    placeholder="Your organization name"
-                  />
-                </div>
-                <div className="p-4 bg-white/5 border border-white/10">
-                  <p className="text-sm text-white/60">
-                    Email templates can be customized in the AWS Cognito console under User Pool → Messaging.
-                  </p>
-                </div>
-              </div>
-            </ContentCard>
-          )}
-
-          {activeSection === 'notifications' && (
-            <ContentCard title="Notification Settings" accent="neon">
-              <div className="space-y-4">
-                {[
-                  { label: 'New registration alerts', description: 'Get notified when a new registration is made', enabled: true },
-                  { label: 'Payment received', description: 'Get notified when payments are processed', enabled: true },
-                  { label: 'New licensee signup', description: 'Get notified when a new licensee joins', enabled: true },
-                  { label: 'Low enrollment warnings', description: 'Get notified when camp enrollment is low', enabled: false },
-                  { label: 'Daily summary', description: 'Receive a daily summary of activity', enabled: false },
-                ].map((item, index) => (
-                  <div key={index} className="flex items-center justify-between p-4 bg-black/50 border border-white/10">
+              <div className="space-y-8">
+                {getSettingsForCategory('developer').map(([key, settingSchema]) => (
+                  <div key={key} className="space-y-2">
                     <div>
-                      <p className="font-semibold text-white">{item.label}</p>
-                      <p className="text-xs text-white/40">{item.description}</p>
+                      <label className="block text-sm font-bold uppercase tracking-wider text-white mb-1">
+                        {settingSchema.label}
+                      </label>
+                      <p className="text-xs text-white/40 mb-2">
+                        {settingSchema.description}
+                      </p>
                     </div>
-                    <button
-                      className={cn(
-                        'relative h-6 w-11 rounded-full transition-colors',
-                        item.enabled ? 'bg-neon' : 'bg-white/20'
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          'absolute top-1 h-4 w-4 bg-white rounded-full transition-transform',
-                          item.enabled ? 'left-6' : 'left-1'
-                        )}
-                      />
-                    </button>
+                    {renderSettingField(key, settingSchema)}
                   </div>
                 ))}
-              </div>
-            </ContentCard>
-          )}
-
-          {activeSection === 'security' && (
-            <ContentCard title="Security Settings" accent="magenta">
-              <div className="space-y-6">
-                <div className="p-4 bg-neon/5 border border-neon/30">
-                  <div className="flex items-center gap-3">
-                    <Shield className="h-5 w-5 text-neon" />
-                    <div>
-                      <p className="font-bold text-white">Two-Factor Authentication</p>
-                      <p className="text-xs text-white/40">Add an extra layer of security to admin accounts</p>
-                    </div>
-                  </div>
-                  <Button variant="outline-neon" size="sm" className="mt-4">
-                    Configure 2FA
-                  </Button>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-white/50 mb-2">
-                    Session Timeout (minutes)
-                  </label>
-                  <Input
-                    type="number"
-                    defaultValue="60"
-                    min="5"
-                    max="480"
-                    placeholder="60"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-white/50 mb-2">
-                    Password Requirements
-                  </label>
-                  <div className="space-y-2 text-sm text-white/60">
-                    <div className="flex items-center gap-2">
-                      <Check className="h-4 w-4 text-neon" />
-                      Minimum 8 characters
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Check className="h-4 w-4 text-neon" />
-                      At least one uppercase letter
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Check className="h-4 w-4 text-neon" />
-                      At least one number
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </ContentCard>
-          )}
-
-          {activeSection === 'branding' && (
-            <ContentCard title="Branding Settings" accent="purple">
-              <div className="space-y-6">
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-white/50 mb-2">
-                    Logo
-                  </label>
-                  <div className="flex items-center gap-4">
-                    <div className="h-20 w-20 bg-white/5 border border-white/10 flex items-center justify-center">
-                      <Palette className="h-8 w-8 text-white/20" />
-                    </div>
-                    <Button variant="outline-neon" size="sm">
-                      Upload Logo
-                    </Button>
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-white/50 mb-2">
-                    Primary Color
-                  </label>
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 bg-neon border border-white/20" />
-                    <Input
-                      type="text"
-                      defaultValue="#39FF14"
-                      placeholder="#39FF14"
-                      className="max-w-32"
-                    />
-                    <span className="text-xs text-white/40">Neon Green (default)</span>
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-white/50 mb-2">
-                    Accent Color
-                  </label>
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 bg-magenta border border-white/20" />
-                    <Input
-                      type="text"
-                      defaultValue="#FF0080"
-                      placeholder="#FF0080"
-                      className="max-w-32"
-                    />
-                    <span className="text-xs text-white/40">Magenta (default)</span>
-                  </div>
-                </div>
               </div>
             </ContentCard>
           )}

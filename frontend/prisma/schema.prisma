@@ -65,6 +65,7 @@ model Tenant {
   venues                   Venue[]
   volunteerCertifications  VolunteerCertification[]
   athletes                 Athlete[]
+  settings                 Setting[]
 
   @@map("tenants")
 }
@@ -247,6 +248,8 @@ model Profile {
   certificationsReviewed        VolunteerCertification[]      @relation("Reviewer")
   createdSquads                 CampFriendSquad[]             @relation("SquadCreator")
   squadMemberships              CampFriendSquadMember[]       @relation("SquadMemberParent")
+  settingsUpdated               Setting[]                     @relation("SettingsUpdatedBy")
+  settingsAuditLogs             SettingsAuditLog[]            @relation("SettingsAuditChangedBy")
 
   @@map("profiles")
 }
@@ -2685,4 +2688,69 @@ enum FacilityType {
   community_center
   recreation_center
   other
+}
+
+// =============================================================================
+// SETTINGS SYSTEM
+// =============================================================================
+
+enum SettingScope {
+  GLOBAL
+  TENANT
+}
+
+enum SettingValueType {
+  STRING
+  NUMBER
+  BOOLEAN
+  JSON
+}
+
+enum SettingAuditSource {
+  ADMIN_UI
+  LICENSEE_UI
+  API
+  SYSTEM
+}
+
+model Setting {
+  id            String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  scope         SettingScope     @default(GLOBAL)
+  tenantId      String?          @map("tenant_id") @db.Uuid
+  key           String
+  valueJson     Json             @default("null") @map("value_json")
+  valueType     SettingValueType @default(STRING) @map("value_type")
+  description   String?
+  updatedAt     DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedByUserId String?        @map("updated_by_user_id") @db.Uuid
+  createdAt     DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenant        Tenant?          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  updatedByUser Profile?         @relation("SettingsUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+  auditLogs     SettingsAuditLog[]
+
+  @@unique([scope, tenantId, key])
+  @@index([tenantId, key])
+  @@index([key])
+  @@map("settings")
+}
+
+model SettingsAuditLog {
+  id              String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  settingId       String?            @map("setting_id") @db.Uuid
+  scope           SettingScope
+  tenantId        String?            @map("tenant_id") @db.Uuid
+  key             String
+  oldValueJson    Json?              @map("old_value_json")
+  newValueJson    Json               @map("new_value_json")
+  changedAt       DateTime           @default(now()) @map("changed_at") @db.Timestamptz(6)
+  changedByUserId String?            @map("changed_by_user_id") @db.Uuid
+  source          SettingAuditSource @default(ADMIN_UI)
+  setting         Setting?           @relation(fields: [settingId], references: [id], onDelete: SetNull)
+  changedByUser   Profile?           @relation("SettingsAuditChangedBy", fields: [changedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([settingId])
+  @@index([tenantId])
+  @@index([key])
+  @@index([changedAt])
+  @@map("settings_audit_logs")
 }
