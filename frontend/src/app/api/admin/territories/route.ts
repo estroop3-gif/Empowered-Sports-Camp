@@ -62,12 +62,15 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const user = await getAuthUserFromRequest(request)
+    console.log('[API] Territory POST - user:', user ? { id: user.id, email: user.email, role: user.role } : null)
+
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     if (user.role !== 'hq_admin') {
-      return NextResponse.json({ error: 'Forbidden - HQ admin only' }, { status: 403 })
+      console.log('[API] Territory POST - role check failed, got:', user.role)
+      return NextResponse.json({ error: `Forbidden - HQ admin only (got role: ${user.role})` }, { status: 403 })
     }
 
     const body = await request.json()
