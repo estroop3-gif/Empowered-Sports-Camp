@@ -101,12 +101,13 @@ export default function CampCreateSchedulePage() {
   async function loadScheduleTemplates() {
     setLoadingTemplates(true)
     try {
-      const response = await fetch('/api/schedule/templates')
+      const response = await fetch('/api/schedule-templates')
       if (response.ok) {
-        const data = await response.json()
-        setScheduleTemplates(data.templates || [])
+        const result = await response.json()
+        const templates = result.data || result.templates || []
+        setScheduleTemplates(templates)
         // Auto-select default template if available
-        const defaultTemplate = data.templates?.find((t: ScheduleTemplate) => t.isDefault)
+        const defaultTemplate = templates.find((t: ScheduleTemplate) => t.isDefault)
         if (defaultTemplate) {
           setSelectedTemplateId(defaultTemplate.id)
         }
@@ -175,7 +176,7 @@ export default function CampCreateSchedulePage() {
       // Apply schedule template if selected
       if (selectedTemplateId) {
         try {
-          await fetch(`/api/camps/${campId}/schedule/apply-template`, {
+          await fetch(`/api/camps/${campId}/hq/schedule/apply-template`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ templateId: selectedTemplateId }),

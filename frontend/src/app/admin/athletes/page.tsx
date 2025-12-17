@@ -99,14 +99,6 @@ export default function AdminAthletesPage() {
 
   const userName = user?.firstName || user?.email?.split('@')[0] || 'Admin'
 
-  useEffect(() => {
-    loadInitialData()
-  }, [])
-
-  useEffect(() => {
-    loadAthletes()
-  }, [page, genderFilter, tenantFilter, gradeFilter, activeFilter, riskFilter])
-
   const loadInitialData = async () => {
     // Load tenants, grades, and stats in parallel
     try {
@@ -160,6 +152,14 @@ export default function AdminAthletesPage() {
     }
     setLoading(false)
   }
+
+  useEffect(() => {
+    loadInitialData()
+  }, [])
+
+  useEffect(() => {
+    loadAthletes()
+  }, [page, genderFilter, tenantFilter, gradeFilter, activeFilter, riskFilter])
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
