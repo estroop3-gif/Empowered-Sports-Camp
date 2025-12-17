@@ -14,6 +14,11 @@ export interface KpiCardProps {
   variant?: 'default' | 'neon' | 'magenta' | 'purple'
   icon?: React.ElementType
   format?: 'currency' | 'percentage' | 'number' | 'decimal'
+  bonus?: {
+    amount: number
+    label: string
+    eligible: boolean
+  }
 }
 
 function formatValue(value: string | number, format?: string): string {
@@ -37,6 +42,15 @@ function formatValue(value: string | number, format?: string): string {
   }
 }
 
+function formatCurrency(value: number): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(value)
+}
+
 export function KpiCard({
   label,
   value,
@@ -45,6 +59,7 @@ export function KpiCard({
   variant = 'default',
   icon: Icon,
   format,
+  bonus,
 }: KpiCardProps) {
   const variantStyles = {
     default: {
@@ -105,6 +120,20 @@ export function KpiCard({
               >
                 {delta.value}
               </span>
+            </div>
+          )}
+          {bonus && (
+            <div className={cn(
+              'mt-3 pt-3 border-t',
+              bonus.eligible ? 'border-neon/30' : 'border-white/10'
+            )}>
+              <p className="text-xs text-white/40 mb-1">{bonus.label}</p>
+              <p className={cn(
+                'text-lg font-black',
+                bonus.eligible ? 'text-neon' : 'text-white/30'
+              )}>
+                {bonus.amount > 0 ? formatCurrency(bonus.amount) : '$0'}
+              </p>
             </div>
           )}
         </div>

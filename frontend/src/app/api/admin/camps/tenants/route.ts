@@ -24,8 +24,11 @@ export async function GET(request: NextRequest) {
     }
 
     const tenants = await prisma.tenant.findMany({
-      where: { licenseStatus: 'active' },
-      select: { id: true, name: true, slug: true, city: true, state: true },
+      // Include all tenants (active, suspended) - exclude only terminated
+      where: {
+        licenseStatus: { not: 'terminated' }
+      },
+      select: { id: true, name: true, slug: true, city: true, state: true, licenseStatus: true },
       orderBy: { name: 'asc' },
     })
 

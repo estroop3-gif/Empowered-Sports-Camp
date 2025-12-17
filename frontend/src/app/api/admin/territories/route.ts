@@ -1,7 +1,7 @@
 /**
  * Admin Territories API
  *
- * GET /api/admin/territories - List all territories with stats and tenants
+ * GET /api/admin/territories - List all territories with stats, tenants, and licensees
  * POST /api/admin/territories - Create new territory
  */
 
@@ -11,6 +11,7 @@ import {
   getAllTerritories,
   getTerritoryStats,
   getTenantsForAssignment,
+  getLicenseesForAssignment,
   createTerritory,
   CreateTerritoryInput,
 } from '@/lib/services/territories'
@@ -33,10 +34,11 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search') || undefined
 
     // Fetch all data in parallel
-    const [territoriesResult, statsResult, tenantsResult] = await Promise.all([
+    const [territoriesResult, statsResult, tenantsResult, licenseesResult] = await Promise.all([
       getAllTerritories({ status: status as any, tenant_id: tenantId, search }),
       getTerritoryStats(),
       getTenantsForAssignment(),
+      getLicenseesForAssignment(),
     ])
 
     if (territoriesResult.error) {
@@ -51,6 +53,7 @@ export async function GET(request: NextRequest) {
         territories: territoriesResult.data || [],
         stats: statsResult.data || { total: 0, open: 0, reserved: 0, assigned: 0, closed: 0 },
         tenants: tenantsResult.data || [],
+        licensees: licenseesResult.data || [],
       },
     })
   } catch (error) {

@@ -819,9 +819,24 @@ export async function updateCamperStatus(params: {
   role: RosterRole
   tenantId: string | null
   userId: string
+  // Pickup person info for checkout
+  pickupPersonName?: string
+  pickupPersonRelationship?: string
+  pickupPersonId?: string
 }): Promise<{ data: { success: boolean } | null; error: Error | null }> {
   try {
-    const { camperId, campId, status, notes, role, tenantId, userId } = params
+    const {
+      camperId,
+      campId,
+      status,
+      notes,
+      role,
+      tenantId,
+      userId,
+      pickupPersonName,
+      pickupPersonRelationship,
+      pickupPersonId,
+    } = params
 
     // Get camp and verify access
     const camp = await prisma.camp.findUnique({
@@ -918,6 +933,16 @@ export async function updateCamperStatus(params: {
       attendanceData.checkOutTime = now
       attendanceData.checkOutMethod = 'manual'
       attendanceData.checkOutByUserId = userId
+      // Record pickup person info
+      if (pickupPersonName) {
+        attendanceData.checkOutPickupPersonName = pickupPersonName
+      }
+      if (pickupPersonRelationship) {
+        attendanceData.checkOutPickupPersonRelationship = pickupPersonRelationship
+      }
+      if (pickupPersonId) {
+        attendanceData.checkOutPickupPersonId = pickupPersonId
+      }
     }
 
     if (notes) {

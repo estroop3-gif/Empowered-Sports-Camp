@@ -5,6 +5,7 @@ import {
   getCurrentUser,
   getCurrentSession,
   signOut as cognitoSignOut,
+  checkAndRefreshSession,
   type AuthUser,
 } from './cognito-client'
 
@@ -251,24 +252,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     initAuth()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Check session periodically (every 5 minutes)
+  // Check and refresh session periodically (every 5 minutes)
+  // This keeps the session alive for up to 30 days (refresh token validity)
   useEffect(() => {
-    const interval = setInterval(async () => {
-      const session = await getCurrentSession()
-      if (!session && user) {
-        // Session expired
-        setUser(null)
-        setActualRole(null)
-        setTenant(null)
-        setViewingAsRoleState(null)
-        initializedRef.current = false
-        if (typeof window !== 'undefined') {
-          sessionStorage.removeItem(VIEWING_AS_ROLE_KEY)
+    const checkSession = async () => {
+      if (!user) return
+
+      // Try to refresh the session if needed
+      const refreshed = await checkAndRefreshSession()
+
+      if (!refreshed) {
+        // Session couldn't be refreshed - may need to login again
+        const session = await getCurrentSession()
+        if (!session) {
+          // Session completely expired
+          setUser(null)
+          setActualRole(null)
+          setTenant(null)
+          setViewingAsRoleState(null)
+          initializedRef.current = false
+          if (typeof window !== 'undefined') {
+            sessionStorage.removeItem(VIEWING_AS_ROLE_KEY)
+          }
         }
       }
-    }, 5 * 60 * 1000)
+    }
 
-    return () => clearInterval(interval)
+    // Initial check after a short delay
+    const initialCheck = setTimeout(checkSession, 10000) // 10 seconds after mount
+
+    // Then check every 5 minutes
+    const interval = setInterval(checkSession, 5 * 60 * 1000)
+
+    return () => {
+      clearTimeout(initialCheck)
+      clearInterval(interval)
+    }
   }, [user])
 
   // Public refresh function (forces re-initialization)

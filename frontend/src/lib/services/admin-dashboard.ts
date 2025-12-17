@@ -120,19 +120,21 @@ export async function getAdminDashboardData(params: {
     const uniqueAthletes = new Set(registrations.map(r => r.athleteId))
     const activeAthletes = uniqueAthletes.size
 
-    // Active camps (in_progress status)
+    // Active camps (camps currently running based on dates)
     const activeCamps = await prisma.camp.count({
       where: {
-        status: 'in_progress',
+        startDate: { lte: now },
+        endDate: { gte: today },
+        status: { notIn: ['draft', 'cancelled'] },
       },
     })
 
     // Today's campers (registrations for camps running today)
     const todayCampsData = await prisma.camp.findMany({
       where: {
-        status: 'in_progress',
-        startDate: { lte: today },
+        startDate: { lte: now },
         endDate: { gte: today },
+        status: { notIn: ['draft', 'cancelled'] },
       },
       select: {
         _count: {
@@ -187,7 +189,7 @@ export async function getAdminDashboardData(params: {
         },
         camps: {
           where: {
-            status: { in: ['published', 'registration_open', 'in_progress'] },
+            status: { in: ['published', 'registration_open', 'registration_closed'] },
             startDate: { gte: today },
           },
           select: { id: true },

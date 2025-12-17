@@ -136,8 +136,18 @@ export default function ContactDetailPage({ params }: { params: Promise<{ id: st
   const handleSave = async () => {
     if (!submission) return
 
+    const previousStatus = submission.status
+    const previousNotes = submission.internal_notes
     setSaving(true)
     setError(null)
+
+    // Optimistically update the UI
+    setSubmission(prev => prev ? {
+      ...prev,
+      status: selectedStatus,
+      internal_notes: internalNotes
+    } : null)
+    setNotesChanged(false)
 
     try {
       const res = await fetch(`/api/admin/contact/${id}`, {
@@ -152,14 +162,28 @@ export default function ContactDetailPage({ params }: { params: Promise<{ id: st
       const { data, error: apiError } = await res.json()
 
       if (apiError) {
+        // Revert on error
+        setSubmission(prev => prev ? {
+          ...prev,
+          status: previousStatus,
+          internal_notes: previousNotes
+        } : null)
+        setSelectedStatus(previousStatus)
         setError(apiError)
         setSaving(false)
         return
       }
 
+      // Update with full data from server (includes timestamps)
       setSubmission(data)
-      setNotesChanged(false)
     } catch (err) {
+      // Revert on error
+      setSubmission(prev => prev ? {
+        ...prev,
+        status: previousStatus,
+        internal_notes: previousNotes
+      } : null)
+      setSelectedStatus(previousStatus)
       console.error('Error saving:', err)
       setError('Failed to save changes')
     }

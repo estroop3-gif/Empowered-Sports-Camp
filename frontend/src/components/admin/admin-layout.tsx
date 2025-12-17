@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
@@ -334,11 +334,28 @@ export function AdminLayout({
   const [expandedItems, setExpandedItems] = useState<string[]>([])
   const [initialized, setInitialized] = useState(false)
 
+  const navRef = useRef<HTMLElement>(null)
+
   const isLicensor = userRole === 'hq_admin'
   const navItems = isLicensor ? licensorNavItems : licenseeNavItems
   const filteredNavItems = navItems.filter((item) => item.roles.includes(userRole))
 
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + '/')
+
+  // Restore sidebar scroll position on mount
+  useEffect(() => {
+    const savedScrollTop = sessionStorage.getItem('adminSidebarScroll')
+    if (savedScrollTop && navRef.current) {
+      navRef.current.scrollTop = parseInt(savedScrollTop, 10)
+    }
+  }, [])
+
+  // Save scroll position before navigation
+  const saveScrollPosition = () => {
+    if (navRef.current) {
+      sessionStorage.setItem('adminSidebarScroll', navRef.current.scrollTop.toString())
+    }
+  }
 
   // Check if a nav item or any of its children matches the current path
   const isItemOrChildActive = (item: NavItem) => {
@@ -425,7 +442,7 @@ export function AdminLayout({
         </div>
 
         {/* Navigation */}
-        <nav className="p-4 space-y-1 overflow-y-auto" style={{ maxHeight: `calc(100vh - ${topWithNavbar}px - 10rem)` }}>
+        <nav ref={navRef} className="p-4 space-y-1 overflow-y-auto" style={{ maxHeight: `calc(100vh - ${topWithNavbar}px - 10rem)` }}>
           {filteredNavItems.map((item) => {
             const active = isItemOrChildActive(item)
             const expanded = expandedItems.includes(item.label)
@@ -439,6 +456,8 @@ export function AdminLayout({
                     if (hasChildren) {
                       e.preventDefault()
                       toggleExpanded(item.label)
+                    } else {
+                      saveScrollPosition()
                     }
                   }}
                   className={cn(
@@ -471,6 +490,7 @@ export function AdminLayout({
                         <Link
                           key={child.href}
                           href={child.href}
+                          onClick={saveScrollPosition}
                           className={cn(
                             'block px-4 py-2 text-xs uppercase tracking-wider transition-colors',
                             childActive

@@ -45,6 +45,15 @@ export interface GlobalAnalyticsOverview {
   averageCsat: number | null
   complaintRatio: number
   averageCurriculumAdherenceScore: number | null
+
+  // Incentive fields
+  parentSurveyRate: number | null
+  totalSurveys: number
+  registeredCampersPerCamp: number
+  totalVenueCost: number
+  venueBudget: number
+  totalIncentiveBonuses: number
+  uniqueGuestSpeakers: number
 }
 
 export interface LicenseeBreakdownItem {
@@ -101,6 +110,14 @@ export interface LicenseeAnalyticsOverview {
   averageCsat: number | null
   complaintRatio: number
   averageCurriculumAdherenceScore: number | null
+
+  // Incentive fields
+  parentSurveyRate: number | null // Percentage of surveys with 4.5+ rating
+  totalSurveys: number
+  registeredCampersPerCamp: number
+  totalVenueCost: number
+  venueBudget: number // $1200 default per camp
+  uniqueGuestSpeakers: number
 }
 
 export interface SessionAnalyticsItem {
@@ -377,6 +394,53 @@ export async function getGlobalAnalyticsOverview(
       ? sessionsWithAdherence.reduce((sum, s) => sum + Number(s.curriculumAdherenceScore), 0) / sessionsWithAdherence.length
       : null
 
+    // Parent survey rate (percentage of surveys with 4.5+ rating)
+    const highRatedSurveys = surveys.filter(s => s.rating >= 4.5).length
+    const parentSurveyRate = surveys.length > 0
+      ? (highRatedSurveys / surveys.length) * 100
+      : null
+    const totalSurveys = surveys.length
+
+    // Registered campers per camp
+    const registeredCampersPerCamp = sessionsHeld > 0
+      ? totalCampers / sessionsHeld
+      : 0
+
+    // Venue cost tracking
+    const venueBudget = 1200 * sessionsHeld
+    const totalVenueCost = 0 // TODO: Get actual venue costs
+
+    // Calculate estimated incentive bonuses
+    // Survey bonus: $200/camp if 70%+ surveys are 4.5+
+    const surveyBonus = (parentSurveyRate ?? 0) >= 70 ? sessionsHeld * 200 : 0
+    // Camper bonus: $20/camper if avg >= 25/camp
+    const camperBonus = registeredCampersPerCamp >= 25 ? totalCampers * 20 : 0
+    // Budget bonus: 25% of savings (not calculated without actual venue costs)
+    const budgetBonus = 0
+
+    // Count unique guest speakers from the GuestSpeaker table
+    const guestSpeakers = await prisma.guestSpeaker.findMany({
+      where: {
+        isHighProfile: true,
+        camp: {
+          startDate: { lte: endDate },
+          endDate: { gte: startDate },
+        },
+      },
+      select: {
+        name: true,
+      },
+    })
+    const uniqueGuestSpeakers = new Set(
+      guestSpeakers
+        .map(s => s.name?.toLowerCase().trim())
+        .filter(Boolean)
+    ).size
+
+    // Guest speaker bonus: $100/session if 3+ unique speakers
+    const guestSpeakerBonus = uniqueGuestSpeakers >= 3 ? sessionsHeld * 100 : 0
+    const totalIncentiveBonuses = surveyBonus + camperBonus + budgetBonus + guestSpeakerBonus
+
     return {
       data: {
         totalSystemGrossRevenue,
@@ -392,6 +456,13 @@ export async function getGlobalAnalyticsOverview(
         averageCsat,
         complaintRatio,
         averageCurriculumAdherenceScore,
+        parentSurveyRate,
+        totalSurveys,
+        registeredCampersPerCamp,
+        totalVenueCost,
+        venueBudget,
+        totalIncentiveBonuses,
+        uniqueGuestSpeakers,
       },
       error: null,
     }
@@ -864,6 +935,43 @@ export async function getLicenseeAnalyticsOverview(
       ? sessionsWithAdherence.reduce((sum, s) => sum + Number(s.curriculumAdherenceScore), 0) / sessionsWithAdherence.length
       : null
 
+    // Parent survey rate (percentage of surveys with 4.5+ rating)
+    const highRatedSurveys = surveys.filter(s => s.rating >= 4.5).length
+    const parentSurveyRate = surveys.length > 0
+      ? (highRatedSurveys / surveys.length) * 100
+      : null
+    const totalSurveys = surveys.length
+
+    // Registered campers per camp
+    const registeredCampersPerCamp = sessionsHeld > 0
+      ? totalCampers / sessionsHeld
+      : 0
+
+    // Venue cost tracking (placeholder - would need venue cost data from camps)
+    // For now, we'll use a default budget of $1200 per camp
+    const venueBudget = 1200
+    const totalVenueCost = 0 // TODO: Get actual venue costs from camps when available
+
+    // Count unique guest speakers from the GuestSpeaker table for this licensee
+    const guestSpeakers = await prisma.guestSpeaker.findMany({
+      where: {
+        tenantId,
+        isHighProfile: true,
+        camp: {
+          startDate: { lte: endDate },
+          endDate: { gte: startDate },
+        },
+      },
+      select: {
+        name: true,
+      },
+    })
+    const uniqueGuestSpeakers = new Set(
+      guestSpeakers
+        .map(s => s.name?.toLowerCase().trim())
+        .filter(Boolean)
+    ).size
+
     return {
       data: {
         tsgr,
@@ -878,6 +986,12 @@ export async function getLicenseeAnalyticsOverview(
         averageCsat,
         complaintRatio,
         averageCurriculumAdherenceScore,
+        parentSurveyRate,
+        totalSurveys,
+        registeredCampersPerCamp,
+        totalVenueCost,
+        venueBudget,
+        uniqueGuestSpeakers,
       },
       error: null,
     }

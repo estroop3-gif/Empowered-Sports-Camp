@@ -45,6 +45,10 @@ export async function PATCH(
       role,
       tenantId: user.tenantId || null,
       userId: user.id,
+      // Pickup person info for checkout
+      pickupPersonName: body.pickupPersonName,
+      pickupPersonRelationship: body.pickupPersonRelationship,
+      pickupPersonId: body.pickupPersonId,
     })
 
     if (error) {

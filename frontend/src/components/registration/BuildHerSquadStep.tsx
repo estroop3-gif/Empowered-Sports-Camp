@@ -35,6 +35,8 @@ interface Athlete {
 interface RegisteredCamper {
   athleteId: string
   athleteName: string
+  athleteFirstName?: string
+  athleteLastName?: string
   grade: string | null
   parentName: string
   parentId: string
@@ -65,9 +67,16 @@ interface BuildHerSquadStepProps {
   registeredAthletes: Athlete[]
   parentName: string
   parentEmail: string
+  isAuthenticated?: boolean // Whether user is logged in
   onContinue: () => void
   onBack: () => void
   onSquadUpdate?: (squadId: string | null) => void
+}
+
+// Helper function to format name with privacy (Last Name, First Initial)
+function formatPrivacyName(firstName: string, lastName: string): string {
+  const firstInitial = firstName?.charAt(0)?.toUpperCase() || ''
+  return `${lastName}, ${firstInitial}.`
 }
 
 export function BuildHerSquadStep({
@@ -77,6 +86,7 @@ export function BuildHerSquadStep({
   registeredAthletes,
   parentName,
   parentEmail,
+  isAuthenticated = true,
   onContinue,
   onBack,
   onSquadUpdate,
@@ -227,7 +237,38 @@ export function BuildHerSquadStep({
     setInviteError(null)
 
     try {
-      // First, create a squad if we don't have one
+      // Use guest invite API if not authenticated
+      if (!isAuthenticated) {
+        const athleteNames = registeredAthletes.map(a => `${a.firstName} ${a.lastName}`)
+
+        const res = await fetch('/api/squads/guest-invite', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            inviterEmail: parentEmail,
+            inviterName: parentName,
+            inviteeEmail: inviteEmail,
+            campId,
+            campName,
+            tenantId,
+            athleteNames,
+          }),
+        })
+
+        const data = await res.json()
+
+        if (data.error) {
+          setInviteError(data.error)
+          return
+        }
+
+        setInviteEmail('')
+        setInviteSent(true)
+        setTimeout(() => setInviteSent(false), 3000)
+        return
+      }
+
+      // Authenticated flow - create squad if needed
       let squadId = existingSquad?.id
 
       if (!squadId) {
@@ -414,6 +455,22 @@ export function BuildHerSquadStep({
               const isSelected = selectedCampers.has(camper.athleteId)
               const isRequested = requestedCampers.has(camper.athleteId)
 
+              // Format name for privacy: "Last Name, F."
+              // Use firstName/lastName if available, otherwise parse from athleteName
+              let displayName = camper.athleteName
+              let initial = camper.athleteName.charAt(0)
+              if (camper.athleteFirstName && camper.athleteLastName) {
+                displayName = formatPrivacyName(camper.athleteFirstName, camper.athleteLastName)
+                initial = camper.athleteLastName.charAt(0)
+              } else if (camper.athleteName.includes(' ')) {
+                // Parse "First Last" format
+                const parts = camper.athleteName.split(' ')
+                const firstName = parts[0]
+                const lastName = parts.slice(1).join(' ')
+                displayName = formatPrivacyName(firstName, lastName)
+                initial = lastName.charAt(0)
+              }
+
               return (
                 <button
                   key={camper.athleteId}
@@ -437,12 +494,12 @@ export function BuildHerSquadStep({
                           ? 'bg-purple/30 text-purple'
                           : 'bg-white/10 text-white/60'
                     )}>
-                      {camper.athleteName.charAt(0)}
+                      {initial}
                     </div>
                     <div className="text-left">
-                      <p className="text-white font-medium">{camper.athleteName}</p>
+                      <p className="text-white font-medium">{displayName}</p>
                       <p className="text-xs text-white/40">
-                        {camper.grade ? `Grade ${camper.grade}` : 'Camper'} • Parent: {camper.parentName}
+                        {camper.grade ? `Grade ${camper.grade}` : 'Camper'}
                       </p>
                     </div>
                   </div>

@@ -21,7 +21,7 @@ export default function CoachCampRosterPage({
     <TheRoster
       campId={campId}
       role="coach"
-      backUrl="/coach"
+      backUrl={`/coach/camps/${campId}`}
     />
   )
 }

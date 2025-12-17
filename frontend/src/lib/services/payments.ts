@@ -93,21 +93,26 @@ function getStripe(): Stripe {
 
 /**
  * Create a Stripe Checkout session for camp registration
+ * Supports multiple registrations (e.g., multiple campers in one checkout)
  */
 export async function createStripeCheckoutSession(params: {
   campSessionId: string
   registrationId: string
+  registrationIds?: string[] // Optional array for multiple campers
   successUrl: string
   cancelUrl: string
   tenantId: string
 }): Promise<{ data: CheckoutSessionResult | null; error: Error | null }> {
   try {
-    const { campSessionId, registrationId, successUrl, cancelUrl, tenantId } = params
+    const { campSessionId, registrationId, registrationIds, successUrl, cancelUrl, tenantId } = params
 
-    // Fetch registration and camp details
-    const registration = await prisma.registration.findFirst({
+    // Use registrationIds if provided, otherwise use single registrationId
+    const allRegIds = registrationIds?.length ? registrationIds : [registrationId]
+
+    // Fetch all registrations and their details
+    const registrations = await prisma.registration.findMany({
       where: {
-        id: registrationId,
+        id: { in: allRegIds },
         campId: campSessionId,
         tenantId,
       },
@@ -124,17 +129,19 @@ export async function createStripeCheckoutSession(params: {
       },
     })
 
-    if (!registration) {
+    if (registrations.length === 0) {
       return { data: null, error: new Error('Registration not found') }
     }
 
-    // Calculate total amount
-    const amountInCents = registration.totalPriceCents || registration.camp.priceCents || 0
+    const primaryRegistration = registrations[0]
 
-    if (amountInCents <= 0) {
-      // Free registration - mark as paid immediately
-      await prisma.registration.update({
-        where: { id: registrationId },
+    // Calculate total amount across all registrations
+    const totalAmountInCents = registrations.reduce((sum, reg) => sum + (reg.totalPriceCents || 0), 0)
+
+    if (totalAmountInCents <= 0) {
+      // Free registration - mark all as paid immediately
+      await prisma.registration.updateMany({
+        where: { id: { in: allRegIds } },
         data: {
           paymentStatus: 'paid',
           status: 'confirmed',
@@ -155,7 +162,7 @@ export async function createStripeCheckoutSession(params: {
     if (!isStripeConfigured()) {
       console.log('[Payments] Stripe not configured - using demo checkout')
 
-      // Create a demo session ID for tracking
+      // Create a demo session ID for tracking (use primary registration)
       const demoSessionId = `demo_${registrationId}_${Date.now()}`
 
       // In demo mode, redirect to a simulated checkout page
@@ -171,33 +178,57 @@ export async function createStripeCheckoutSession(params: {
 
     const stripe = getStripe()
 
-    // Build line items
-    const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = [
-      {
+    // Build line items for ALL registrations
+    const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = []
+    let totalTaxCents = 0
+
+    for (const registration of registrations) {
+      // Calculate camp price after discounts for this registration
+      const campNetPrice = registration.basePriceCents - registration.discountCents - registration.promoDiscountCents
+
+      // Add camp registration line item
+      lineItems.push({
         price_data: {
           currency: 'usd',
           product_data: {
             name: registration.camp.name,
             description: `Camp registration for ${registration.athlete?.firstName || 'Athlete'} ${registration.athlete?.lastName || ''}`.trim(),
           },
-          unit_amount: registration.basePriceCents - registration.discountCents - registration.promoDiscountCents,
+          unit_amount: campNetPrice,
         },
         quantity: 1,
-      },
-    ]
+      })
 
-    // Add addon line items
-    for (const regAddon of registration.registrationAddons) {
+      // Add addon line items for this registration
+      for (const regAddon of registration.registrationAddons) {
+        lineItems.push({
+          price_data: {
+            currency: 'usd',
+            product_data: {
+              name: `${regAddon.addon.name}${registrations.length > 1 ? ` (${registration.athlete?.firstName})` : ''}`,
+              description: regAddon.variant?.name || undefined,
+            },
+            unit_amount: regAddon.priceCents,
+          },
+          quantity: regAddon.quantity,
+        })
+      }
+
+      // Sum up taxes
+      totalTaxCents += registration.taxCents
+    }
+
+    // Add combined tax as single line item
+    if (totalTaxCents > 0) {
       lineItems.push({
         price_data: {
           currency: 'usd',
           product_data: {
-            name: regAddon.addon.name,
-            description: regAddon.variant?.name || undefined,
+            name: 'Sales Tax',
           },
-          unit_amount: regAddon.priceCents,
+          unit_amount: totalTaxCents,
         },
-        quantity: regAddon.quantity,
+        quantity: 1,
       })
     }
 
@@ -208,26 +239,28 @@ export async function createStripeCheckoutSession(params: {
       mode: 'payment',
       success_url: `${successUrl}?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: cancelUrl,
-      customer_email: registration.parent?.email || undefined,
+      customer_email: primaryRegistration.parent?.email || undefined,
       metadata: {
         type: 'registration',
-        registrationId,
+        registrationId: registrationId, // Primary registration for webhook
+        registrationIds: allRegIds.join(','), // All registration IDs
         campSessionId,
         tenantId,
-        athleteId: registration.athleteId,
+        athleteId: primaryRegistration.athleteId,
       },
       payment_intent_data: {
         metadata: {
           type: 'registration',
-          registrationId,
+          registrationId: registrationId,
+          registrationIds: allRegIds.join(','),
           tenantId,
         },
       },
     })
 
-    // Update registration with checkout session ID
-    await prisma.registration.update({
-      where: { id: registrationId },
+    // Update all registrations with checkout session ID
+    await prisma.registration.updateMany({
+      where: { id: { in: allRegIds } },
       data: {
         paymentMethod: 'stripe',
       },
@@ -492,9 +525,14 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session): Promise
     : session.payment_intent?.id
 
   if (metadata.type === 'registration' && metadata.registrationId) {
-    // Update registration status
-    await prisma.registration.update({
-      where: { id: metadata.registrationId },
+    // Get all registration IDs (may be multiple for multi-camper checkout)
+    const allRegIds = metadata.registrationIds
+      ? metadata.registrationIds.split(',')
+      : [metadata.registrationId]
+
+    // Update ALL registration statuses
+    await prisma.registration.updateMany({
+      where: { id: { in: allRegIds } },
       data: {
         paymentStatus: 'paid',
         status: 'confirmed',
@@ -503,9 +541,9 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session): Promise
       },
     })
 
-    // Get registration details for notification
-    const registration = await prisma.registration.findUnique({
-      where: { id: metadata.registrationId },
+    // Get all registration details for notifications
+    const registrations = await prisma.registration.findMany({
+      where: { id: { in: allRegIds } },
       include: {
         camp: true,
         parent: true,
@@ -513,20 +551,28 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session): Promise
       },
     })
 
-    if (registration) {
+    if (registrations.length > 0) {
+      const primaryReg = registrations[0]
+      const camperNames = registrations
+        .map(r => r.athlete?.firstName)
+        .filter(Boolean)
+        .join(', ')
+
       // Send confirmation notification to parent
       createNotification({
-        userId: registration.parentId,
-        tenantId: registration.tenantId,
+        userId: primaryReg.parentId,
+        tenantId: primaryReg.tenantId,
         type: 'payment_confirmed',
         title: 'Registration Confirmed!',
-        body: `${registration.athlete?.firstName}'s registration for ${registration.camp.name} has been confirmed. See you at camp!`,
+        body: registrations.length === 1
+          ? `${camperNames}'s registration for ${primaryReg.camp.name} has been confirmed. See you at camp!`
+          : `Registrations for ${camperNames} for ${primaryReg.camp.name} have been confirmed. See you at camp!`,
         category: 'camp',
         severity: 'success',
       }).catch((err) => console.error('[Payments] Failed to send confirmation notification:', err))
     }
 
-    console.log('[Payments] Registration confirmed:', metadata.registrationId)
+    console.log('[Payments] Registrations confirmed:', allRegIds.join(', '))
     return metadata.registrationId
   }
 

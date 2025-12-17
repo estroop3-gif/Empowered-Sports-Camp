@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useCheckout } from '@/lib/checkout/context'
-import { useAuth } from '@/lib/auth/auth-context'
+import { useAuth } from '@/lib/auth/context'
 import { signUp, confirmSignUp, resendConfirmationCode } from '@/lib/auth/cognito-client'
 import { Input } from '@/components/ui/input'
 import {
@@ -29,7 +29,8 @@ type AccountStepPhase = 'check' | 'create' | 'confirm' | 'complete'
 
 export function AccountCreationStep({ onContinue, onBack }: AccountCreationStepProps) {
   const { state } = useCheckout()
-  const { user, isAuthenticated, isLoading: authLoading, refreshAuth } = useAuth()
+  const { user, loading: authLoading, refreshAuth } = useAuth()
+  const isAuthenticated = !!user
 
   const [phase, setPhase] = useState<AccountStepPhase>('check')
   const [loading, setLoading] = useState(false)

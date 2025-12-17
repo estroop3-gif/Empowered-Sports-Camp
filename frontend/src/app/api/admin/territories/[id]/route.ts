@@ -11,10 +11,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUserFromRequest } from '@/lib/auth/server'
 import {
   getTerritoryById,
+  getTerritoryAssignments,
   updateTerritory,
   closeTerritory,
   reopenTerritory,
   unassignTerritory,
+  saveTerritoryAssignments,
   UpdateTerritoryInput,
 } from '@/lib/services/territories'
 
@@ -35,17 +37,23 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     const { id } = await params
-    const { data, error } = await getTerritoryById(id)
+    const [territoryResult, assignmentsResult] = await Promise.all([
+      getTerritoryById(id),
+      getTerritoryAssignments(id),
+    ])
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+    if (territoryResult.error) {
+      return NextResponse.json({ error: territoryResult.error.message }, { status: 500 })
     }
 
-    if (!data) {
+    if (!territoryResult.data) {
       return NextResponse.json({ error: 'Territory not found' }, { status: 404 })
     }
 
-    return NextResponse.json({ data })
+    return NextResponse.json({
+      data: territoryResult.data,
+      assignments: assignmentsResult.data || { tenants: [], licensees: [] },
+    })
   } catch (error) {
     console.error('[API] Get territory error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
@@ -116,6 +124,15 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         break
       case 'unassign':
         result = await unassignTerritory(id)
+        break
+      case 'assign':
+        const { tenantIds, licenseeIds } = body
+        result = await saveTerritoryAssignments(
+          id,
+          tenantIds || [],
+          licenseeIds || [],
+          user.id
+        )
         break
       default:
         return NextResponse.json({ error: 'Invalid action' }, { status: 400 })

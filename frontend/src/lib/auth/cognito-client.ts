@@ -299,3 +299,64 @@ export function changePassword(oldPassword: string, newPassword: string): Promis
     })
   })
 }
+
+/**
+ * Refresh the current session and sync cookies with server
+ * This should be called periodically to keep the session alive
+ */
+export async function refreshAndSyncSession(): Promise<boolean> {
+  const pool = getUserPool()
+  const cognitoUser = pool.getCurrentUser()
+
+  if (!cognitoUser) {
+    return false
+  }
+
+  return new Promise((resolve) => {
+    // getSession will automatically refresh tokens if needed
+    cognitoUser.getSession(async (err: Error | null, session: CognitoUserSession | null) => {
+      if (err || !session?.isValid()) {
+        resolve(false)
+        return
+      }
+
+      try {
+        // Sync the tokens with the server cookies
+        const response = await fetch('/api/auth/set-tokens', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            idToken: session.getIdToken().getJwtToken(),
+            accessToken: session.getAccessToken().getJwtToken(),
+            refreshToken: session.getRefreshToken()?.getToken(),
+            expiresIn: session.getIdToken().getExpiration() - Math.floor(Date.now() / 1000),
+          }),
+        })
+
+        resolve(response.ok)
+      } catch {
+        resolve(false)
+      }
+    })
+  })
+}
+
+/**
+ * Check if the session needs refresh (within 5 minutes of expiry)
+ */
+export async function checkAndRefreshSession(): Promise<boolean> {
+  const session = await getCurrentSession()
+  if (!session) return false
+
+  // Get expiration time
+  const expiration = session.getIdToken().getExpiration()
+  const now = Math.floor(Date.now() / 1000)
+  const timeUntilExpiry = expiration - now
+
+  // If less than 5 minutes until expiry, refresh
+  if (timeUntilExpiry < 300) {
+    return refreshAndSyncSession()
+  }
+
+  return true
+}

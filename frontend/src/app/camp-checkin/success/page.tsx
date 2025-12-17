@@ -5,12 +5,23 @@
  *
  * Shown after successful check-in.
  * Displays confirmation and link to pickup codes.
+ *
+ * STATUS: Coming Soon - Part of the check-in kiosk feature.
  */
 
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
+
+// Feature flag - must match the one in the main check-in page
+const FEATURE_CHECKIN_KIOSK_ENABLED = false
 
 export default function CheckInSuccessPage() {
+  // Redirect to coming soon page if feature is disabled
+  if (!FEATURE_CHECKIN_KIOSK_ENABLED) {
+    redirect('/camp-checkin')
+  }
+
   const searchParams = useSearchParams()
   const count = searchParams.get('count') || '1'
   const campId = searchParams.get('campId')

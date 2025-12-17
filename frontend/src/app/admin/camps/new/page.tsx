@@ -22,7 +22,11 @@ import {
   X,
   Building2,
   Check,
+  ImagePlus,
+  Trash2,
 } from 'lucide-react'
+import { useUpload, STORAGE_FOLDERS } from '@/lib/storage/use-upload'
+import Image from 'next/image'
 
 // Types (defined locally to avoid Prisma imports in client component)
 interface CampFormData {
@@ -126,6 +130,11 @@ export default function AdminCreateCampPage() {
   const [venueSearchQuery, setVenueSearchQuery] = useState('')
   const [venueDropdownOpen, setVenueDropdownOpen] = useState(false)
   const venueDropdownRef = useRef<HTMLDivElement>(null)
+
+  // Image upload state
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const { upload, uploading, progress, error: uploadError } = useUpload()
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
 
   const [formData, setFormData] = useState<CampFormData>({
     name: '',
@@ -299,6 +308,44 @@ export default function AdminCreateCampPage() {
     setFormData(prev => ({ ...prev, name, slug }))
   }
 
+  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      setError('Please select an image file')
+      return
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      setError('Image must be less than 5MB')
+      return
+    }
+
+    // Create preview
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      setImagePreview(reader.result as string)
+    }
+    reader.readAsDataURL(file)
+
+    // Upload to S3
+    const result = await upload(file, { folder: STORAGE_FOLDERS.CAMP_IMAGES })
+    if (result) {
+      setFormData(prev => ({ ...prev, image_url: result.fileUrl }))
+    }
+  }
+
+  const handleRemoveImage = () => {
+    setImagePreview(null)
+    setFormData(prev => ({ ...prev, image_url: null }))
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setSaving(true)
@@ -416,9 +463,20 @@ export default function AdminCreateCampPage() {
                         </option>
                       ))}
                     </select>
-                    {territories.length === 0 && (
-                      <p className="mt-2 text-sm text-white/40">No territories found. Create a territory first.</p>
-                    )}
+                    <div className="mt-2 flex items-center justify-between">
+                      {territories.length === 0 ? (
+                        <p className="text-sm text-white/40">No territories found.</p>
+                      ) : (
+                        <span />
+                      )}
+                      <Link
+                        href="/admin/licensees/territories/new"
+                        className="flex items-center gap-1.5 text-sm text-neon hover:underline"
+                      >
+                        <MapPin className="h-3.5 w-3.5" />
+                        Create new territory
+                      </Link>
+                    </div>
                   </div>
                 )}
 
@@ -478,6 +536,73 @@ export default function AdminCreateCampPage() {
                     className="w-full px-4 py-3 bg-black border border-white/20 text-white placeholder:text-white/30 focus:border-neon focus:outline-none resize-none"
                   />
                 </div>
+              </div>
+            </ContentCard>
+
+            {/* Camp Photo Upload */}
+            <ContentCard title="Camp Photo" accent="purple">
+              <div className="space-y-4">
+                <p className="text-sm text-white/60">
+                  <ImagePlus className="h-4 w-4 inline mr-2" />
+                  Upload a main photo for this camp. This will be displayed on the camp listing page.
+                </p>
+
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageSelect}
+                  className="hidden"
+                />
+
+                {imagePreview || formData.image_url ? (
+                  <div className="relative aspect-video w-full max-w-md overflow-hidden border border-white/20">
+                    <Image
+                      src={imagePreview || formData.image_url || ''}
+                      alt="Camp preview"
+                      fill
+                      className="object-cover"
+                    />
+                    {uploading && (
+                      <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center">
+                        <Loader2 className="h-8 w-8 text-neon animate-spin mb-2" />
+                        <span className="text-white text-sm">{progress}%</span>
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleRemoveImage}
+                      disabled={uploading}
+                      className="absolute top-2 right-2 p-2 bg-black/80 text-white hover:bg-magenta/80 transition-colors"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploading}
+                    className="w-full max-w-md aspect-video flex flex-col items-center justify-center border-2 border-dashed border-white/20 hover:border-purple/50 transition-colors bg-white/5 cursor-pointer"
+                  >
+                    {uploading ? (
+                      <>
+                        <Loader2 className="h-10 w-10 text-purple animate-spin mb-3" />
+                        <span className="text-white/50">Uploading... {progress}%</span>
+                      </>
+                    ) : (
+                      <>
+                        <ImagePlus className="h-10 w-10 text-white/30 mb-3" />
+                        <span className="text-white/50 text-sm font-medium">Click to upload camp photo</span>
+                        <span className="text-white/30 text-xs mt-1">PNG, JPG up to 5MB</span>
+                      </>
+                    )}
+                  </button>
+                )}
+
+                {uploadError && (
+                  <p className="text-sm text-magenta">{uploadError}</p>
+                )}
               </div>
             </ContentCard>
 

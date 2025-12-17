@@ -480,6 +480,16 @@ export default function AdminAthletesPage() {
                               {athlete.parent.first_name} {athlete.parent.last_name}
                             </p>
                             <p className="text-xs text-white/40">{athlete.parent.email}</p>
+                            {athlete.parent.phone && (
+                              <a
+                                href={`tel:${athlete.parent.phone}`}
+                                onClick={(e) => e.stopPropagation()}
+                                className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 mt-0.5"
+                              >
+                                <Phone className="h-3 w-3" />
+                                {athlete.parent.phone}
+                              </a>
+                            )}
                           </div>
                         ) : (
                           <span className="text-white/40">—</span>

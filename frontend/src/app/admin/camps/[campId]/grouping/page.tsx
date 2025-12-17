@@ -21,7 +21,7 @@ export default function AdminCampGroupingPage({
     <CampGroupingTool
       campId={campId}
       mode="admin"
-      backUrl="/admin/camps"
+      backUrl={`/admin/camps/${campId}/hq?tab=groups`}
     />
   )
 }

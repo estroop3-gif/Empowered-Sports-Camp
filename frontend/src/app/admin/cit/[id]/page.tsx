@@ -154,9 +154,14 @@ export default function CitDetailPage({ params }: { params: Promise<{ id: string
   }
 
   const handleStatusChange = async () => {
-    if (!application || newStatus === application.status) return
+    if (!application) return
 
+    const previousStatus = application.status
     setSaving(true)
+
+    // Optimistically update the UI
+    setApplication(prev => prev ? { ...prev, status: newStatus } : null)
+    setStatusNote('')
 
     try {
       const res = await fetch(`/api/admin/cit/${id}`, {
@@ -165,17 +170,26 @@ export default function CitDetailPage({ params }: { params: Promise<{ id: string
         body: JSON.stringify({
           action: 'update_status',
           status: newStatus,
-          changed_by: user?.email || 'admin',
+          changed_by: user?.id || null,
           note: statusNote || undefined,
         }),
       })
 
       if (res.ok) {
-        setStatusNote('')
+        // Reload to get updated timeline/events
         loadApplication()
+      } else {
+        // Revert on error
+        setApplication(prev => prev ? { ...prev, status: previousStatus } : null)
+        setNewStatus(previousStatus)
+        const errorData = await res.json()
+        alert('Failed to update status: ' + (errorData.error || 'Unknown error'))
       }
     } catch (err) {
-      console.error('Error updating status:', err)
+      // Revert on error
+      setApplication(prev => prev ? { ...prev, status: previousStatus } : null)
+      setNewStatus(previousStatus)
+      alert('Failed to update status: ' + (err instanceof Error ? err.message : 'Unknown error'))
     }
 
     setSaving(false)
@@ -249,6 +263,7 @@ export default function CitDetailPage({ params }: { params: Promise<{ id: string
     )
   }
 
+  // Use application.status for display since we update it optimistically
   const statusConfig = STATUS_CONFIG[application.status] || STATUS_CONFIG.applied
   const StatusIcon = statusConfig.icon
   const fullName = `${application.first_name} ${application.last_name}`

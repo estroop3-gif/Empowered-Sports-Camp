@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils'
 import { useCheckout, type ExistingAthlete, type ParentProfile } from '@/lib/checkout/context'
 import { useAuth } from '@/lib/auth/context'
 import { Button } from '@/components/ui/button'
-import type { CamperFormData, TShirtSize, CampSession } from '@/types/registration'
+import type { CamperFormData, CampSession } from '@/types/registration'
 
 /**
  * CamperForm
@@ -24,17 +24,6 @@ interface CamperFormProps {
   campSession: CampSession | null
   onContinue: () => void
 }
-
-const TSHIRT_SIZES: { value: TShirtSize; label: string }[] = [
-  { value: 'YXS', label: 'Youth XS' },
-  { value: 'YS', label: 'Youth S' },
-  { value: 'YM', label: 'Youth M' },
-  { value: 'YL', label: 'Youth L' },
-  { value: 'AS', label: 'Adult S' },
-  { value: 'AM', label: 'Adult M' },
-  { value: 'AL', label: 'Adult L' },
-  { value: 'AXL', label: 'Adult XL' },
-]
 
 const GRADES = [
   'Pre-K',
@@ -422,14 +411,6 @@ function CamperCard({
               </div>
             </div>
           </div>
-
-          <FormSelect
-            label="T-Shirt Size"
-            required
-            value={camper.tshirtSize}
-            onChange={(e) => onUpdate({ tshirtSize: e.target.value as TShirtSize })}
-            options={TSHIRT_SIZES}
-          />
 
           {/* Medical Info */}
           <div className="pt-4 border-t border-white/10">

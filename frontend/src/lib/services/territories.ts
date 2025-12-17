@@ -435,21 +435,154 @@ export async function checkTerritoryConflicts(
 
 /**
  * Get all tenants for the assign dropdown
+ * Returns ALL tenants to allow assignment
  */
 export async function getTenantsForAssignment(): Promise<{
-  data: Array<{ id: string; name: string }> | null
+  data: Array<{ id: string; name: string; licenseStatus: string | null }> | null
   error: Error | null
 }> {
   try {
+    // Return ALL tenants - no filter on licenseStatus
     const tenants = await prisma.tenant.findMany({
-      where: { licenseStatus: 'active' },
-      select: { id: true, name: true },
+      select: { id: true, name: true, licenseStatus: true },
       orderBy: { name: 'asc' },
     })
 
     return { data: tenants, error: null }
   } catch (err) {
+    console.error('[getTenantsForAssignment] Error:', err)
     return { data: null, error: err as Error }
+  }
+}
+
+/**
+ * Get all licensees (users with licensee_owner role) for assignment
+ */
+export async function getLicenseesForAssignment(): Promise<{
+  data: Array<{ id: string; name: string; email: string; tenantName: string | null }> | null
+  error: Error | null
+}> {
+  try {
+    const roles = await prisma.userRoleAssignment.findMany({
+      where: {
+        role: 'licensee_owner',
+        isActive: true,
+      },
+      include: {
+        profile: {
+          select: { id: true, firstName: true, lastName: true, email: true },
+        },
+        tenant: {
+          select: { name: true },
+        },
+      },
+    })
+
+    const licensees = roles
+      .filter(r => r.profile)
+      .map(r => ({
+        id: r.profile!.id,
+        name: `${r.profile!.firstName || ''} ${r.profile!.lastName || ''}`.trim() || r.profile!.email,
+        email: r.profile!.email,
+        tenantName: r.tenant?.name || null,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+
+    return { data: licensees, error: null }
+  } catch (err) {
+    console.error('[getLicenseesForAssignment] Error:', err)
+    return { data: null, error: err as Error }
+  }
+}
+
+/**
+ * Get current territory assignments
+ */
+export async function getTerritoryAssignments(territoryId: string): Promise<{
+  data: {
+    tenants: Array<{ id: string; name: string }>
+    licensees: Array<{ id: string; name: string; email: string }>
+  } | null
+  error: Error | null
+}> {
+  try {
+    const assignments = await prisma.territoryAssignment.findMany({
+      where: { territoryId },
+      include: {
+        tenant: { select: { id: true, name: true } },
+        licensee: { select: { id: true, firstName: true, lastName: true, email: true } },
+      },
+    })
+
+    const tenants = assignments
+      .filter(a => a.tenant)
+      .map(a => ({ id: a.tenant!.id, name: a.tenant!.name }))
+
+    const licensees = assignments
+      .filter(a => a.licensee)
+      .map(a => ({
+        id: a.licensee!.id,
+        name: `${a.licensee!.firstName || ''} ${a.licensee!.lastName || ''}`.trim() || a.licensee!.email,
+        email: a.licensee!.email,
+      }))
+
+    return { data: { tenants, licensees }, error: null }
+  } catch (err) {
+    console.error('[getTerritoryAssignments] Error:', err)
+    return { data: null, error: err as Error }
+  }
+}
+
+/**
+ * Save territory assignments (replaces all existing assignments)
+ */
+export async function saveTerritoryAssignments(
+  territoryId: string,
+  tenantIds: string[],
+  licenseeIds: string[],
+  assignedBy?: string
+): Promise<{ success: boolean; error: Error | null }> {
+  try {
+    // Delete all existing assignments
+    await prisma.territoryAssignment.deleteMany({
+      where: { territoryId },
+    })
+
+    // Create new assignments for tenants
+    const tenantAssignments = tenantIds.map(tenantId => ({
+      territoryId,
+      tenantId,
+      assignedBy,
+    }))
+
+    // Create new assignments for licensees
+    const licenseeAssignments = licenseeIds.map(licenseeId => ({
+      territoryId,
+      licenseeId,
+      assignedBy,
+    }))
+
+    if (tenantAssignments.length > 0 || licenseeAssignments.length > 0) {
+      await prisma.territoryAssignment.createMany({
+        data: [...tenantAssignments, ...licenseeAssignments],
+      })
+    }
+
+    // Update territory status
+    const hasAssignments = tenantIds.length > 0 || licenseeIds.length > 0
+    await prisma.territory.update({
+      where: { id: territoryId },
+      data: {
+        status: hasAssignments ? 'assigned' : 'open',
+        // Keep primary tenant for backward compatibility
+        tenantId: tenantIds[0] || null,
+      },
+    })
+
+    return { success: true, error: null }
+  } catch (err) {
+    console.error('[saveTerritoryAssignments] Error:', err)
+    return { success: false, error: err as Error }
   }
 }
 

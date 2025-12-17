@@ -80,6 +80,17 @@ export default function LicenseeCITApplicationsPage() {
     }
   }
 
+  // Optimistically update application status in local state
+  function handleStatusChange(id: string, newStatus: string) {
+    setApplications((prev) =>
+      prev.map((app) =>
+        app.id === id
+          ? { ...app, status: newStatus as CITApplication['status'] }
+          : app
+      )
+    )
+  }
+
   const filteredApps = applications.filter((app) => {
     if (filter === 'all') return true
     if (filter === 'pending') return ['pending', 'in_review'].includes(app.status)
@@ -221,7 +232,12 @@ export default function LicenseeCITApplicationsPage() {
           <PortalCard title="Applications">
             <div className="space-y-4">
               {filteredApps.map((app) => (
-                <ApplicationRow key={app.id} application={app} onUpdate={loadApplications} />
+                <ApplicationRow
+                  key={app.id}
+                  application={app}
+                  onUpdate={loadApplications}
+                  onStatusChange={handleStatusChange}
+                />
               ))}
             </div>
           </PortalCard>
@@ -243,9 +259,11 @@ export default function LicenseeCITApplicationsPage() {
 function ApplicationRow({
   application,
   onUpdate,
+  onStatusChange,
 }: {
   application: CITApplication
   onUpdate: () => void
+  onStatusChange: (id: string, newStatus: string) => void
 }) {
   const [updating, setUpdating] = useState(false)
 
@@ -264,6 +282,10 @@ function ApplicationRow({
   async function updateStatus(newStatus: string) {
     try {
       setUpdating(true)
+
+      // Optimistically update the UI immediately
+      onStatusChange(application.id, newStatus)
+
       const res = await fetch(`/api/admin/cit/${application.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -271,10 +293,10 @@ function ApplicationRow({
       })
 
       if (!res.ok) {
+        // Revert on error by refetching
+        onUpdate()
         throw new Error('Failed to update status')
       }
-
-      onUpdate()
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Something went wrong')
     } finally {

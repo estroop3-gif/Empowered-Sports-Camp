@@ -9,6 +9,8 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
+import jsPDF from 'jspdf'
+import autoTable from 'jspdf-autotable'
 import CamperDetailDrawer from './CamperDetailDrawer'
 import type { RosterCamper, RosterCamperDetail, RosterListResult } from '@/lib/services/roster'
 
@@ -44,6 +46,151 @@ export default function TheRoster({ campId, role, backUrl }: TheRosterProps) {
 
   // Toast state
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
+
+  // Checkout modal state
+  const [showCheckoutModal, setShowCheckoutModal] = useState(false)
+  const [checkoutCamper, setCheckoutCamper] = useState<RosterCamper | null>(null)
+  const [authorizedPickups, setAuthorizedPickups] = useState<Array<{
+    id: string
+    name: string
+    relationship: string
+    phone: string | null
+  }>>([])
+  const [loadingPickups, setLoadingPickups] = useState(false)
+  const [selectedPickupId, setSelectedPickupId] = useState<string>('')
+  const [customPickupName, setCustomPickupName] = useState('')
+  const [customPickupRelationship, setCustomPickupRelationship] = useState('')
+  const [checkoutSubmitting, setCheckoutSubmitting] = useState(false)
+
+  // PDF export state
+  const [exportingPdf, setExportingPdf] = useState(false)
+
+  // Generate PDF export
+  const handleExportPdf = async () => {
+    if (!result) return
+
+    setExportingPdf(true)
+    try {
+      // Fetch all campers without pagination for export
+      const params = new URLSearchParams()
+      if (search) params.set('search', search)
+      if (groupFilter !== 'all') params.set('groupId', groupFilter)
+      if (statusFilter !== 'all') params.set('checkInStatus', statusFilter)
+      params.set('limit', '1000') // Get all for export
+
+      const res = await fetch(`/api/camps/${campId}/roster?${params}`)
+      const json = await res.json()
+
+      if (!res.ok) {
+        showToast('Failed to load roster data', 'error')
+        return
+      }
+
+      const allCampers = json.data?.campers || []
+      if (allCampers.length === 0) {
+        showToast('No campers to export', 'error')
+        return
+      }
+
+      // Create PDF
+      const doc = new jsPDF()
+      const pageWidth = doc.internal.pageSize.getWidth()
+
+      // Header
+      doc.setFontSize(18)
+      doc.setFont('helvetica', 'bold')
+      doc.text('Camp Roster', pageWidth / 2, 20, { align: 'center' })
+
+      doc.setFontSize(12)
+      doc.setFont('helvetica', 'normal')
+      doc.text(result.campName, pageWidth / 2, 28, { align: 'center' })
+
+      doc.setFontSize(10)
+      doc.setTextColor(100)
+      doc.text(`${result.campStartDate} - ${result.campEndDate}`, pageWidth / 2, 34, { align: 'center' })
+
+      // Stats
+      doc.setFontSize(10)
+      doc.setTextColor(0)
+      const today = new Date().toLocaleDateString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      })
+      doc.text(`Exported: ${today}`, 14, 44)
+
+      const checkedInCount = allCampers.filter((c: RosterCamper) => c.checkInStatus === 'checked_in').length
+      const notArrivedCount = allCampers.filter((c: RosterCamper) => c.checkInStatus === 'not_arrived').length
+      doc.text(`Total: ${allCampers.length} campers | Checked In: ${checkedInCount} | Not Arrived: ${notArrivedCount}`, 14, 50)
+
+      // Table data
+      const tableData = allCampers.map((camper: RosterCamper) => [
+        `${camper.lastName}, ${camper.firstName}`,
+        camper.gradeDisplay,
+        camper.groupName || 'Ungrouped',
+        camper.checkInStatus === 'checked_in' ? 'Checked In' :
+          camper.checkInStatus === 'checked_out' ? 'Checked Out' :
+            camper.checkInStatus === 'absent' ? 'Absent' : 'Not Arrived',
+        camper.parentPhone || '-',
+        [
+          camper.hasMedicalNotes ? 'M' : '',
+          camper.hasAllergies ? 'A' : '',
+        ].filter(Boolean).join(', ') || '-',
+      ])
+
+      // Generate table
+      autoTable(doc, {
+        startY: 56,
+        head: [['Name', 'Grade', 'Group', 'Status', 'Parent Phone', 'Flags']],
+        body: tableData,
+        styles: {
+          fontSize: 9,
+          cellPadding: 3,
+        },
+        headStyles: {
+          fillColor: [0, 0, 0],
+          textColor: [255, 255, 255],
+          fontStyle: 'bold',
+        },
+        columnStyles: {
+          0: { cellWidth: 45 },
+          1: { cellWidth: 25 },
+          2: { cellWidth: 30 },
+          3: { cellWidth: 25 },
+          4: { cellWidth: 35 },
+          5: { cellWidth: 20 },
+        },
+        alternateRowStyles: {
+          fillColor: [245, 245, 245],
+        },
+      })
+
+      // Footer with page numbers
+      const pageCount = doc.getNumberOfPages()
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i)
+        doc.setFontSize(8)
+        doc.setTextColor(128)
+        doc.text(
+          `Page ${i} of ${pageCount}`,
+          pageWidth / 2,
+          doc.internal.pageSize.getHeight() - 10,
+          { align: 'center' }
+        )
+      }
+
+      // Download
+      const filename = `roster-${result.campName.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${new Date().toISOString().split('T')[0]}.pdf`
+      doc.save(filename)
+      showToast('Roster exported successfully', 'success')
+    } catch (err) {
+      console.error('Failed to export PDF:', err)
+      showToast('Failed to export roster', 'error')
+    } finally {
+      setExportingPdf(false)
+    }
+  }
 
   // Fetch campers
   const fetchCampers = useCallback(async () => {
@@ -142,6 +289,99 @@ export default function TheRoster({ campId, role, backUrl }: TheRosterProps) {
     }
   }
 
+  // Open checkout modal and fetch authorized pickups
+  const openCheckoutModal = async (camper: RosterCamper) => {
+    setCheckoutCamper(camper)
+    setShowCheckoutModal(true)
+    setSelectedPickupId('')
+    setCustomPickupName('')
+    setCustomPickupRelationship('')
+    setLoadingPickups(true)
+    setAuthorizedPickups([])
+
+    try {
+      // Fetch authorized pickups for this athlete
+      const res = await fetch(`/api/athletes/${camper.athleteId}/authorized-pickups`)
+      if (res.ok) {
+        const data = await res.json()
+        setAuthorizedPickups(data.pickups || [])
+      }
+    } catch (err) {
+      console.error('Failed to load authorized pickups:', err)
+    } finally {
+      setLoadingPickups(false)
+    }
+  }
+
+  const closeCheckoutModal = () => {
+    setShowCheckoutModal(false)
+    setCheckoutCamper(null)
+    setAuthorizedPickups([])
+    setSelectedPickupId('')
+    setCustomPickupName('')
+    setCustomPickupRelationship('')
+  }
+
+  const handleCheckoutSubmit = async () => {
+    if (!checkoutCamper) return
+
+    // Determine pickup person info
+    let pickupPersonName: string | undefined
+    let pickupPersonRelationship: string | undefined
+    let pickupPersonId: string | undefined
+
+    if (selectedPickupId === 'custom') {
+      if (!customPickupName.trim()) {
+        showToast('Please enter pickup person name', 'error')
+        return
+      }
+      pickupPersonName = customPickupName.trim()
+      pickupPersonRelationship = customPickupRelationship.trim() || 'Other'
+    } else if (selectedPickupId === 'parent') {
+      pickupPersonName = 'Parent/Guardian'
+      pickupPersonRelationship = 'Parent'
+    } else if (selectedPickupId) {
+      const selectedPickup = authorizedPickups.find(p => p.id === selectedPickupId)
+      if (selectedPickup) {
+        pickupPersonId = selectedPickup.id
+        pickupPersonName = selectedPickup.name
+        pickupPersonRelationship = selectedPickup.relationship
+      }
+    }
+
+    if (!pickupPersonName) {
+      showToast('Please select who is picking up this camper', 'error')
+      return
+    }
+
+    setCheckoutSubmitting(true)
+    try {
+      const res = await fetch(`/api/camps/${campId}/roster/${checkoutCamper.id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'checked_out',
+          pickupPersonName,
+          pickupPersonRelationship,
+          pickupPersonId,
+        }),
+      })
+
+      if (res.ok) {
+        showToast(`${checkoutCamper.firstName} checked out to ${pickupPersonName}`, 'success')
+        fetchCampers()
+        closeCheckoutModal()
+      } else {
+        const data = await res.json()
+        showToast(data.error || 'Failed to check out', 'error')
+      }
+    } catch {
+      showToast('Failed to check out', 'error')
+    } finally {
+      setCheckoutSubmitting(false)
+    }
+  }
+
   // Grouping tool link
   const groupingUrl = role === 'hq_admin' || role === 'licensee_owner'
     ? `/admin/camps/${campId}/grouping`
@@ -174,6 +414,21 @@ export default function TheRoster({ campId, role, backUrl }: TheRosterProps) {
               )}
             </div>
             <div className="flex items-center gap-3">
+              {/* Export PDF Button */}
+              <button
+                onClick={handleExportPdf}
+                disabled={exportingPdf || !result}
+                className="px-4 py-2 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {exportingPdf ? (
+                  <div className="animate-spin w-4 h-4 border-2 border-gray-400 border-t-gray-700 rounded-full" />
+                ) : (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                )}
+                Export PDF
+              </button>
               {(role === 'hq_admin' || role === 'licensee_owner' || role === 'director') && (
                 <Link
                   href={groupingUrl}
@@ -347,6 +602,18 @@ export default function TheRoster({ campId, role, backUrl }: TheRosterProps) {
                               <div className="font-medium text-gray-900">
                                 {camper.lastName}, {camper.firstName}
                               </div>
+                              {camper.parentPhone && (
+                                <a
+                                  href={`tel:${camper.parentPhone}`}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 mt-0.5"
+                                >
+                                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                                  </svg>
+                                  {camper.parentPhone}
+                                </a>
+                              )}
                               {role !== 'coach' && camper.parentEmail && (
                                 <div className="text-xs text-gray-500">{camper.parentEmail}</div>
                               )}
@@ -416,7 +683,7 @@ export default function TheRoster({ campId, role, backUrl }: TheRosterProps) {
                             )}
                             {camper.checkInStatus === 'checked_in' && (
                               <button
-                                onClick={() => handleQuickStatus(camper, 'checked_out')}
+                                onClick={() => openCheckoutModal(camper)}
                                 className="px-3 py-1 text-xs font-medium bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
                               >
                                 Check Out
@@ -487,6 +754,131 @@ export default function TheRoster({ campId, role, backUrl }: TheRosterProps) {
             }`}
           >
             {toast.message}
+          </div>
+        </div>
+      )}
+
+      {/* Checkout Modal */}
+      {showCheckoutModal && checkoutCamper && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex min-h-full items-center justify-center p-4 text-center">
+            <div className="fixed inset-0 bg-black/50" onClick={closeCheckoutModal} />
+            <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full p-6 text-left">
+              <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                Check Out {checkoutCamper.firstName} {checkoutCamper.lastName}
+              </h3>
+              <p className="text-sm text-gray-500 mb-4">
+                Select who is picking up this camper
+              </p>
+
+              {loadingPickups ? (
+                <div className="flex justify-center py-8">
+                  <div className="animate-spin w-6 h-6 border-2 border-gray-300 border-t-blue-600 rounded-full" />
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {/* Parent Option */}
+                  <label className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="pickup"
+                      value="parent"
+                      checked={selectedPickupId === 'parent'}
+                      onChange={() => setSelectedPickupId('parent')}
+                      className="w-4 h-4 text-blue-600"
+                    />
+                    <div>
+                      <div className="font-medium text-gray-900">Parent/Guardian</div>
+                      <div className="text-sm text-gray-500">Primary parent picking up</div>
+                    </div>
+                  </label>
+
+                  {/* Authorized Pickups */}
+                  {authorizedPickups.map((pickup) => (
+                    <label
+                      key={pickup.id}
+                      className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer"
+                    >
+                      <input
+                        type="radio"
+                        name="pickup"
+                        value={pickup.id}
+                        checked={selectedPickupId === pickup.id}
+                        onChange={() => setSelectedPickupId(pickup.id)}
+                        className="w-4 h-4 text-blue-600"
+                      />
+                      <div className="flex-1">
+                        <div className="font-medium text-gray-900">{pickup.name}</div>
+                        <div className="text-sm text-gray-500">{pickup.relationship}</div>
+                      </div>
+                      {pickup.phone && (
+                        <a
+                          href={`tel:${pickup.phone}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="text-xs text-blue-600 hover:text-blue-800"
+                        >
+                          {pickup.phone}
+                        </a>
+                      )}
+                    </label>
+                  ))}
+
+                  {/* Custom Option */}
+                  <label className="flex items-start gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="pickup"
+                      value="custom"
+                      checked={selectedPickupId === 'custom'}
+                      onChange={() => setSelectedPickupId('custom')}
+                      className="w-4 h-4 text-blue-600 mt-1"
+                    />
+                    <div className="flex-1">
+                      <div className="font-medium text-gray-900 mb-2">Other Person</div>
+                      {selectedPickupId === 'custom' && (
+                        <div className="space-y-2">
+                          <input
+                            type="text"
+                            value={customPickupName}
+                            onChange={(e) => setCustomPickupName(e.target.value)}
+                            placeholder="Name"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          />
+                          <input
+                            type="text"
+                            value={customPickupRelationship}
+                            onChange={(e) => setCustomPickupRelationship(e.target.value)}
+                            placeholder="Relationship (e.g., Aunt, Family Friend)"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </label>
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-200">
+                <button
+                  onClick={closeCheckoutModal}
+                  disabled={checkoutSubmitting}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleCheckoutSubmit}
+                  disabled={checkoutSubmitting || !selectedPickupId}
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {checkoutSubmitting && (
+                    <div className="animate-spin w-4 h-4 border-2 border-white/30 border-t-white rounded-full" />
+                  )}
+                  Confirm Check Out
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

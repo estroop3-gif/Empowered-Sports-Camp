@@ -297,8 +297,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Create Stripe checkout session for the first registration
-    // (All registrations will be linked via parent profile)
+    // Create Stripe checkout session for ALL registrations
+    // This ensures all campers' prices, add-ons, and taxes are included
     const primaryRegistrationId = registrationIds[0]
     const successUrl = `${baseUrl}/register/confirmation?registration_id=${primaryRegistrationId}`
     const cancelUrl = `${baseUrl}/camps/${campId}`
@@ -306,6 +306,7 @@ export async function POST(request: NextRequest) {
     const { data: checkoutData, error: checkoutError } = await createStripeCheckoutSession({
       campSessionId: campId,
       registrationId: primaryRegistrationId,
+      registrationIds: registrationIds, // Pass all registration IDs
       successUrl,
       cancelUrl,
       tenantId,

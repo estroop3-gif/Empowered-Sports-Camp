@@ -265,6 +265,64 @@ export async function getUserRoles(userId: string): Promise<{ role: string; tena
 }
 
 /**
+ * Refresh tokens using refresh_token
+ */
+export async function refreshTokens(refreshToken: string): Promise<{
+  access_token: string
+  id_token: string
+  expires_in: number
+} | null> {
+  const region = process.env.AWS_REGION || 'us-east-2'
+  const userPoolId = process.env.COGNITO_USER_POOL_ID
+  const clientId = process.env.COGNITO_CLIENT_ID
+  const clientSecret = process.env.COGNITO_CLIENT_SECRET
+
+  if (!userPoolId || !clientId) {
+    console.error('Cognito configuration missing')
+    return null
+  }
+
+  const poolIdParts = userPoolId.split('_')
+  const domainPrefix = process.env.COGNITO_DOMAIN || `empowered-${poolIdParts[1]?.toLowerCase()}`
+
+  const tokenUrl = `https://${domainPrefix}.auth.${region}.amazoncognito.com/oauth2/token`
+
+  const body = new URLSearchParams({
+    grant_type: 'refresh_token',
+    client_id: clientId,
+    refresh_token: refreshToken,
+  })
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/x-www-form-urlencoded',
+  }
+
+  if (clientSecret) {
+    const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64')
+    headers['Authorization'] = `Basic ${credentials}`
+  }
+
+  try {
+    const response = await fetch(tokenUrl, {
+      method: 'POST',
+      headers,
+      body: body.toString(),
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('Token refresh failed:', response.status, errorText)
+      return null
+    }
+
+    return await response.json()
+  } catch (error) {
+    console.error('Token refresh error:', error)
+    return null
+  }
+}
+
+/**
  * Exchange authorization code for tokens (OAuth callback)
  */
 export async function exchangeCodeForTokens(code: string): Promise<{

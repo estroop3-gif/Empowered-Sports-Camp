@@ -29,12 +29,13 @@ export async function POST(request: NextRequest) {
     const response = NextResponse.json({ success: true })
 
     // Set cookies with secure options
+    // Use 24 hours for session tokens to reduce login friction
     const cookieOptions = {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax' as const,
       path: '/',
-      maxAge: expiresIn || 3600, // Default 1 hour
+      maxAge: 24 * 60 * 60, // 24 hours for session stability
     }
 
     response.cookies.set('id_token', idToken, cookieOptions)

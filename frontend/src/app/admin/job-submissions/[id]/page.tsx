@@ -174,9 +174,14 @@ export default function JobApplicationDetailPage({ params }: { params: Promise<{
   const handleStatusChange = async () => {
     if (!application || newStatus === application.status) return
 
+    const previousStatus = application.status
     setSaving(true)
     setSuccessMessage('')
     setErrorMessage('')
+
+    // Optimistically update the UI
+    setApplication(prev => prev ? { ...prev, status: newStatus } : null)
+    setStatusReason('')
 
     try {
       const res = await fetch(`/api/admin/job-applications/${id}`, {
@@ -189,15 +194,21 @@ export default function JobApplicationDetailPage({ params }: { params: Promise<{
       })
 
       if (res.ok) {
-        setStatusReason('')
         setSuccessMessage('Status updated successfully')
+        // Reload to get updated timeline
         loadApplication()
         setTimeout(() => setSuccessMessage(''), 3000)
       } else {
+        // Revert on error
+        setApplication(prev => prev ? { ...prev, status: previousStatus } : null)
+        setNewStatus(previousStatus)
         const { error } = await res.json()
         setErrorMessage(error || 'Failed to update status')
       }
     } catch (err) {
+      // Revert on error
+      setApplication(prev => prev ? { ...prev, status: previousStatus } : null)
+      setNewStatus(previousStatus)
       console.error('Error updating status:', err)
       setErrorMessage('Failed to update status')
     }
@@ -304,6 +315,7 @@ export default function JobApplicationDetailPage({ params }: { params: Promise<{
     )
   }
 
+  // Use application.status for display since we update it optimistically
   const statusConfig = STATUS_CONFIG[application.status] || STATUS_CONFIG.submitted
   const StatusIcon = statusConfig.icon
   const fullName = `${application.first_name} ${application.last_name}`

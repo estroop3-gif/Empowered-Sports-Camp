@@ -175,7 +175,7 @@ export function TerritoryEditModal({ territory, onClose, onSave }: TerritoryEdit
 
   const modalContent = (
     <>
-      {/* Full-screen overlay */}
+      {/* Full-screen scrollable overlay */}
       <div
         onClick={onClose}
         style={{
@@ -188,34 +188,32 @@ export function TerritoryEditModal({ territory, onClose, onSave }: TerritoryEdit
           height: '100vh',
           backgroundColor: 'rgba(0, 0, 0, 0.9)',
           zIndex: 99999,
-        }}
-      />
-      {/* Modal container */}
-      <div
-        style={{
-          position: 'fixed',
-          top: '50%',
-          left: '50%',
-          transform: 'translate(-50%, -50%)',
-          width: '100%',
-          maxWidth: '36rem',
-          maxHeight: '90vh',
-          zIndex: 100000,
+          overflowY: 'auto',
           display: 'flex',
-          flexDirection: 'column',
+          justifyContent: 'center',
+          padding: '2rem 1rem',
         }}
-        onClick={(e) => e.stopPropagation()}
       >
+        {/* Modal container */}
         <div
           style={{
-            backgroundColor: '#1a1a1a',
-            border: '1px solid rgba(255, 255, 255, 0.2)',
+            width: '100%',
+            maxWidth: '36rem',
+            zIndex: 100000,
             display: 'flex',
             flexDirection: 'column',
-            maxHeight: '90vh',
-            overflow: 'hidden',
+            margin: 'auto',
           }}
+          onClick={(e) => e.stopPropagation()}
         >
+          <div
+            style={{
+              backgroundColor: '#1a1a1a',
+              border: '1px solid rgba(255, 255, 255, 0.2)',
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+          >
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 flex-shrink-0">
             <div className="flex items-center gap-3">
@@ -408,6 +406,7 @@ export function TerritoryEditModal({ territory, onClose, onSave }: TerritoryEdit
           </div>
         </div>
       </div>
+    </div>
     </>
   )
 

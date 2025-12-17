@@ -88,8 +88,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         )
 
         if (error) {
+          console.error('Failed to update CIT status:', error.message, error)
           return NextResponse.json(
-            { error: 'Failed to update status' },
+            { error: 'Failed to update status', details: error.message },
             { status: 500 }
           )
         }

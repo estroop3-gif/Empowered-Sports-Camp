@@ -11,7 +11,7 @@
  */
 
 import { useState, useEffect, use, useRef } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { Button } from '@/components/ui/button'
@@ -40,7 +40,9 @@ import {
   Shirt,
   Trophy,
   Users,
+  Shield,
 } from 'lucide-react'
+import { AuthorizedPickupManager } from '@/components/athletes/AuthorizedPickupManager'
 
 interface Athlete {
   id: string
@@ -137,8 +139,13 @@ interface PageProps {
 export default function ParentAthleteDetailPage({ params }: PageProps) {
   const { athleteId } = use(params)
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { user, loading: authLoading } = useAuth()
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Get initial tab from URL query param
+  const tabParam = searchParams.get('tab')
+  const initialTab = tabParam === 'safety' ? 'safety' : tabParam === 'history' ? 'history' : 'profile'
 
   const [athlete, setAthlete] = useState<Athlete | null>(null)
   const [registrations, setRegistrations] = useState<Registration[]>([])
@@ -153,7 +160,7 @@ export default function ParentAthleteDetailPage({ params }: PageProps) {
 
   // Form state
   const [formData, setFormData] = useState<Partial<Athlete>>({})
-  const [activeTab, setActiveTab] = useState<'profile' | 'safety' | 'history'>('profile')
+  const [activeTab, setActiveTab] = useState<'profile' | 'safety' | 'history'>(initialTab)
 
   useEffect(() => {
     if (!authLoading) {
@@ -822,25 +829,41 @@ export default function ParentAthleteDetailPage({ params }: PageProps) {
               </div>
             </div>
 
-            {/* Pickup Notes */}
+            {/* Authorized Pickup List */}
+            <div className="bg-dark-100 border border-white/10">
+              <div className="px-6 py-4 border-b border-purple/30">
+                <h2 className="text-sm font-bold uppercase tracking-widest text-white flex items-center gap-2">
+                  <Shield className="h-4 w-4 text-purple" />
+                  Authorized Pickup
+                </h2>
+              </div>
+              <div className="p-6">
+                <AuthorizedPickupManager
+                  athleteId={athleteId}
+                  athleteName={athlete.first_name}
+                />
+              </div>
+            </div>
+
+            {/* Additional Pickup Notes */}
             <div className="bg-dark-100 border border-white/10">
               <div className="px-6 py-4 border-b border-white/10">
                 <h2 className="text-sm font-bold uppercase tracking-widest text-white flex items-center gap-2">
                   <Users className="h-4 w-4 text-white/50" />
-                  Pickup Notes
+                  Additional Pickup Notes
                 </h2>
               </div>
               <div className="p-6">
                 <div>
                   <label className="block text-xs text-white/40 uppercase tracking-wider mb-2">
-                    Authorized Pickup & Notes
+                    Special instructions or notes for pickup
                   </label>
                   {isEditMode ? (
                     <textarea
                       value={formData.pickup_notes || ''}
                       onChange={(e) => setFormData({ ...formData, pickup_notes: e.target.value || null })}
                       className="w-full bg-black border border-white/20 text-white px-4 py-3 focus:border-neon focus:outline-none min-h-[100px]"
-                      placeholder="List authorized pickup persons and any special pickup instructions..."
+                      placeholder="Any special pickup instructions or notes..."
                     />
                   ) : (
                     <p className="text-white py-2 whitespace-pre-wrap">{athlete.pickup_notes || 'None listed'}</p>

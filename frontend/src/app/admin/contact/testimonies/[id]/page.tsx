@@ -123,9 +123,31 @@ export default function TestimonyDetailPage() {
   }, [id])
 
   const handleSave = async () => {
+    if (!testimony) return
+
+    const previousValues = {
+      status: testimony.status,
+      is_featured: testimony.is_featured,
+      display_order: testimony.display_order,
+      review_notes: testimony.review_notes,
+      headline: testimony.headline,
+      body: testimony.body,
+    }
+
     setIsSaving(true)
     setError(null)
     setSuccessMessage(null)
+
+    // Optimistically update the UI
+    setTestimony(prev => prev ? {
+      ...prev,
+      status,
+      is_featured: isFeatured,
+      display_order: displayOrder,
+      review_notes: reviewNotes || null,
+      headline: editedHeadline || null,
+      body: editedBody,
+    } : null)
 
     try {
       const res = await fetch(`/api/admin/testimonies/${id}`, {
@@ -144,15 +166,26 @@ export default function TestimonyDetailPage() {
       const { data, error } = await res.json()
 
       if (error) {
+        // Revert on error
+        setTestimony(prev => prev ? { ...prev, ...previousValues } : null)
+        setStatus(previousValues.status)
+        setIsFeatured(previousValues.is_featured)
+        setDisplayOrder(previousValues.display_order)
         setError(error)
         setIsSaving(false)
         return
       }
 
+      // Update with full data from server (includes timestamps)
       setTestimony(data)
       setSuccessMessage('Testimony updated successfully')
       setTimeout(() => setSuccessMessage(null), 3000)
     } catch (err) {
+      // Revert on error
+      setTestimony(prev => prev ? { ...prev, ...previousValues } : null)
+      setStatus(previousValues.status)
+      setIsFeatured(previousValues.is_featured)
+      setDisplayOrder(previousValues.display_order)
       console.error('Error saving testimony:', err)
       setError('Failed to save changes')
     } finally {

@@ -163,6 +163,43 @@ export default function LicenseeJobSubmissionsPage() {
     }
   }
 
+  // Optimistically update application status in local state
+  const handleStatusChange = async (id: string, newStatus: string) => {
+    const app = applications.find(a => a.id === id)
+    if (!app) return
+
+    const previousStatus = app.status
+
+    // Optimistically update UI immediately
+    setApplications((prev) =>
+      prev.map((a) => (a.id === id ? { ...a, status: newStatus } : a))
+    )
+
+    try {
+      const res = await fetch(`/api/licensee/job-applications/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      })
+
+      if (!res.ok) {
+        // Revert on error
+        setApplications((prev) =>
+          prev.map((a) => (a.id === id ? { ...a, status: previousStatus } : a))
+        )
+      } else {
+        // Refresh counts
+        loadCounts()
+      }
+    } catch (err) {
+      // Revert on error
+      setApplications((prev) =>
+        prev.map((a) => (a.id === id ? { ...a, status: previousStatus } : a))
+      )
+      console.error('Error updating status:', err)
+    }
+  }
+
   const filteredApplications = applications.filter(app => {
     if (!searchQuery) return true
     const query = searchQuery.toLowerCase()
@@ -343,14 +380,48 @@ export default function LicenseeJobSubmissionsPage() {
                           <td className="px-4 py-4 text-sm text-white/40">
                             {formatDate(app.created_at)}
                           </td>
-                          <td className="px-4 py-4 text-right">
-                            <Link
-                              href={`/licensee/job-submissions/${app.id}`}
-                              className="inline-flex items-center gap-1 text-sm text-magenta hover:text-magenta/80 transition-colors"
-                            >
-                              View
-                              <ChevronRight className="h-4 w-4" />
-                            </Link>
+                          <td className="px-4 py-4">
+                            <div className="flex items-center gap-2 justify-end">
+                              {app.status === 'submitted' && (
+                                <>
+                                  <button
+                                    onClick={() => handleStatusChange(app.id, 'under_review')}
+                                    className="px-2 py-1 text-xs font-bold uppercase tracking-wider bg-yellow-400/10 text-yellow-400 border border-yellow-400/30 hover:bg-yellow-400/20 transition-colors"
+                                  >
+                                    Review
+                                  </button>
+                                  <button
+                                    onClick={() => handleStatusChange(app.id, 'rejected')}
+                                    className="px-2 py-1 text-xs font-bold uppercase tracking-wider bg-red-400/10 text-red-400 border border-red-400/30 hover:bg-red-400/20 transition-colors"
+                                  >
+                                    Reject
+                                  </button>
+                                </>
+                              )}
+                              {app.status === 'under_review' && (
+                                <>
+                                  <button
+                                    onClick={() => handleStatusChange(app.id, 'phone_screen')}
+                                    className="px-2 py-1 text-xs font-bold uppercase tracking-wider bg-purple/10 text-purple border border-purple/30 hover:bg-purple/20 transition-colors"
+                                  >
+                                    Phone
+                                  </button>
+                                  <button
+                                    onClick={() => handleStatusChange(app.id, 'rejected')}
+                                    className="px-2 py-1 text-xs font-bold uppercase tracking-wider bg-red-400/10 text-red-400 border border-red-400/30 hover:bg-red-400/20 transition-colors"
+                                  >
+                                    Reject
+                                  </button>
+                                </>
+                              )}
+                              <Link
+                                href={`/licensee/job-submissions/${app.id}`}
+                                className="inline-flex items-center gap-1 text-sm text-magenta hover:text-magenta/80 transition-colors"
+                              >
+                                View
+                                <ChevronRight className="h-4 w-4" />
+                              </Link>
+                            </div>
                           </td>
                         </tr>
                       )

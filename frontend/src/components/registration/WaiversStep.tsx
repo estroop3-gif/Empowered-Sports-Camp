@@ -56,6 +56,7 @@ export function WaiversStep({ campSession, onContinue, onBack }: WaiversStepProp
   const [signingStates, setSigningStates] = useState<WaiverSigningState[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [currentWaiverIndex, setCurrentWaiverIndex] = useState(0)
+  const [photoVideoConsent, setPhotoVideoConsent] = useState(true) // Default checked
 
   useEffect(() => {
     loadWaiverRequirements()
@@ -170,6 +171,9 @@ export function WaiversStep({ campSession, onContinue, onBack }: WaiversStepProp
       }))
 
     localStorage.setItem('pendingWaiverSignatures', JSON.stringify(waiverAcknowledgments))
+
+    // Store photo/video consent
+    localStorage.setItem('photoVideoConsent', JSON.stringify(photoVideoConsent))
 
     setSubmitting(false)
     onContinue()
@@ -372,6 +376,26 @@ export function WaiversStep({ campSession, onContinue, onBack }: WaiversStepProp
             </div>
           )
         })}
+      </div>
+
+      {/* Photo/Video Consent */}
+      <div className="mb-8 p-5 bg-black/30 border border-white/10">
+        <label className="flex items-start gap-4 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={photoVideoConsent}
+            onChange={(e) => setPhotoVideoConsent(e.target.checked)}
+            className="mt-1 w-5 h-5 accent-neon flex-shrink-0"
+          />
+          <div>
+            <span className="font-bold text-white block mb-1">Photo & Video Consent</span>
+            <span className="text-sm text-white/70">
+              I grant Empowered Athletes permission to take photographs and/or video recordings of my
+              child(ren) during camp activities. These may be used for promotional materials, social media,
+              and marketing purposes. Uncheck this box if you do not consent to photos or videos of your child(ren).
+            </span>
+          </div>
+        </label>
       </div>
 
       {/* Navigation */}

@@ -131,8 +131,17 @@ export default function LicenseeApplicationDetailPage({
   const handleSave = async () => {
     if (!application) return
 
+    const previousStatus = application.status
+    const previousNotes = application.internal_notes
     setSaving(true)
     setError(null)
+
+    // Optimistically update the UI
+    setApplication(prev => prev ? {
+      ...prev,
+      status: selectedStatus,
+      internal_notes: internalNotes
+    } : null)
 
     try {
       const res = await fetch(`/api/admin/licensee-applications/${id}`, {
@@ -144,16 +153,31 @@ export default function LicenseeApplicationDetailPage({
         }),
       })
 
-      const { data, error: apiError } = await res.json()
+      const { error: apiError } = await res.json()
 
       if (apiError) {
+        // Revert on error
+        setApplication(prev => prev ? {
+          ...prev,
+          status: previousStatus,
+          internal_notes: previousNotes
+        } : null)
+        setSelectedStatus(previousStatus)
         setError(apiError)
         setSaving(false)
         return
       }
 
-      setApplication(data)
+      // Reload to get updated timestamps
+      loadApplication()
     } catch (err) {
+      // Revert on error
+      setApplication(prev => prev ? {
+        ...prev,
+        status: previousStatus,
+        internal_notes: previousNotes
+      } : null)
+      setSelectedStatus(previousStatus)
       console.error('Error saving application:', err)
       setError('Failed to save changes')
     }
@@ -200,6 +224,7 @@ export default function LicenseeApplicationDetailPage({
     )
   }
 
+  // Use application.status for display since we update it optimistically
   const statusConfig = STATUS_CONFIG[application.status] || STATUS_CONFIG.submitted
   const StatusIcon = statusConfig.icon
   const fullName = `${application.first_name} ${application.last_name}`

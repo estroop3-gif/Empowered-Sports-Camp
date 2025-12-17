@@ -14,10 +14,11 @@ import {
   Users,
   Calendar,
   Star,
-  AlertCircle,
   TrendingUp,
   RefreshCw,
-  BarChart3,
+  ClipboardCheck,
+  Wallet,
+  Mic,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import Link from 'next/link'
@@ -35,6 +36,13 @@ interface LicenseeOverview {
   averageCsat: number | null
   complaintRatio: number
   averageCurriculumAdherenceScore: number | null
+  // New incentive-related fields
+  parentSurveyRate: number | null // Percentage of surveys 4.5+
+  totalSurveys: number
+  registeredCampersPerCamp: number
+  totalVenueCost: number
+  venueBudget: number // $1200 default
+  uniqueGuestSpeakers: number
 }
 
 interface TrendDataPoint {
@@ -288,34 +296,75 @@ export default function LicenseeAnalyticsPage() {
           ]}
         />
 
-        {/* Quality Metrics */}
+        {/* Incentive Metrics */}
         <div className="mt-6">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-white/40 mb-3">
+            Incentive Bonuses
+          </h3>
           <KpiGrid
-            columns={3}
+            columns={4}
             items={[
               {
-                label: 'Average CSAT',
-                value: overview?.averageCsat ?? 'N/A',
-                format: overview?.averageCsat ? 'decimal' : undefined,
+                label: 'Parent Surveys',
+                value: overview?.parentSurveyRate ?? 'N/A',
+                format: overview?.parentSurveyRate !== null ? 'percentage' : undefined,
                 icon: Star,
-                variant: (overview?.averageCsat ?? 0) >= 4.5 ? 'neon' : 'default',
-                subLabel: 'Out of 5.0',
+                variant: (overview?.parentSurveyRate ?? 0) >= 70 ? 'neon' : 'default',
+                subLabel: `${overview?.totalSurveys ?? 0} surveys (4.5+ rating)`,
+                bonus: {
+                  amount: (overview?.parentSurveyRate ?? 0) >= 70
+                    ? (overview?.sessionsHeld ?? 0) * 200
+                    : 0,
+                  label: '$200/camp bonus (70%+ at 4.5+)',
+                  eligible: (overview?.parentSurveyRate ?? 0) >= 70,
+                },
               },
               {
-                label: 'Complaint Rate',
-                value: overview?.complaintRatio ?? 0,
-                format: 'percentage',
-                icon: AlertCircle,
-                variant: (overview?.complaintRatio ?? 0) > 2 ? 'magenta' : 'default',
-                subLabel: 'Per 100 campers',
+                label: 'Registered Campers',
+                value: overview?.totalCampers ?? 0,
+                format: 'number',
+                icon: ClipboardCheck,
+                variant: (overview?.registeredCampersPerCamp ?? 0) >= 25 ? 'neon' : 'default',
+                subLabel: `${overview?.registeredCampersPerCamp?.toFixed(1) ?? 0} avg per camp`,
+                bonus: {
+                  amount: (overview?.registeredCampersPerCamp ?? 0) >= 25
+                    ? (overview?.totalCampers ?? 0) * 20
+                    : 0,
+                  label: '$20/camper bonus (min 25/camp)',
+                  eligible: (overview?.registeredCampersPerCamp ?? 0) >= 25,
+                },
               },
               {
-                label: 'Curriculum Adherence',
-                value: overview?.averageCurriculumAdherenceScore ?? 'N/A',
-                format: overview?.averageCurriculumAdherenceScore ? 'percentage' : undefined,
-                icon: BarChart3,
-                variant: (overview?.averageCurriculumAdherenceScore ?? 0) >= 90 ? 'neon' : 'default',
-                subLabel: 'Average score',
+                label: 'Guest Speakers',
+                value: overview?.uniqueGuestSpeakers ?? 0,
+                format: 'number',
+                icon: Mic,
+                variant: (overview?.uniqueGuestSpeakers ?? 0) >= 3 ? 'neon' : 'default',
+                subLabel: 'Unique high-profile speakers',
+                bonus: {
+                  amount: (overview?.uniqueGuestSpeakers ?? 0) >= 3
+                    ? (overview?.sessionsHeld ?? 0) * 100
+                    : 0,
+                  label: '$100/session bonus (min 3 speakers)',
+                  eligible: (overview?.uniqueGuestSpeakers ?? 0) >= 3,
+                },
+              },
+              {
+                label: 'Budget Efficiency',
+                value: overview?.totalVenueCost !== undefined && overview?.venueBudget !== undefined
+                  ? Math.max(0, ((overview.venueBudget - overview.totalVenueCost) / overview.venueBudget) * 100)
+                  : 'N/A',
+                format: overview?.totalVenueCost !== undefined ? 'percentage' : undefined,
+                icon: Wallet,
+                variant: (overview?.totalVenueCost ?? 1200) < (overview?.venueBudget ?? 1200) ? 'neon' : 'default',
+                subLabel: `${formatCurrency(overview?.totalVenueCost ?? 0)} of ${formatCurrency(overview?.venueBudget ?? 1200)} budget`,
+                bonus: {
+                  amount: (overview?.totalVenueCost ?? 1200) < (overview?.venueBudget ?? 1200)
+                    ? Math.round(((overview?.venueBudget ?? 1200) - (overview?.totalVenueCost ?? 0)) * 0.25 * (overview?.sessionsHeld ?? 0))
+                    : 0,
+                  label: '25% of venue savings/camp',
+                  eligible: (overview?.totalVenueCost ?? 1200) < (overview?.venueBudget ?? 1200),
+                },
               },
             ]}
           />

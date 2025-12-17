@@ -37,6 +37,8 @@ import {
   Clock,
   XCircle,
   UserCheck,
+  MapPin,
+  X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { LicenseeEditModal } from '@/components/admin/LicenseeEditModal'
@@ -61,6 +63,13 @@ export default function AllLicenseesPage() {
   const [deactivating, setDeactivating] = useState<string | null>(null)
   const [activating, setActivating] = useState<string | null>(null)
   const [editModalLicensee, setEditModalLicensee] = useState<Licensee | null>(null)
+  const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number } | null>(null)
+
+  // Territory assignment state
+  const [territories, setTerritories] = useState<Array<{ id: string; name: string; state_region: string; status: string; tenant_id: string | null }>>([])
+  const [assignTerritoryLicensee, setAssignTerritoryLicensee] = useState<Licensee | null>(null)
+  const [selectedTerritoryId, setSelectedTerritoryId] = useState<string>('')
+  const [assigningTerritory, setAssigningTerritory] = useState(false)
 
   // Fetch licensees on mount
   useEffect(() => {
@@ -88,6 +97,69 @@ export default function AllLicenseesPage() {
 
     fetchLicensees()
   }, [])
+
+  // Fetch territories when assign modal opens
+  useEffect(() => {
+    async function fetchTerritories() {
+      if (!assignTerritoryLicensee) return
+
+      try {
+        const res = await fetch('/api/admin/territories', { credentials: 'include' })
+        const result = await res.json()
+        if (result.data?.territories) {
+          setTerritories(result.data.territories)
+        }
+      } catch (err) {
+        console.error('Failed to load territories:', err)
+      }
+    }
+
+    fetchTerritories()
+  }, [assignTerritoryLicensee])
+
+  // Handle territory assignment
+  const handleAssignTerritory = async () => {
+    if (!assignTerritoryLicensee || !selectedTerritoryId) return
+
+    setAssigningTerritory(true)
+
+    try {
+      const res = await fetch(`/api/admin/territories/${selectedTerritoryId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'assign',
+          tenant_id: assignTerritoryLicensee.tenant_id,
+        }),
+      })
+
+      const result = await res.json()
+
+      if (res.ok) {
+        // Get the territory name
+        const territory = territories.find(t => t.id === selectedTerritoryId)
+
+        // Update the licensee in the list with the new territory
+        setLicensees((prev) =>
+          prev.map((l) =>
+            l.id === assignTerritoryLicensee.id
+              ? { ...l, territory_name: territory?.name || 'Assigned' }
+              : l
+          )
+        )
+
+        // Close modal
+        setAssignTerritoryLicensee(null)
+        setSelectedTerritoryId('')
+      } else {
+        alert(result.error || 'Failed to assign territory')
+      }
+    } catch (err) {
+      alert('Failed to assign territory')
+    }
+
+    setAssigningTerritory(false)
+  }
 
   // Filter licensees based on search and status
   const filteredLicensees = useMemo(() => {
@@ -182,17 +254,62 @@ export default function AllLicenseesPage() {
     setEditModalLicensee(null)
   }
 
-  // Close dropdown when clicking outside
+  // Close dropdown when clicking outside or scrolling
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as HTMLElement
       // Don't close if clicking inside a dropdown or on the dropdown trigger
       if (target.closest('[data-dropdown]')) return
       setActiveDropdown(null)
+      setDropdownPosition(null)
+    }
+    const handleScroll = () => {
+      setActiveDropdown(null)
+      setDropdownPosition(null)
     }
     document.addEventListener('click', handleClickOutside)
-    return () => document.removeEventListener('click', handleClickOutside)
+    window.addEventListener('scroll', handleScroll, true)
+    return () => {
+      document.removeEventListener('click', handleClickOutside)
+      window.removeEventListener('scroll', handleScroll, true)
+    }
   }, [])
+
+  // Handle dropdown toggle with position calculation
+  const handleDropdownToggle = (licenseeId: string, e: React.MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation()
+    if (activeDropdown === licenseeId) {
+      setActiveDropdown(null)
+      setDropdownPosition(null)
+    } else {
+      const button = e.currentTarget
+      const rect = button.getBoundingClientRect()
+      const dropdownWidth = 192 // w-48 = 12rem = 192px
+      const dropdownHeight = 150 // approximate height
+
+      // Calculate position - prefer right-aligned, below the button
+      let left = rect.right - dropdownWidth
+      let top = rect.bottom + 4
+
+      // If dropdown would go off the right edge, align to left of button
+      if (left < 0) {
+        left = rect.left
+      }
+
+      // If dropdown would go off the bottom, check if we need to scroll
+      const viewportHeight = window.innerHeight
+      if (top + dropdownHeight > viewportHeight) {
+        // Position above if there's more room above
+        if (rect.top > dropdownHeight) {
+          top = rect.top - dropdownHeight - 4
+        }
+        // Otherwise keep below and let page scroll
+      }
+
+      setDropdownPosition({ top, left })
+      setActiveDropdown(licenseeId)
+    }
+  }
 
   const getStatusBadge = (licensee: Licensee) => {
     if (!licensee.is_active) {
@@ -434,70 +551,11 @@ export default function AllLicenseesPage() {
                         {/* Actions Dropdown */}
                         <div className="relative" data-dropdown>
                           <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setActiveDropdown(
-                                activeDropdown === licensee.id
-                                  ? null
-                                  : licensee.id
-                              )
-                            }}
+                            onClick={(e) => handleDropdownToggle(licensee.id, e)}
                             className="p-2 text-white/40 hover:text-white transition-colors"
                           >
                             <MoreVertical className="h-4 w-4" />
                           </button>
-
-                          {activeDropdown === licensee.id && (
-                            <div
-                              className="absolute right-0 top-full mt-1 w-48 bg-black border border-white/10 shadow-xl z-50"
-                              data-dropdown
-                            >
-                              <button
-                                onClick={() => {
-                                  setEditModalLicensee(licensee)
-                                  setActiveDropdown(null)
-                                }}
-                                className="flex items-center gap-2 w-full px-4 py-3 text-sm text-white/70 hover:bg-white/5 hover:text-white transition-colors"
-                              >
-                                <Edit className="h-4 w-4" />
-                                Edit Licensee
-                              </button>
-                              <Link
-                                href={`/admin/analytics/licensees/${licensee.id}`}
-                                className="flex items-center gap-2 px-4 py-3 text-sm text-white/70 hover:bg-white/5 hover:text-white transition-colors"
-                              >
-                                <Eye className="h-4 w-4" />
-                                View Analytics
-                              </Link>
-                              {licensee.is_active ? (
-                                <button
-                                  onClick={() => handleDeactivate(licensee.id)}
-                                  disabled={deactivating === licensee.id}
-                                  className="flex items-center gap-2 w-full px-4 py-3 text-sm text-red-400 hover:bg-red-500/10 transition-colors"
-                                >
-                                  {deactivating === licensee.id ? (
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                  ) : (
-                                    <UserMinus className="h-4 w-4" />
-                                  )}
-                                  Deactivate
-                                </button>
-                              ) : (
-                                <button
-                                  onClick={() => handleActivate(licensee.id)}
-                                  disabled={activating === licensee.id}
-                                  className="flex items-center gap-2 w-full px-4 py-3 text-sm text-neon hover:bg-neon/10 transition-colors"
-                                >
-                                  {activating === licensee.id ? (
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                  ) : (
-                                    <UserCheck className="h-4 w-4" />
-                                  )}
-                                  Reactivate
-                                </button>
-                              )}
-                            </div>
-                          )}
                         </div>
                       </div>
                     </td>
@@ -517,6 +575,88 @@ export default function AllLicenseesPage() {
         </ContentCard>
       )}
 
+      {/* Fixed position dropdown portal */}
+      {activeDropdown && dropdownPosition && (
+        <div
+          className="fixed w-48 bg-black border border-white/10 shadow-xl z-[9999]"
+          style={{
+            top: dropdownPosition.top,
+            left: dropdownPosition.left,
+          }}
+          data-dropdown
+        >
+          {(() => {
+            const licensee = filteredLicensees.find(l => l.id === activeDropdown)
+            if (!licensee) return null
+            return (
+              <>
+                <button
+                  onClick={() => {
+                    setEditModalLicensee(licensee)
+                    setActiveDropdown(null)
+                    setDropdownPosition(null)
+                  }}
+                  className="flex items-center gap-2 w-full px-4 py-3 text-sm text-white/70 hover:bg-white/5 hover:text-white transition-colors"
+                >
+                  <Edit className="h-4 w-4" />
+                  Edit Licensee
+                </button>
+                <Link
+                  href={`/admin/analytics/licensees/${licensee.id}`}
+                  className="flex items-center gap-2 px-4 py-3 text-sm text-white/70 hover:bg-white/5 hover:text-white transition-colors"
+                  onClick={() => {
+                    setActiveDropdown(null)
+                    setDropdownPosition(null)
+                  }}
+                >
+                  <Eye className="h-4 w-4" />
+                  View Analytics
+                </Link>
+                <button
+                  onClick={() => {
+                    setAssignTerritoryLicensee(licensee)
+                    setSelectedTerritoryId('')
+                    setActiveDropdown(null)
+                    setDropdownPosition(null)
+                  }}
+                  className="flex items-center gap-2 w-full px-4 py-3 text-sm text-white/70 hover:bg-white/5 hover:text-white transition-colors"
+                >
+                  <MapPin className="h-4 w-4" />
+                  {licensee.territory_name ? 'Change Territory' : 'Assign Territory'}
+                </button>
+                {licensee.is_active ? (
+                  <button
+                    onClick={() => handleDeactivate(licensee.id)}
+                    disabled={deactivating === licensee.id}
+                    className="flex items-center gap-2 w-full px-4 py-3 text-sm text-red-400 hover:bg-red-500/10 transition-colors"
+                  >
+                    {deactivating === licensee.id ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <UserMinus className="h-4 w-4" />
+                    )}
+                    Deactivate
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => handleActivate(licensee.id)}
+                    disabled={activating === licensee.id}
+                    className="flex items-center gap-2 w-full px-4 py-3 text-sm text-neon hover:bg-neon/10 transition-colors"
+                  >
+                    {activating === licensee.id ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <UserCheck className="h-4 w-4" />
+                    )}
+                    Reactivate
+                  </button>
+                )}
+              </>
+            )
+          })()}
+        </div>
+      )}
+
       {/* Edit Modal */}
       {editModalLicensee && (
         <LicenseeEditModal
@@ -524,6 +664,129 @@ export default function AllLicenseesPage() {
           onClose={() => setEditModalLicensee(null)}
           onSave={handleEditSave}
         />
+      )}
+
+      {/* Territory Assignment Modal */}
+      {assignTerritoryLicensee && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div
+            className="fixed inset-0 bg-black/80"
+            onClick={() => {
+              setAssignTerritoryLicensee(null)
+              setSelectedTerritoryId('')
+            }}
+          />
+          <div className="flex min-h-full items-center justify-center p-4">
+            <div className="relative bg-dark-100 border border-white/10 w-full max-w-lg">
+              {/* Header */}
+              <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 bg-purple/10 border border-purple/30 flex items-center justify-center">
+                    <MapPin className="h-5 w-5 text-purple" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-bold uppercase tracking-wider text-white">
+                      Assign Territory
+                    </h2>
+                    <p className="text-sm text-white/40">
+                      {assignTerritoryLicensee.first_name} {assignTerritoryLicensee.last_name}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setAssignTerritoryLicensee(null)
+                    setSelectedTerritoryId('')
+                  }}
+                  className="text-white/40 hover:text-white transition-colors"
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+
+              {/* Content */}
+              <div className="p-6 space-y-4">
+                {assignTerritoryLicensee.territory_name && (
+                  <div className="p-3 bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 text-sm">
+                    Currently assigned to: <strong>{assignTerritoryLicensee.territory_name}</strong>
+                  </div>
+                )}
+
+                <label className="block text-xs font-bold uppercase tracking-wider text-white/60 mb-2">
+                  Select Territory
+                </label>
+
+                {territories.length === 0 ? (
+                  <div className="py-8 text-center text-white/40">
+                    <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
+                    Loading territories...
+                  </div>
+                ) : (
+                  <div className="max-h-64 overflow-y-auto space-y-2">
+                    {/* Filter to only show open/reserved territories or the one already assigned */}
+                    {territories
+                      .filter(t => t.status === 'open' || t.status === 'reserved' || t.tenant_id === assignTerritoryLicensee.tenant_id)
+                      .map((territory) => (
+                        <button
+                          key={territory.id}
+                          onClick={() => setSelectedTerritoryId(territory.id)}
+                          className={cn(
+                            'w-full flex items-center justify-between p-3 border transition-all text-left',
+                            selectedTerritoryId === territory.id
+                              ? 'bg-purple/10 border-purple'
+                              : 'bg-black/50 border-white/10 hover:border-white/30'
+                          )}
+                        >
+                          <div>
+                            <p className="font-semibold text-white">{territory.name}</p>
+                            <p className="text-xs text-white/40">{territory.state_region}</p>
+                          </div>
+                          <span className={cn(
+                            'text-xs uppercase tracking-wider px-2 py-1 border',
+                            territory.status === 'open'
+                              ? 'bg-neon/10 text-neon border-neon/30'
+                              : territory.status === 'reserved'
+                              ? 'bg-yellow-400/10 text-yellow-400 border-yellow-400/30'
+                              : 'bg-white/10 text-white/40 border-white/10'
+                          )}>
+                            {territory.status}
+                          </span>
+                        </button>
+                      ))}
+
+                    {territories.filter(t => t.status === 'open' || t.status === 'reserved').length === 0 && (
+                      <div className="py-4 text-center text-white/40 text-sm">
+                        No available territories. All territories are assigned or closed.
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="flex items-center justify-end gap-4 px-6 py-4 border-t border-white/10">
+                <button
+                  onClick={() => {
+                    setAssignTerritoryLicensee(null)
+                    setSelectedTerritoryId('')
+                  }}
+                  disabled={assigningTerritory}
+                  className="px-6 py-3 border border-white/20 text-white font-bold uppercase tracking-wider hover:bg-white/5 transition-colors disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleAssignTerritory}
+                  disabled={assigningTerritory || !selectedTerritoryId}
+                  className="flex items-center gap-2 px-6 py-3 bg-neon text-black font-bold uppercase tracking-wider hover:bg-neon/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {assigningTerritory && <Loader2 className="h-4 w-4 animate-spin" />}
+                  Assign Territory
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </AdminLayout>
   )

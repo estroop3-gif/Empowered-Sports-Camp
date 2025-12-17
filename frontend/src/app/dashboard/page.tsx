@@ -15,6 +15,9 @@ import {
   Zap,
   User,
   Loader2,
+  Shield,
+  ShoppingBag,
+  Coins,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -471,6 +474,42 @@ export default function ParentDashboard() {
                   </div>
                   <ArrowRight className="h-4 w-4 text-white/30 group-hover:text-magenta transition-colors" />
                 </Link>
+                {athletes.length > 0 && (
+                  <Link
+                    href={athletes.length === 1 ? `/dashboard/athletes/${athletes[0].id}?tab=safety` : '/dashboard/authorized-pickups'}
+                    className="flex items-center justify-between p-3 bg-black/50 border border-white/10 hover:border-cyan-400/30 hover:bg-cyan-400/5 transition-all group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Shield className="h-5 w-5 text-cyan-400" />
+                      <span className="text-sm font-semibold text-white">Authorized Pickups</span>
+                    </div>
+                    <ArrowRight className="h-4 w-4 text-white/30 group-hover:text-cyan-400 transition-colors" />
+                  </Link>
+                )}
+                {upcomingRegistrations.length > 0 && (
+                  <>
+                    <Link
+                      href="/dashboard/camp-store"
+                      className="flex items-center justify-between p-3 bg-black/50 border border-white/10 hover:border-orange-400/30 hover:bg-orange-400/5 transition-all group"
+                    >
+                      <div className="flex items-center gap-3">
+                        <ShoppingBag className="h-5 w-5 text-orange-400" />
+                        <span className="text-sm font-semibold text-white">Camp Store</span>
+                      </div>
+                      <ArrowRight className="h-4 w-4 text-white/30 group-hover:text-orange-400 transition-colors" />
+                    </Link>
+                    <Link
+                      href="/dashboard/camp-store?section=credits"
+                      className="flex items-center justify-between p-3 bg-black/50 border border-white/10 hover:border-amber-400/30 hover:bg-amber-400/5 transition-all group"
+                    >
+                      <div className="flex items-center gap-3">
+                        <Coins className="h-5 w-5 text-amber-400" />
+                        <span className="text-sm font-semibold text-white">Concession Credits</span>
+                      </div>
+                      <ArrowRight className="h-4 w-4 text-white/30 group-hover:text-amber-400 transition-colors" />
+                    </Link>
+                  </>
+                )}
                 <Link
                   href="/dashboard/payments"
                   className="flex items-center justify-between p-3 bg-black/50 border border-white/10 hover:border-purple/30 hover:bg-purple/5 transition-all group"

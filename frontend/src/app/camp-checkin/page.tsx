@@ -8,12 +8,18 @@
  * - Shows athletes registered for today's camps
  * - Handles onboarding confirmations if needed
  * - Allows quick QR-based check-in
+ *
+ * STATUS: Coming Soon - Feature is implemented but disabled for launch.
+ * To enable: Set FEATURE_CHECKIN_KIOSK_ENABLED to true
  */
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useBannerOffset } from '@/hooks/useBannerOffset'
+
+// Feature flag - set to true to enable the check-in kiosk
+const FEATURE_CHECKIN_KIOSK_ENABLED = false
 
 interface CampOption {
   id: string
@@ -63,7 +69,115 @@ interface CheckInStatus {
   camp_day_id: string | null
 }
 
-export default function CampCheckInPage() {
+// Coming Soon component for when feature is disabled
+function ComingSoonPage() {
+  const { topWithNavbar } = useBannerOffset()
+
+  return (
+    <div
+      className="min-h-screen bg-black flex items-center justify-center p-4"
+      style={{ paddingTop: `${topWithNavbar}px` }}
+    >
+      <div className="max-w-lg w-full text-center">
+        {/* Icon */}
+        <div className="w-24 h-24 mx-auto mb-8 relative">
+          <div className="absolute inset-0 bg-neon/20 rounded-full animate-pulse" />
+          <div className="absolute inset-2 bg-dark-100 rounded-full flex items-center justify-center border border-neon/30">
+            <svg
+              className="w-10 h-10 text-neon"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.5}
+                d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"
+              />
+            </svg>
+          </div>
+        </div>
+
+        {/* Title */}
+        <h1 className="text-3xl font-black uppercase tracking-wider text-white mb-4">
+          Coming Soon
+        </h1>
+
+        {/* Subtitle */}
+        <div className="inline-block px-4 py-2 bg-neon/10 border border-neon/30 mb-6">
+          <span className="text-neon font-bold uppercase tracking-wider text-sm">
+            QR Code Check-In Kiosk
+          </span>
+        </div>
+
+        {/* Description */}
+        <p className="text-white/60 mb-8 max-w-md mx-auto">
+          Our streamlined QR code check-in system is currently in development.
+          Soon you&apos;ll be able to quickly check in campers using QR codes
+          at self-service kiosks.
+        </p>
+
+        {/* Features Preview */}
+        <div className="bg-dark-100 border border-white/10 p-6 mb-8 text-left">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-white/40 mb-4">
+            Upcoming Features
+          </h3>
+          <ul className="space-y-3">
+            {[
+              'Quick QR code scanning for fast check-ins',
+              'Self-service kiosk mode for drop-off areas',
+              'Real-time attendance tracking',
+              'Digital onboarding confirmation',
+              'Secure pickup verification',
+            ].map((feature, i) => (
+              <li key={i} className="flex items-start gap-3">
+                <svg
+                  className="w-5 h-5 text-neon flex-shrink-0 mt-0.5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M5 13l4 4L19 7"
+                  />
+                </svg>
+                <span className="text-white/70">{feature}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {/* Back Button */}
+        <Link
+          href="/dashboard"
+          className="inline-flex items-center gap-2 px-6 py-3 bg-white/10 text-white font-bold uppercase tracking-wider hover:bg-white/20 transition-colors"
+        >
+          <svg
+            className="w-4 h-4"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M10 19l-7-7m0 0l7-7m-7 7h18"
+            />
+          </svg>
+          Back to Dashboard
+        </Link>
+      </div>
+    </div>
+  )
+}
+
+// Main check-in functionality component
+function CheckInKiosk() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const campIdParam = searchParams.get('campId')
@@ -718,4 +832,12 @@ export default function CampCheckInPage() {
       </div>
     </div>
   )
+}
+
+// Default export - renders Coming Soon or the actual kiosk based on feature flag
+export default function CampCheckInPage() {
+  if (!FEATURE_CHECKIN_KIOSK_ENABLED) {
+    return <ComingSoonPage />
+  }
+  return <CheckInKiosk />
 }

@@ -267,13 +267,92 @@ function transformCamper(
 // ============================================================================
 
 /**
+ * Sync CamperSessionData from confirmed registrations.
+ * Ensures all confirmed registrations have a corresponding CamperSessionData entry.
+ */
+export async function syncCamperSessionData(
+  campId: string
+): Promise<{ synced: number; error: Error | null }> {
+  try {
+    // Find confirmed registrations without CamperSessionData
+    const confirmedRegistrations = await prisma.registration.findMany({
+      where: {
+        campId,
+        status: 'confirmed',
+        paymentStatus: 'paid',
+      },
+      include: {
+        athlete: true,
+        camp: true,
+        camperSessionData: true,
+      },
+    })
+
+    let syncedCount = 0
+
+    for (const reg of confirmedRegistrations) {
+      // Skip if CamperSessionData already exists
+      if (reg.camperSessionData) continue
+
+      // Check if CamperSessionData exists via the unique constraint
+      const existingSessionData = await prisma.camperSessionData.findUnique({
+        where: {
+          campId_athleteId: {
+            campId: reg.campId,
+            athleteId: reg.athleteId,
+          },
+        },
+      })
+
+      if (existingSessionData) continue
+
+      // Create CamperSessionData
+      const campStart = new Date(reg.camp.startDate)
+      const dob = reg.athlete.dateOfBirth
+      const ageAtCamp = campStart.getFullYear() - dob.getFullYear()
+      const ageMonths = (campStart.getFullYear() - dob.getFullYear()) * 12 +
+        (campStart.getMonth() - dob.getMonth())
+
+      await prisma.camperSessionData.create({
+        data: {
+          registrationId: reg.id,
+          campId: reg.campId,
+          athleteId: reg.athleteId,
+          tenantId: reg.tenantId,
+          ageAtCampStart: ageAtCamp,
+          ageMonthsAtCampStart: ageMonths,
+          gradeFromRegistration: reg.athlete.grade,
+          medicalNotes: reg.athlete.medicalNotes,
+          allergies: reg.athlete.allergies,
+          specialConsiderations: reg.specialConsiderations,
+          friendRequests: reg.friendRequests,
+          registeredAt: reg.createdAt,
+          isLateRegistration: new Date() > new Date(reg.camp.registrationClose || reg.camp.startDate),
+        },
+      })
+
+      syncedCount++
+    }
+
+    return { synced: syncedCount, error: null }
+  } catch (error) {
+    console.error('[syncCamperSessionData] Error:', error)
+    return { synced: 0, error: error as Error }
+  }
+}
+
+/**
  * Get the current grouping state for a camp
  * Creates groups if they don't exist
+ * Also syncs CamperSessionData from confirmed registrations
  */
 export async function getCampGroupingState(
   campId: string
 ): Promise<{ data: GroupingState | null; error: Error | null }> {
   try {
+    // First, sync CamperSessionData from confirmed registrations
+    await syncCamperSessionData(campId)
+
     // Fetch camp with configuration
     const camp = await prisma.camp.findUnique({
       where: { id: campId },
@@ -1218,6 +1297,163 @@ export async function updateGroupName(
   } catch (error) {
     console.error('[updateGroupName] Error:', error)
     return { data: { success: false }, error: error as Error }
+  }
+}
+
+/**
+ * Add a new group to a camp
+ */
+export async function addGroup(
+  campId: string,
+  options?: {
+    groupName?: string
+    groupColor?: string
+  }
+): Promise<{ data: { group: { id: string; groupNumber: number; groupName: string; groupColor: string } } | null; error: Error | null }> {
+  try {
+    // Get camp info
+    const camp = await prisma.camp.findUnique({
+      where: { id: campId },
+      select: { tenantId: true, numGroups: true },
+    })
+
+    if (!camp || !camp.tenantId) {
+      return { data: null, error: new Error('Camp not found or has no tenant') }
+    }
+
+    // Get highest existing group number
+    const existingGroups = await prisma.campGroup.findMany({
+      where: { campId },
+      orderBy: { groupNumber: 'desc' },
+      take: 1,
+    })
+
+    const newGroupNumber = (existingGroups[0]?.groupNumber || 0) + 1
+    const defaultName = DEFAULT_GROUP_NAMES[newGroupNumber - 1] || `Group ${newGroupNumber}`
+    const defaultColor = DEFAULT_GROUP_COLORS[(newGroupNumber - 1) % DEFAULT_GROUP_COLORS.length]
+
+    const newGroup = await prisma.campGroup.create({
+      data: {
+        campId,
+        tenantId: camp.tenantId,
+        groupNumber: newGroupNumber,
+        groupName: options?.groupName || defaultName,
+        groupColor: options?.groupColor || defaultColor,
+      },
+    })
+
+    // Update camp's numGroups
+    await prisma.camp.update({
+      where: { id: campId },
+      data: { numGroups: newGroupNumber },
+    })
+
+    return {
+      data: {
+        group: {
+          id: newGroup.id,
+          groupNumber: newGroup.groupNumber,
+          groupName: newGroup.groupName || defaultName,
+          groupColor: newGroup.groupColor || defaultColor,
+        },
+      },
+      error: null,
+    }
+  } catch (error) {
+    console.error('[addGroup] Error:', error)
+    return { data: null, error: error as Error }
+  }
+}
+
+/**
+ * Remove a group from a camp
+ * Moves all campers in that group to ungrouped
+ */
+export async function removeGroup(
+  groupId: string
+): Promise<{ data: { success: boolean; movedCampers: number } | null; error: Error | null }> {
+  try {
+    // Get group with campers
+    const group = await prisma.campGroup.findUnique({
+      where: { id: groupId },
+      include: {
+        camperSessionData: true,
+      },
+    })
+
+    if (!group) {
+      return { data: null, error: new Error('Group not found') }
+    }
+
+    // Move all campers to ungrouped
+    const movedCampers = group.camperSessionData.length
+    if (movedCampers > 0) {
+      await prisma.camperSessionData.updateMany({
+        where: { assignedGroupId: groupId },
+        data: {
+          assignedGroupId: null,
+          assignmentType: null,
+          assignmentReason: 'Group was deleted',
+        },
+      })
+    }
+
+    // Delete the group
+    await prisma.campGroup.delete({
+      where: { id: groupId },
+    })
+
+    // Renumber remaining groups
+    const remainingGroups = await prisma.campGroup.findMany({
+      where: { campId: group.campId },
+      orderBy: { groupNumber: 'asc' },
+    })
+
+    for (let i = 0; i < remainingGroups.length; i++) {
+      if (remainingGroups[i].groupNumber !== i + 1) {
+        await prisma.campGroup.update({
+          where: { id: remainingGroups[i].id },
+          data: { groupNumber: i + 1 },
+        })
+      }
+    }
+
+    // Update camp's numGroups
+    await prisma.camp.update({
+      where: { id: group.campId },
+      data: { numGroups: remainingGroups.length },
+    })
+
+    return { data: { success: true, movedCampers }, error: null }
+  } catch (error) {
+    console.error('[removeGroup] Error:', error)
+    return { data: null, error: error as Error }
+  }
+}
+
+/**
+ * Update group settings (name, color)
+ */
+export async function updateGroup(
+  groupId: string,
+  updates: {
+    groupName?: string
+    groupColor?: string
+  }
+): Promise<{ data: { success: boolean } | null; error: Error | null }> {
+  try {
+    await prisma.campGroup.update({
+      where: { id: groupId },
+      data: {
+        ...(updates.groupName !== undefined && { groupName: updates.groupName }),
+        ...(updates.groupColor !== undefined && { groupColor: updates.groupColor }),
+      },
+    })
+
+    return { data: { success: true }, error: null }
+  } catch (error) {
+    console.error('[updateGroup] Error:', error)
+    return { data: null, error: error as Error }
   }
 }
 

@@ -16,11 +16,14 @@ export async function GET(request: Request) {
         // Set tokens in cookies
         const cookieStore = await cookies()
 
+        // Use 24 hours for session tokens to reduce login friction
+        const sessionMaxAge = 24 * 60 * 60 // 24 hours
+
         cookieStore.set('access_token', tokens.access_token, {
           httpOnly: true,
           secure: process.env.NODE_ENV === 'production',
           sameSite: 'lax',
-          maxAge: tokens.expires_in,
+          maxAge: sessionMaxAge,
           path: '/',
         })
 
@@ -28,7 +31,7 @@ export async function GET(request: Request) {
           httpOnly: true,
           secure: process.env.NODE_ENV === 'production',
           sameSite: 'lax',
-          maxAge: tokens.expires_in,
+          maxAge: sessionMaxAge,
           path: '/',
         })
 

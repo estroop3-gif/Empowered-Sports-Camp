@@ -207,8 +207,9 @@ export default function CampCreateSchedulePage() {
       // Clear session storage
       sessionStorage.removeItem('campCreateFormData')
 
-      // Navigate to camp edit page
-      router.replace(`/admin/camps/${campId}`)
+      // Navigate to success page with camp info
+      const successUrl = `/admin/camps/new/success?campId=${campId}&name=${encodeURIComponent(formData.name)}`
+      router.replace(successUrl)
     } catch (err) {
       console.error('Failed to create camp:', err)
       setError(err instanceof Error ? err.message : 'Failed to create camp')

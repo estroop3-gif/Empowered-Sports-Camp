@@ -40,7 +40,7 @@ import {
   DollarSign,
   Shield,
 } from 'lucide-react'
-import { IncentiveSummaryPanel } from '@/components/incentives/IncentiveSummaryPanel'
+import { IncentiveSummaryPanel, GuestSpeakerManager } from '@/components/incentives'
 import { ScheduleBuilder } from '@/components/camp-hq/schedule'
 import type {
   CampHqOverview,
@@ -1584,7 +1584,15 @@ function IncentivesTab({
   isAdmin?: boolean
 }) {
   return (
-    <div>
+    <div className="space-y-8">
+      {/* Guest Speaker Manager */}
+      <GuestSpeakerManager
+        campId={campId}
+        canEdit={canEdit}
+        minSpeakersForBonus={3}
+      />
+
+      {/* Compensation Tracking */}
       <IncentiveSummaryPanel
         campId={campId}
         tenantId={overview.camp.tenant_id || undefined}

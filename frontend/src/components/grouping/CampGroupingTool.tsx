@@ -356,6 +356,19 @@ export default function CampGroupingTool({
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null)
   const { topWithNavbar } = useBannerOffset()
 
+  // Group management state
+  const [showGroupManager, setShowGroupManager] = useState(false)
+  const [editingGroup, setEditingGroup] = useState<{ id: string; name: string; color: string } | null>(null)
+  const [newGroupName, setNewGroupName] = useState('')
+  const [newGroupColor, setNewGroupColor] = useState('#FF6B6B')
+
+  // Available colors for groups
+  const GROUP_COLORS = [
+    '#FF6B6B', '#4ECDC4', '#FFE66D', '#95E1D3',
+    '#F38181', '#AA96DA', '#FCBAD3', '#A8D8EA',
+    '#C9B1FF', '#F9F9F9', '#FF9F43', '#54A0FF',
+  ]
+
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -473,6 +486,88 @@ export default function CampGroupingTool({
   // Handle print
   const handlePrint = () => {
     window.open(`/director/camps/${campId}/grouping/report`, '_blank')
+  }
+
+  // Group management handlers
+  const handleAddGroup = async () => {
+    setActionLoading('addGroup')
+    try {
+      const res = await fetch(`/api/grouping/${campId}/group`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          groupName: newGroupName || undefined,
+          groupColor: newGroupColor,
+        }),
+      })
+      const json = await res.json()
+
+      if (!res.ok) {
+        throw new Error(json.error || 'Failed to add group')
+      }
+
+      await fetchState()
+      setNewGroupName('')
+      setNewGroupColor('#FF6B6B')
+      showToast(`Added ${json.data.group.groupName}`, 'success')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to add group', 'error')
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  const handleUpdateGroup = async () => {
+    if (!editingGroup) return
+
+    setActionLoading('updateGroup')
+    try {
+      const res = await fetch(`/api/grouping/${campId}/group`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          groupId: editingGroup.id,
+          groupName: editingGroup.name,
+          groupColor: editingGroup.color,
+        }),
+      })
+      const json = await res.json()
+
+      if (!res.ok) {
+        throw new Error(json.error || 'Failed to update group')
+      }
+
+      await fetchState()
+      setEditingGroup(null)
+      showToast('Group updated', 'success')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to update group', 'error')
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  const handleDeleteGroup = async (groupId: string, groupName: string) => {
+    if (!confirm(`Delete "${groupName}"? Campers will be moved to ungrouped.`)) return
+
+    setActionLoading('deleteGroup')
+    try {
+      const res = await fetch(`/api/grouping/${campId}/group?groupId=${groupId}`, {
+        method: 'DELETE',
+      })
+      const json = await res.json()
+
+      if (!res.ok) {
+        throw new Error(json.error || 'Failed to delete group')
+      }
+
+      await fetchState()
+      showToast(`Deleted ${groupName}. ${json.data.movedCampers} campers moved to ungrouped.`, 'success')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to delete group', 'error')
+    } finally {
+      setActionLoading(null)
+    }
   }
 
   // Drag handlers
@@ -765,6 +860,15 @@ export default function CampGroupingTool({
                     {actionLoading === 'unfinalize' ? 'Processing...' : 'Unlock'}
                   </button>
                 )}
+                {!state.is_finalized && (
+                  <button
+                    onClick={() => setShowGroupManager(true)}
+                    disabled={actionLoading !== null}
+                    className="px-4 py-2 border border-purple/50 text-purple font-bold uppercase tracking-wider hover:bg-purple/10 disabled:opacity-50 transition-colors"
+                  >
+                    Manage Groups
+                  </button>
+                )}
                 <button
                   onClick={handlePrint}
                   className="px-4 py-2 border border-white/20 text-white font-bold uppercase tracking-wider hover:bg-white/10 transition-colors"
@@ -1021,6 +1125,182 @@ export default function CampGroupingTool({
                   )}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Group Manager Modal */}
+      {showGroupManager && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/80"
+            onClick={() => {
+              setShowGroupManager(false)
+              setEditingGroup(null)
+            }}
+          />
+          <div className="relative w-full max-w-2xl bg-dark-100 border border-white/20 max-h-[80vh] overflow-hidden flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b border-white/10">
+              <h2 className="text-lg font-bold text-white">Manage Groups</h2>
+              <button
+                onClick={() => {
+                  setShowGroupManager(false)
+                  setEditingGroup(null)
+                }}
+                className="p-2 text-white/50 hover:text-white transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-4 overflow-y-auto flex-1">
+              {/* Add New Group */}
+              <div className="mb-6 p-4 bg-white/5 border border-white/10">
+                <h3 className="text-sm font-bold text-white/70 uppercase tracking-wider mb-3">Add New Group</h3>
+                <div className="flex items-end gap-3">
+                  <div className="flex-1">
+                    <label className="block text-xs text-white/40 uppercase tracking-wider mb-1">
+                      Group Name (optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={newGroupName}
+                      onChange={(e) => setNewGroupName(e.target.value)}
+                      placeholder="Auto-generated if empty"
+                      className="w-full bg-black/30 border border-white/20 text-white p-2 text-sm focus:border-neon focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-white/40 uppercase tracking-wider mb-1">Color</label>
+                    <div className="flex gap-1">
+                      {GROUP_COLORS.slice(0, 6).map((color) => (
+                        <button
+                          key={color}
+                          onClick={() => setNewGroupColor(color)}
+                          className={`w-6 h-6 rounded-full border-2 ${
+                            newGroupColor === color ? 'border-white' : 'border-transparent'
+                          }`}
+                          style={{ backgroundColor: color }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleAddGroup}
+                    disabled={actionLoading === 'addGroup'}
+                    className="px-4 py-2 bg-neon text-black font-bold uppercase tracking-wider hover:bg-neon/90 disabled:opacity-50 transition-colors"
+                  >
+                    {actionLoading === 'addGroup' ? 'Adding...' : 'Add'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Existing Groups */}
+              <div>
+                <h3 className="text-sm font-bold text-white/70 uppercase tracking-wider mb-3">
+                  Existing Groups ({state.groups.length})
+                </h3>
+                <div className="space-y-2">
+                  {state.groups.map((group) => (
+                    <div
+                      key={group.id}
+                      className="flex items-center gap-3 p-3 bg-white/5 border border-white/10 hover:border-white/20 transition-colors"
+                    >
+                      {editingGroup?.id === group.id ? (
+                        // Edit mode
+                        <>
+                          <input
+                            type="text"
+                            value={editingGroup.name}
+                            onChange={(e) => setEditingGroup({ ...editingGroup, name: e.target.value })}
+                            className="flex-1 bg-black/30 border border-white/20 text-white p-2 text-sm focus:border-neon focus:outline-none"
+                          />
+                          <div className="flex gap-1">
+                            {GROUP_COLORS.map((color) => (
+                              <button
+                                key={color}
+                                onClick={() => setEditingGroup({ ...editingGroup, color })}
+                                className={`w-5 h-5 rounded-full border-2 ${
+                                  editingGroup.color === color ? 'border-white' : 'border-transparent'
+                                }`}
+                                style={{ backgroundColor: color }}
+                              />
+                            ))}
+                          </div>
+                          <button
+                            onClick={handleUpdateGroup}
+                            disabled={actionLoading === 'updateGroup'}
+                            className="px-3 py-1 bg-green-600 text-white text-sm font-medium hover:bg-green-500 disabled:opacity-50"
+                          >
+                            Save
+                          </button>
+                          <button
+                            onClick={() => setEditingGroup(null)}
+                            className="px-3 py-1 text-white/50 hover:text-white text-sm"
+                          >
+                            Cancel
+                          </button>
+                        </>
+                      ) : (
+                        // View mode
+                        <>
+                          <div
+                            className="w-4 h-4 rounded-full shrink-0"
+                            style={{ backgroundColor: group.group_color || '#333' }}
+                          />
+                          <div className="flex-1">
+                            <span className="text-white font-medium">{group.group_name}</span>
+                            <span className="text-white/50 ml-2 text-sm">
+                              ({group.stats.count} campers)
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => setEditingGroup({
+                              id: group.id,
+                              name: group.group_name,
+                              color: group.group_color || '#333',
+                            })}
+                            className="p-2 text-white/40 hover:text-white transition-colors"
+                            title="Edit group"
+                          >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={() => handleDeleteGroup(group.id, group.group_name)}
+                            disabled={actionLoading === 'deleteGroup' || state.groups.length <= 1}
+                            className="p-2 text-red-400/70 hover:text-red-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                            title={state.groups.length <= 1 ? 'Cannot delete last group' : 'Delete group'}
+                          >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 border-t border-white/10">
+              <button
+                onClick={() => {
+                  setShowGroupManager(false)
+                  setEditingGroup(null)
+                }}
+                className="w-full py-2 border border-white/20 text-white font-bold uppercase tracking-wider hover:bg-white/10 transition-colors"
+              >
+                Done
+              </button>
             </div>
           </div>
         </div>

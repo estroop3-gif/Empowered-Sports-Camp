@@ -865,6 +865,8 @@ export async function getOtherRegisteredCampers(params: {
   data: Array<{
     athleteId: string
     athleteName: string
+    athleteFirstName: string
+    athleteLastName: string
     grade: string | null
     parentName: string
     parentId: string
@@ -906,6 +908,8 @@ export async function getOtherRegisteredCampers(params: {
     const campers = registrations.map((r) => ({
       athleteId: r.athlete.id,
       athleteName: `${r.athlete.firstName} ${r.athlete.lastName}`,
+      athleteFirstName: r.athlete.firstName,
+      athleteLastName: r.athlete.lastName,
       grade: r.athlete.grade,
       parentName: [r.athlete.parent?.firstName, r.athlete.parent?.lastName].filter(Boolean).join(' ') || 'Parent',
       parentId: r.athlete.parentId,
@@ -1082,6 +1086,11 @@ export async function claimPendingSquadInvites(params: {
     let claimedCount = 0
 
     for (const invite of pendingInvites) {
+      // Skip invites without a squadId (guest invites that never got linked to a squad)
+      if (!invite.squadId) {
+        continue
+      }
+
       // Create squad memberships for all user's athletes
       for (const athlete of userAthletes) {
         const existing = await prisma.campFriendSquadMember.findUnique({

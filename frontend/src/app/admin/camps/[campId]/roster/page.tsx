@@ -20,7 +20,7 @@ export default function AdminCampRosterPage({
     <TheRoster
       campId={campId}
       role="hq_admin"
-      backUrl="/admin/camps"
+      backUrl={`/admin/camps/${campId}/hq?tab=campers`}
     />
   )
 }

@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { AdminLayout, PageHeader, ContentCard } from '@/components/admin/admin-layout'
@@ -110,8 +111,15 @@ export default function TerritoriesPage() {
 
   // UI state
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null)
+  const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number } | null>(null)
   const [processingId, setProcessingId] = useState<string | null>(null)
   const [editModalTerritory, setEditModalTerritory] = useState<Territory | null>(null)
+  const [mounted, setMounted] = useState(false)
+
+  // Track mount state for portal
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   // Fetch data on mount
   useEffect(() => {
@@ -174,6 +182,7 @@ export default function TerritoriesPage() {
       const target = e.target as HTMLElement
       if (target.closest('[data-dropdown]')) return
       setActiveDropdown(null)
+      setDropdownPosition(null)
     }
     document.addEventListener('click', handleClickOutside)
     return () => document.removeEventListener('click', handleClickOutside)
@@ -224,6 +233,7 @@ export default function TerritoriesPage() {
 
     setProcessingId(null)
     setActiveDropdown(null)
+    setDropdownPosition(null)
   }
 
   const handleReopen = async (id: string) => {
@@ -256,6 +266,7 @@ export default function TerritoriesPage() {
 
     setProcessingId(null)
     setActiveDropdown(null)
+    setDropdownPosition(null)
   }
 
   const handleUnassign = async (id: string) => {
@@ -292,6 +303,7 @@ export default function TerritoriesPage() {
 
     setProcessingId(null)
     setActiveDropdown(null)
+    setDropdownPosition(null)
   }
 
   const getLocationString = (territory: Territory) => {
@@ -604,7 +616,28 @@ export default function TerritoriesPage() {
                           <button
                             onClick={(e) => {
                               e.stopPropagation()
-                              setActiveDropdown(activeDropdown === territory.id ? null : territory.id)
+                              if (activeDropdown === territory.id) {
+                                setActiveDropdown(null)
+                                setDropdownPosition(null)
+                              } else {
+                                // Calculate position for the dropdown using document coordinates
+                                // This allows scrolling to reveal the dropdown
+                                const button = e.currentTarget
+                                const rect = button.getBoundingClientRect()
+                                const scrollX = window.scrollX
+                                const scrollY = window.scrollY
+                                const dropdownWidth = 208 // w-52 (13rem)
+
+                                // Position in document space (not viewport)
+                                let left = rect.right + scrollX - dropdownWidth
+                                if (left < 8) left = 8
+
+                                // Position below the button
+                                const top = rect.bottom + scrollY + 4
+
+                                setDropdownPosition({ top, left })
+                                setActiveDropdown(territory.id)
+                              }
                             }}
                             className="p-2 text-white/40 hover:text-white transition-colors"
                             disabled={processingId === territory.id}
@@ -616,70 +649,7 @@ export default function TerritoriesPage() {
                             )}
                           </button>
 
-                          {activeDropdown === territory.id && (
-                            <div
-                              className="absolute right-0 top-full mt-1 w-52 bg-black border border-white/10 shadow-xl z-50"
-                              data-dropdown
-                            >
-                              <button
-                                onClick={() => {
-                                  setEditModalTerritory(territory)
-                                  setActiveDropdown(null)
-                                }}
-                                className="flex items-center gap-2 w-full px-4 py-3 text-sm text-white/70 hover:bg-white/5 hover:text-white transition-colors"
-                              >
-                                <Edit className="h-4 w-4" />
-                                Edit Territory
-                              </button>
-                              <Link
-                                href={`/admin/licensees/territories/${territory.id}`}
-                                className="flex items-center gap-2 px-4 py-3 text-sm text-white/70 hover:bg-white/5 hover:text-white transition-colors"
-                              >
-                                <Eye className="h-4 w-4" />
-                                View Details
-                              </Link>
-
-                              {territory.status !== 'closed' && (
-                                <>
-                                  {!territory.tenant_id ? (
-                                    <Link
-                                      href={`/admin/licensees/territories/${territory.id}/assign`}
-                                      className="flex items-center gap-2 px-4 py-3 text-sm text-white/70 hover:bg-white/5 hover:text-white transition-colors"
-                                    >
-                                      <UserPlus className="h-4 w-4" />
-                                      Assign Licensee
-                                    </Link>
-                                  ) : (
-                                    <button
-                                      onClick={() => handleUnassign(territory.id)}
-                                      className="flex items-center gap-2 w-full px-4 py-3 text-sm text-white/70 hover:bg-white/5 hover:text-white transition-colors"
-                                    >
-                                      <UserMinus className="h-4 w-4" />
-                                      Remove Licensee
-                                    </button>
-                                  )}
-
-                                  <button
-                                    onClick={() => handleClose(territory.id)}
-                                    className="flex items-center gap-2 w-full px-4 py-3 text-sm text-red-400 hover:bg-red-500/10 transition-colors"
-                                  >
-                                    <Archive className="h-4 w-4" />
-                                    Close Territory
-                                  </button>
-                                </>
-                              )}
-
-                              {territory.status === 'closed' && (
-                                <button
-                                  onClick={() => handleReopen(territory.id)}
-                                  className="flex items-center gap-2 w-full px-4 py-3 text-sm text-neon hover:bg-neon/10 transition-colors"
-                                >
-                                  <RotateCcw className="h-4 w-4" />
-                                  Reopen Territory
-                                </button>
-                              )}
-                            </div>
-                          )}
+                          {/* Dropdown rendered via portal below */}
                         </div>
                       </div>
                     </td>
@@ -697,6 +667,88 @@ export default function TerritoriesPage() {
             </p>
           </div>
         </ContentCard>
+      )}
+
+      {/* Actions Dropdown Portal */}
+      {mounted && activeDropdown && dropdownPosition && createPortal(
+        <div
+          style={{
+            position: 'absolute',
+            top: dropdownPosition.top,
+            left: dropdownPosition.left,
+            zIndex: 99999,
+          }}
+          className="w-52 bg-black border border-white/10 shadow-xl"
+          data-dropdown
+        >
+          {(() => {
+            const territory = filteredTerritories.find(t => t.id === activeDropdown)
+            if (!territory) return null
+            return (
+              <>
+                <button
+                  onClick={() => {
+                    setEditModalTerritory(territory)
+                    setActiveDropdown(null)
+                    setDropdownPosition(null)
+                  }}
+                  className="flex items-center gap-2 w-full px-4 py-3 text-sm text-white/70 hover:bg-white/5 hover:text-white transition-colors"
+                >
+                  <Edit className="h-4 w-4" />
+                  Edit Territory
+                </button>
+                <Link
+                  href={`/admin/licensees/territories/${territory.id}`}
+                  className="flex items-center gap-2 px-4 py-3 text-sm text-white/70 hover:bg-white/5 hover:text-white transition-colors"
+                >
+                  <Eye className="h-4 w-4" />
+                  View Details
+                </Link>
+
+                {territory.status !== 'closed' && (
+                  <>
+                    {!territory.tenant_id ? (
+                      <Link
+                        href={`/admin/licensees/territories/${territory.id}/assign`}
+                        className="flex items-center gap-2 px-4 py-3 text-sm text-white/70 hover:bg-white/5 hover:text-white transition-colors"
+                      >
+                        <UserPlus className="h-4 w-4" />
+                        Assign Licensee
+                      </Link>
+                    ) : (
+                      <button
+                        onClick={() => handleUnassign(territory.id)}
+                        className="flex items-center gap-2 w-full px-4 py-3 text-sm text-white/70 hover:bg-white/5 hover:text-white transition-colors"
+                      >
+                        <UserMinus className="h-4 w-4" />
+                        Remove Licensee
+                      </button>
+                    )}
+
+                    <button
+                      onClick={() => handleClose(territory.id)}
+                      className="flex items-center gap-2 w-full px-4 py-3 text-sm text-red-400 hover:bg-red-500/10 transition-colors"
+                    >
+                      <Archive className="h-4 w-4" />
+                      Close Territory
+                    </button>
+                  </>
+                )}
+
+                {territory.status === 'closed' && (
+                  <button
+                    onClick={() => handleReopen(territory.id)}
+                    className="flex items-center gap-2 w-full px-4 py-3 text-sm text-neon hover:bg-neon/10 transition-colors"
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                    Reopen Territory
+                  </button>
+                )}
+              </>
+            )
+          })()}
+        </div>,
+        document.body
       )}
 
       {/* Edit Modal */}
