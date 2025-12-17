@@ -40,7 +40,7 @@ export async function FeaturedCamps() {
         <div className="absolute inset-0 bg-gradient-to-br from-neon/20 via-purple/15 to-magenta/20" />
         <div className="absolute inset-0 bg-black/70" />
 
-        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 text-center">
+        <div className="relative z-20 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 text-center">
           <div className="flex items-center justify-center gap-3 mb-4">
             <Zap className="h-5 w-5 text-neon" />
             <span className="text-xs font-bold uppercase tracking-widest text-neon">
@@ -84,7 +84,7 @@ export async function FeaturedCamps() {
       {/* Bottom fade to next section */}
       <div className="absolute bottom-0 left-0 right-0 h-48 bg-gradient-to-b from-transparent via-purple/15 to-purple/30 z-10" />
 
-      <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+      <div className="relative z-20 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         {/* Section Header */}
         <div className="flex flex-col items-center justify-between gap-6 sm:flex-row mb-12">
           <div>

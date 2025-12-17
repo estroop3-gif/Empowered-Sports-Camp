@@ -43,7 +43,7 @@ export function HeroSection() {
         <div className="absolute top-1/2 left-1/2 h-[300px] w-[300px] rounded-full bg-magenta/10 blur-[100px]" />
       </div>
 
-      <div className="relative mx-auto max-w-7xl px-4 py-32 sm:px-6 lg:px-8">
+      <div className="relative z-20 mx-auto max-w-7xl px-4 py-16 sm:py-24 lg:py-32 sm:px-6 lg:px-8">
         <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-16">
           {/* Content */}
           <div className="text-center lg:text-left">
@@ -67,7 +67,7 @@ export function HeroSection() {
             </h1>
 
             {/* Subheadline */}
-            <p className="mt-8 text-xl text-white/70 sm:text-2xl lg:max-w-xl leading-relaxed font-light">
+            <p className="mt-6 sm:mt-8 text-base sm:text-xl lg:text-2xl text-white/70 lg:max-w-xl leading-relaxed font-light">
               Intro multi-sport camps introducing girls ages 5–17 to competitive sports in a fierce, fun, fully women-led environment. Built for girls, led by women, focused on growing confident competitors and leaders.
             </p>
 
@@ -88,18 +88,18 @@ export function HeroSection() {
             </div>
 
             {/* Stats - Bold numbers with color variety */}
-            <div className="mt-16 grid grid-cols-3 gap-8 border-t border-white/10 pt-10">
+            <div className="mt-10 sm:mt-16 grid grid-cols-3 gap-4 sm:gap-8 border-t border-white/10 pt-6 sm:pt-10">
               <div className="text-center lg:text-left">
-                <div className="text-4xl sm:text-5xl font-black text-neon text-glow-neon">5K+</div>
-                <div className="mt-2 text-xs font-semibold uppercase tracking-wider text-white/50">Athletes Trained</div>
+                <div className="text-2xl sm:text-4xl lg:text-5xl font-black text-neon text-glow-neon">5K+</div>
+                <div className="mt-1 sm:mt-2 text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-white/50">Athletes Trained</div>
               </div>
               <div className="text-center lg:text-left">
-                <div className="text-4xl sm:text-5xl font-black text-purple">7</div>
-                <div className="mt-2 text-xs font-semibold uppercase tracking-wider text-white/50">Sports</div>
+                <div className="text-2xl sm:text-4xl lg:text-5xl font-black text-purple">7</div>
+                <div className="mt-1 sm:mt-2 text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-white/50">Sports</div>
               </div>
               <div className="text-center lg:text-left">
-                <div className="text-4xl sm:text-5xl font-black text-magenta">98%</div>
-                <div className="mt-2 text-xs font-semibold uppercase tracking-wider text-white/50">Return Rate</div>
+                <div className="text-2xl sm:text-4xl lg:text-5xl font-black text-magenta">98%</div>
+                <div className="mt-1 sm:mt-2 text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-white/50">Return Rate</div>
               </div>
             </div>
           </div>

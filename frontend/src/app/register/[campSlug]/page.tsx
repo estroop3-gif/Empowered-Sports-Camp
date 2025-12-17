@@ -10,6 +10,7 @@ import {
   BuildHerSquadStep,
   AddOnSelector,
   WaiversStep,
+  AccountCreationStep,
   PaymentStep,
   ConfirmationStep,
 } from '@/components/registration'
@@ -277,6 +278,14 @@ function RegistrationContent({ camp, addons }: { camp: CampSession; addons: AddO
         return (
           <WaiversStep
             campSession={camp}
+            onContinue={nextStep}
+            onBack={prevStep}
+          />
+        )
+
+      case 'account':
+        return (
+          <AccountCreationStep
             onContinue={nextStep}
             onBack={prevStep}
           />

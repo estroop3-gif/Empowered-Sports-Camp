@@ -32,8 +32,9 @@ const STEPS: StepConfig[] = [
   { id: 'squad', label: 'HER SQUAD', number: 3 },
   { id: 'addons', label: 'ADD-ONS', number: 4 },
   { id: 'waivers', label: 'WAIVERS', number: 5 },
-  { id: 'payment', label: 'PAYMENT', number: 6 },
-  { id: 'confirmation', label: 'CONFIRMED', number: 7 },
+  { id: 'account', label: 'ACCOUNT', number: 6 },
+  { id: 'payment', label: 'PAYMENT', number: 7 },
+  { id: 'confirmation', label: 'CONFIRMED', number: 8 },
 ]
 
 export function RegistrationStepper({
@@ -43,8 +44,8 @@ export function RegistrationStepper({
   const currentIndex = STEPS.findIndex((s) => s.id === currentStep)
 
   if (variant === 'horizontal') {
-    // Show first 6 steps in horizontal mode (exclude confirmation)
-    const visibleSteps = STEPS.slice(0, 6)
+    // Show first 7 steps in horizontal mode (exclude confirmation)
+    const visibleSteps = STEPS.slice(0, 7)
     return (
       <div className="flex items-center justify-between">
         {visibleSteps.map((step, index) => {

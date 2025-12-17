@@ -2,8 +2,8 @@ export const SITE_NAME = 'Empowered Sports Camp'
 export const SITE_DESCRIPTION = 'Empowering girls through sports, leadership, and confidence'
 
 export const NAV_LINKS = [
-  { label: 'Camps', href: '/camps' },
   { label: 'Programs', href: '/programs' },
+  { label: 'Camps', href: '/camps' },
   { label: 'Shop', href: '/shop' },
   { label: 'About', href: '/about' },
   { label: 'FAQ', href: '/faq' },

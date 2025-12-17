@@ -106,19 +106,19 @@ body {
 }
 
 .headline-xl {
-  font-size: clamp(3rem, 8vw, 6rem);
+  font-size: clamp(2.25rem, 7vw, 6rem);
 }
 
 .headline-lg {
-  font-size: clamp(2.5rem, 6vw, 4.5rem);
+  font-size: clamp(1.875rem, 5vw, 4.5rem);
 }
 
 .headline-md {
-  font-size: clamp(2rem, 4vw, 3rem);
+  font-size: clamp(1.5rem, 4vw, 3rem);
 }
 
 .headline-sm {
-  font-size: clamp(1.5rem, 3vw, 2rem);
+  font-size: clamp(1.25rem, 3vw, 2rem);
 }
 
 /* ===== BRAND GRADIENTS ===== */
