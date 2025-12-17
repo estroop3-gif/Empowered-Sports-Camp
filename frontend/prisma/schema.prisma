@@ -68,6 +68,9 @@ model Tenant {
   athletes                 Athlete[]
   settings                 Setting[]
   jobApplications          JobApplication[]
+  waiverTemplates          WaiverTemplate[]
+  campWaiverRequirements   CampWaiverRequirement[]
+  athleteWaiverSignings    AthleteWaiverSigning[]
 
   @@map("tenants")
 }
@@ -194,6 +197,8 @@ model Camp {
   sessionSurveys           SessionSurvey[]
   testimonies              Testimony[]
   friendSquads             CampFriendSquad[]
+  waiverRequirements       CampWaiverRequirement[]
+  athleteWaiverSignings    AthleteWaiverSigning[]
 
   @@unique([tenantId, slug])
   @@index([tenantId])
@@ -257,6 +262,10 @@ model Profile {
   squadMemberships              CampFriendSquadMember[]       @relation("SquadMemberParent")
   settingsUpdated               Setting[]                     @relation("SettingsUpdatedBy")
   settingsAuditLogs             SettingsAuditLog[]            @relation("SettingsAuditChangedBy")
+  waiverTemplatesCreated        WaiverTemplate[]              @relation("WaiverTemplateCreator")
+  waiverTemplatesUpdated        WaiverTemplate[]              @relation("WaiverTemplateUpdater")
+  waiverVersionsCreated         WaiverTemplateVersion[]       @relation("WaiverVersionCreator")
+  waiverSigningsAsParent        AthleteWaiverSigning[]        @relation("WaiverSignedByParent")
 
   @@map("profiles")
 }
@@ -313,6 +322,7 @@ model Athlete {
   pickupTokens                 PickupToken[]
   registrations                Registration[]
   squadMemberships             CampFriendSquadMember[]
+  waiverSignings               AthleteWaiverSigning[]
 
   @@index([parentId])
   @@index([tenantId])
@@ -357,6 +367,7 @@ model Registration {
   parent                Profile             @relation(fields: [parentId], references: [id], onDelete: Cascade)
   promoCode             PromoCode?          @relation(fields: [promoCodeId], references: [id])
   tenant                Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  athleteWaiverSignings AthleteWaiverSigning[]
 
   @@unique([campId, athleteId])
   @@index([campId])
@@ -2685,6 +2696,7 @@ enum NotificationType {
   squad_invite_received
   squad_invite_accepted
   squad_invite_declined
+  camp_shared
 }
 
 enum NotificationCategory {
@@ -2823,6 +2835,17 @@ enum SettingAuditSource {
   SYSTEM
 }
 
+// =============================================================================
+// WAIVERS SYSTEM
+// =============================================================================
+
+enum WaiverSigningStatus {
+  pending
+  signed
+  expired
+  declined
+}
+
 model Setting {
   id            String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   scope         SettingScope     @default(GLOBAL)
@@ -2863,4 +2886,109 @@ model SettingsAuditLog {
   @@index([key])
   @@index([changedAt])
   @@map("settings_audit_logs")
+}
+
+// =============================================================================
+// WAIVERS MODELS
+// =============================================================================
+
+model WaiverTemplate {
+  id                  String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId            String?                  @map("tenant_id") @db.Uuid
+  title               String
+  description         String?
+  contentHtml         String                   @map("content_html") @db.Text
+  isMandatorySiteWide Boolean                  @default(false) @map("is_mandatory_site_wide")
+  isActive            Boolean                  @default(true) @map("is_active")
+  currentVersion      Int                      @default(1) @map("current_version")
+  createdAt           DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime                 @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdByUserId     String?                  @map("created_by_user_id") @db.Uuid
+  updatedByUserId     String?                  @map("updated_by_user_id") @db.Uuid
+  tenant              Tenant?                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdByUser       Profile?                 @relation("WaiverTemplateCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  updatedByUser       Profile?                 @relation("WaiverTemplateUpdater", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+  versions            WaiverTemplateVersion[]
+  campRequirements    CampWaiverRequirement[]
+  athleteSignings     AthleteWaiverSigning[]
+
+  @@index([tenantId])
+  @@index([isMandatorySiteWide])
+  @@index([isActive])
+  @@map("waiver_templates")
+}
+
+model WaiverTemplateVersion {
+  id              String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  waiverTemplateId String                  @map("waiver_template_id") @db.Uuid
+  version         Int
+  contentHtml     String                   @map("content_html") @db.Text
+  createdAt       DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdByUserId String?                  @map("created_by_user_id") @db.Uuid
+  waiverTemplate  WaiverTemplate           @relation(fields: [waiverTemplateId], references: [id], onDelete: Cascade)
+  createdByUser   Profile?                 @relation("WaiverVersionCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  athleteSignings AthleteWaiverSigning[]
+
+  @@unique([waiverTemplateId, version])
+  @@index([waiverTemplateId])
+  @@map("waiver_template_versions")
+}
+
+model CampWaiverRequirement {
+  id                      String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId                String?                  @map("tenant_id") @db.Uuid
+  campId                  String                   @map("camp_id") @db.Uuid
+  waiverTemplateId        String                   @map("waiver_template_id") @db.Uuid
+  waiverTemplateVersion   Int?                     @map("waiver_template_version")
+  displayOrder            Int                      @default(0) @map("display_order")
+  isRequired              Boolean                  @default(true) @map("is_required")
+  createdAt               DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt               DateTime                 @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tenant                  Tenant?                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  camp                    Camp                     @relation(fields: [campId], references: [id], onDelete: Cascade)
+  waiverTemplate          WaiverTemplate           @relation(fields: [waiverTemplateId], references: [id], onDelete: Cascade)
+  athleteSignings         AthleteWaiverSigning[]
+
+  @@unique([campId, waiverTemplateId])
+  @@index([campId])
+  @@index([waiverTemplateId])
+  @@map("camp_waiver_requirements")
+}
+
+model AthleteWaiverSigning {
+  id                      String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId                String?               @map("tenant_id") @db.Uuid
+  campId                  String?               @map("camp_id") @db.Uuid
+  registrationId          String?               @map("registration_id") @db.Uuid
+  athleteId               String                @map("athlete_id") @db.Uuid
+  parentProfileId         String                @map("parent_profile_id") @db.Uuid
+  waiverTemplateId        String                @map("waiver_template_id") @db.Uuid
+  waiverTemplateVersionId String?               @map("waiver_template_version_id") @db.Uuid
+  campWaiverRequirementId String?               @map("camp_waiver_requirement_id") @db.Uuid
+  versionSigned           Int                   @map("version_signed")
+  status                  WaiverSigningStatus   @default(pending)
+  signedAt                DateTime?             @map("signed_at") @db.Timestamptz(6)
+  signerName              String?               @map("signer_name")
+  signerEmail             String?               @map("signer_email")
+  signerIpAddress         String?               @map("signer_ip_address")
+  signaturePayloadJson    Json?                 @map("signature_payload_json")
+  createdAt               DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt               DateTime              @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tenant                  Tenant?               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  camp                    Camp?                 @relation(fields: [campId], references: [id], onDelete: Cascade)
+  registration            Registration?         @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  athlete                 Athlete               @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+  parentProfile           Profile               @relation("WaiverSignedByParent", fields: [parentProfileId], references: [id], onDelete: Cascade)
+  waiverTemplate          WaiverTemplate        @relation(fields: [waiverTemplateId], references: [id], onDelete: Cascade)
+  waiverTemplateVersion   WaiverTemplateVersion? @relation(fields: [waiverTemplateVersionId], references: [id], onDelete: SetNull)
+  campWaiverRequirement   CampWaiverRequirement? @relation(fields: [campWaiverRequirementId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([campId])
+  @@index([registrationId])
+  @@index([athleteId])
+  @@index([parentProfileId])
+  @@index([waiverTemplateId])
+  @@index([status])
+  @@map("athlete_waiver_signings")
 }

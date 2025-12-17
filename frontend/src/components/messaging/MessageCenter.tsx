@@ -271,7 +271,7 @@ export function MessageCenter({ className = '' }: MessageCenterProps) {
 
       {/* Compose Modal */}
       {showCompose && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[70]">
           <div className="bg-white rounded-lg shadow-xl max-w-lg w-full mx-4">
             <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
               <h4 className="text-lg font-medium">New Message</h4>

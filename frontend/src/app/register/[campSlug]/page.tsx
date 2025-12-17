@@ -9,6 +9,7 @@ import {
   CamperForm,
   BuildHerSquadStep,
   AddOnSelector,
+  WaiversStep,
   PaymentStep,
   ConfirmationStep,
 } from '@/components/registration'
@@ -267,6 +268,15 @@ function RegistrationContent({ camp, addons }: { camp: CampSession; addons: AddO
         return (
           <AddOnSelector
             availableAddOns={addons}
+            onContinue={nextStep}
+            onBack={prevStep}
+          />
+        )
+
+      case 'waivers':
+        return (
+          <WaiversStep
+            campSession={camp}
             onContinue={nextStep}
             onBack={prevStep}
           />

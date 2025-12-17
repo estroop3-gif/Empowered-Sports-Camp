@@ -26,7 +26,7 @@ interface PromoCode {
   tenant_name: string
   code: string
   description: string | null
-  discount_type: 'percent' | 'fixed'
+  discount_type: 'percentage' | 'fixed'
   discount_value: number
   max_uses: number | null
   current_uses: number
@@ -57,7 +57,7 @@ export default function AdminPromoCodesPage() {
     tenantId: '',
     code: '',
     description: '',
-    discountType: 'percent' as 'percent' | 'fixed',
+    discountType: 'percentage' as 'percentage' | 'fixed',
     discountValue: 10,
     maxUses: '',
     minPurchaseCents: '',
@@ -68,7 +68,7 @@ export default function AdminPromoCodesPage() {
   // Edit form
   const [editForm, setEditForm] = useState({
     description: '',
-    discountType: 'percent' as 'percent' | 'fixed',
+    discountType: 'percentage' as 'percentage' | 'fixed',
     discountValue: 0,
     maxUses: '',
     minPurchaseCents: '',
@@ -125,7 +125,7 @@ export default function AdminPromoCodesPage() {
           code: newCode.code,
           description: newCode.description || null,
           discountType: newCode.discountType,
-          discountValue: newCode.discountType === 'percent'
+          discountValue: newCode.discountType === 'percentage'
             ? newCode.discountValue
             : Math.round(newCode.discountValue * 100),
           maxUses: newCode.maxUses ? parseInt(newCode.maxUses) : null,
@@ -151,7 +151,7 @@ export default function AdminPromoCodesPage() {
         tenantId: newCode.tenantId,
         code: '',
         description: '',
-        discountType: 'percent',
+        discountType: 'percentage',
         discountValue: 10,
         maxUses: '',
         minPurchaseCents: '',
@@ -177,7 +177,7 @@ export default function AdminPromoCodesPage() {
           promoCodeId,
           description: editForm.description || null,
           discountType: editForm.discountType,
-          discountValue: editForm.discountType === 'percent'
+          discountValue: editForm.discountType === 'percentage'
             ? editForm.discountValue
             : Math.round(editForm.discountValue * 100),
           maxUses: editForm.maxUses ? parseInt(editForm.maxUses) : null,
@@ -253,7 +253,7 @@ export default function AdminPromoCodesPage() {
     setEditForm({
       description: pc.description || '',
       discountType: pc.discount_type,
-      discountValue: pc.discount_type === 'percent' ? pc.discount_value : pc.discount_value / 100,
+      discountValue: pc.discount_type === 'percentage' ? pc.discount_value : pc.discount_value / 100,
       maxUses: pc.max_uses?.toString() || '',
       minPurchaseCents: pc.min_purchase_cents ? (pc.min_purchase_cents / 100).toString() : '',
       validFrom: pc.valid_from || '',
@@ -262,7 +262,7 @@ export default function AdminPromoCodesPage() {
   }
 
   const formatDiscount = (pc: PromoCode) => {
-    if (pc.discount_type === 'percent') {
+    if (pc.discount_type === 'percentage') {
       return `${pc.discount_value}% off`
     }
     return `$${(pc.discount_value / 100).toFixed(0)} off`
@@ -350,10 +350,10 @@ export default function AdminPromoCodesPage() {
                 </label>
                 <select
                   value={newCode.discountType}
-                  onChange={(e) => setNewCode({ ...newCode, discountType: e.target.value as 'percent' | 'fixed' })}
+                  onChange={(e) => setNewCode({ ...newCode, discountType: e.target.value as 'percentage' | 'fixed' })}
                   className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-neon focus:outline-none"
                 >
-                  <option value="percent">Percentage (%)</option>
+                  <option value="percentage">Percentage (%)</option>
                   <option value="fixed">Fixed Amount ($)</option>
                 </select>
               </div>
@@ -368,13 +368,13 @@ export default function AdminPromoCodesPage() {
                   <Input
                     type="number"
                     min={0}
-                    max={newCode.discountType === 'percent' ? 100 : undefined}
+                    max={newCode.discountType === 'percentage' ? 100 : undefined}
                     value={newCode.discountValue}
                     onChange={(e) => setNewCode({ ...newCode, discountValue: parseFloat(e.target.value) || 0 })}
                     className={newCode.discountType === 'fixed' ? 'pl-8' : ''}
                     required
                   />
-                  {newCode.discountType === 'percent' && (
+                  {newCode.discountType === 'percentage' && (
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40">%</span>
                   )}
                 </div>
@@ -482,10 +482,10 @@ export default function AdminPromoCodesPage() {
                         <label className="block text-xs text-white/40 mb-1">Type</label>
                         <select
                           value={editForm.discountType}
-                          onChange={(e) => setEditForm({ ...editForm, discountType: e.target.value as 'percent' | 'fixed' })}
+                          onChange={(e) => setEditForm({ ...editForm, discountType: e.target.value as 'percentage' | 'fixed' })}
                           className="w-full px-3 py-2 bg-black border border-white/20 text-white text-sm focus:border-neon focus:outline-none"
                         >
-                          <option value="percent">Percent</option>
+                          <option value="percentage">Percent</option>
                           <option value="fixed">Fixed ($)</option>
                         </select>
                       </div>
@@ -551,7 +551,7 @@ export default function AdminPromoCodesPage() {
                           {pc.code}
                         </code>
                         <span className="flex items-center gap-1 text-sm">
-                          {pc.discount_type === 'percent' ? (
+                          {pc.discount_type === 'percentage' ? (
                             <Percent className="h-4 w-4 text-purple" />
                           ) : (
                             <DollarSign className="h-4 w-4 text-purple" />

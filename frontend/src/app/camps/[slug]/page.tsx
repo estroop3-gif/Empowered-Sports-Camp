@@ -8,7 +8,6 @@ import {
   Users,
   CheckCircle,
   ArrowLeft,
-  Share2,
   Zap,
   Crown,
   AlertCircle,
@@ -21,6 +20,7 @@ import {
   getProgramTypeLabel,
   type PublicCampCard,
 } from '@/lib/services/camps'
+import { ShareCampButton } from '@/components/camps/ShareCampButton'
 
 interface PageProps {
   params: Promise<{ slug: string }>
@@ -232,10 +232,17 @@ export default async function CampDetailPage({ params }: PageProps) {
                   {camp.is_full ? 'Join Waitlist' : 'Register Now'}
                 </Link>
 
-                <button className="flex items-center justify-center gap-2 w-full py-3 text-white/50 hover:text-white border border-white/10 hover:border-white/30 transition-all">
-                  <Share2 className="h-4 w-4" />
-                  <span className="text-sm uppercase tracking-wider">Share Camp</span>
-                </button>
+                <ShareCampButton
+                  campName={camp.name}
+                  campSlug={camp.slug}
+                  campDescription={camp.description}
+                  campDates={formatDateRange(camp.start_date, camp.end_date)}
+                  campLocation={
+                    camp.location_name
+                      ? `${camp.location_name}${camp.city ? `, ${camp.city}` : ''}${camp.state ? `, ${camp.state}` : ''}`
+                      : null
+                  }
+                />
 
                 {isEarlyBird && camp.early_bird_deadline && (
                   <p className="text-center text-sm text-white/40">

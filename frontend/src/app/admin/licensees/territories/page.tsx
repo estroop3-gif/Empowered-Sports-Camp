@@ -53,6 +53,7 @@ import {
   Building2,
   ChevronDown,
 } from 'lucide-react'
+import { TerritoryEditModal } from '@/components/admin/TerritoryEditModal'
 
 /**
  * Territories Page
@@ -110,6 +111,7 @@ export default function TerritoriesPage() {
   // UI state
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null)
   const [processingId, setProcessingId] = useState<string | null>(null)
+  const [editModalTerritory, setEditModalTerritory] = useState<Territory | null>(null)
 
   // Fetch data on mount
   useEffect(() => {
@@ -168,10 +170,22 @@ export default function TerritoriesPage() {
 
   // Close dropdown when clicking outside
   useEffect(() => {
-    const handleClickOutside = () => setActiveDropdown(null)
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      if (target.closest('[data-dropdown]')) return
+      setActiveDropdown(null)
+    }
     document.addEventListener('click', handleClickOutside)
     return () => document.removeEventListener('click', handleClickOutside)
   }, [])
+
+  // Handle edit modal save
+  const handleEditSave = (updatedTerritory: Territory) => {
+    setTerritories((prev) =>
+      prev.map((t) => (t.id === updatedTerritory.id ? updatedTerritory : t))
+    )
+    setEditModalTerritory(null)
+  }
 
   // Action handlers
   const handleClose = async (id: string) => {
@@ -586,7 +600,7 @@ export default function TerritoriesPage() {
                         </Link>
 
                         {/* Actions Dropdown */}
-                        <div className="relative">
+                        <div className="relative" data-dropdown>
                           <button
                             onClick={(e) => {
                               e.stopPropagation()
@@ -605,8 +619,18 @@ export default function TerritoriesPage() {
                           {activeDropdown === territory.id && (
                             <div
                               className="absolute right-0 top-full mt-1 w-52 bg-black border border-white/10 shadow-xl z-50"
-                              onClick={(e) => e.stopPropagation()}
+                              data-dropdown
                             >
+                              <button
+                                onClick={() => {
+                                  setEditModalTerritory(territory)
+                                  setActiveDropdown(null)
+                                }}
+                                className="flex items-center gap-2 w-full px-4 py-3 text-sm text-white/70 hover:bg-white/5 hover:text-white transition-colors"
+                              >
+                                <Edit className="h-4 w-4" />
+                                Edit Territory
+                              </button>
                               <Link
                                 href={`/admin/licensees/territories/${territory.id}`}
                                 className="flex items-center gap-2 px-4 py-3 text-sm text-white/70 hover:bg-white/5 hover:text-white transition-colors"
@@ -673,6 +697,15 @@ export default function TerritoriesPage() {
             </p>
           </div>
         </ContentCard>
+      )}
+
+      {/* Edit Modal */}
+      {editModalTerritory && (
+        <TerritoryEditModal
+          territory={editModalTerritory}
+          onClose={() => setEditModalTerritory(null)}
+          onSave={handleEditSave}
+        />
       )}
     </AdminLayout>
   )

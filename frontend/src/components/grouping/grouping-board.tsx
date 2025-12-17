@@ -599,7 +599,7 @@ function OverrideModal({
   const { validation } = pendingDrop
 
   return (
-    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
+    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[70]">
       <div className="bg-dark-100 border-2 border-error/50 max-w-lg w-full mx-4 shadow-[0_0_40px_rgba(239,68,68,0.2)]">
         {/* Header */}
         <div className="flex items-center gap-3 p-4 border-b border-white/10 bg-error/10">

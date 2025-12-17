@@ -33,7 +33,7 @@ interface CampForHQ {
   end_date: string
   status: string
   capacity: number
-  registered_count?: number
+  registration_count?: number
   location?: {
     id: string
     name: string
@@ -54,10 +54,36 @@ export default function AdminCampHQPage() {
   const [loading, setLoading] = useState(true)
   const [camps, setCamps] = useState<CampForHQ[]>([])
   const [filter, setFilter] = useState<'active' | 'upcoming' | 'recent' | 'all'>('active')
+  const [hasInitializedFilter, setHasInitializedFilter] = useState(false)
 
   useEffect(() => {
     loadCamps()
   }, [])
+
+  // Auto-select the best filter based on available camps
+  useEffect(() => {
+    if (hasInitializedFilter || camps.length === 0) return
+
+    const now = new Date()
+    const hasActive = camps.some(camp => {
+      const start = new Date(camp.start_date)
+      const end = new Date(camp.end_date)
+      return now >= start && now <= end
+    })
+    const hasUpcoming = camps.some(camp => {
+      const start = new Date(camp.start_date)
+      return start > now
+    })
+
+    if (hasActive) {
+      setFilter('active')
+    } else if (hasUpcoming) {
+      setFilter('upcoming')
+    } else {
+      setFilter('all')
+    }
+    setHasInitializedFilter(true)
+  }, [camps, hasInitializedFilter])
 
   async function loadCamps() {
     try {
@@ -229,7 +255,7 @@ export default function AdminCampHQPage() {
 
                   <div className="flex items-center gap-2 text-sm text-white/70">
                     <Users className="h-4 w-4 text-white/40" />
-                    {camp.registered_count || 0} / {camp.capacity} registered
+                    {camp.registration_count || 0} / {camp.capacity} registered
                   </div>
                 </div>
 

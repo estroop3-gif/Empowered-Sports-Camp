@@ -17,7 +17,9 @@ import {
   AlertCircle,
   Loader2,
   ExternalLink,
+  Shield,
 } from 'lucide-react'
+import { CampWaiverSelector } from '@/components/waivers/CampWaiverSelector'
 
 // Types (defined locally to avoid Prisma imports in client component)
 interface AdminCamp {
@@ -553,6 +555,16 @@ export default function AdminEditCampPage({ params }: { params: Promise<{ campId
                   />
                 </div>
               </div>
+            </ContentCard>
+
+            <ContentCard title="Required Waivers" accent="purple">
+              <div className="mb-4">
+                <p className="text-sm text-white/60">
+                  <Shield className="h-4 w-4 inline mr-2" />
+                  Assign waiver templates that must be signed before registration is complete.
+                </p>
+              </div>
+              <CampWaiverSelector campId={campId} />
             </ContentCard>
           </div>
 

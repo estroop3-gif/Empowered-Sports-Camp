@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
@@ -139,6 +139,12 @@ const licensorNavItems: NavItem[] = [
     label: 'Promo Codes',
     href: '/admin/promo-codes',
     icon: Tag,
+    roles: ['hq_admin'],
+  },
+  {
+    label: 'Waivers',
+    href: '/admin/waivers',
+    icon: Shield,
     roles: ['hq_admin'],
   },
   {
@@ -326,10 +332,36 @@ export function AdminLayout({
   const { topWithNavbar, heightWithNavbarStyle } = useBannerOffset()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [expandedItems, setExpandedItems] = useState<string[]>([])
+  const [initialized, setInitialized] = useState(false)
 
   const isLicensor = userRole === 'hq_admin'
   const navItems = isLicensor ? licensorNavItems : licenseeNavItems
   const filteredNavItems = navItems.filter((item) => item.roles.includes(userRole))
+
+  const isActive = (href: string) => pathname === href || pathname.startsWith(href + '/')
+
+  // Check if a nav item or any of its children matches the current path
+  const isItemOrChildActive = (item: NavItem) => {
+    if (isActive(item.href)) return true
+    if (item.children) {
+      return item.children.some(child => pathname === child.href || pathname.startsWith(child.href + '/'))
+    }
+    return false
+  }
+
+  // On initial mount, only expand items that contain the current active page
+  useEffect(() => {
+    if (!initialized) {
+      const activeItems = filteredNavItems
+        .filter(item => item.children && item.children.some(child =>
+          pathname === child.href || pathname.startsWith(child.href + '/')
+        ))
+        .map(item => item.label)
+
+      setExpandedItems(activeItems)
+      setInitialized(true)
+    }
+  }, [pathname, filteredNavItems, initialized])
 
   const toggleExpanded = (label: string) => {
     setExpandedItems((prev) =>
@@ -338,8 +370,6 @@ export function AdminLayout({
         : [...prev, label]
     )
   }
-
-  const isActive = (href: string) => pathname === href || pathname.startsWith(href + '/')
 
   return (
     <div
@@ -395,9 +425,9 @@ export function AdminLayout({
         </div>
 
         {/* Navigation */}
-        <nav className="p-4 space-y-1 overflow-y-auto h-[calc(100vh-15rem)]">
+        <nav className="p-4 space-y-1 overflow-y-auto" style={{ maxHeight: `calc(100vh - ${topWithNavbar}px - 10rem)` }}>
           {filteredNavItems.map((item) => {
-            const active = isActive(item.href)
+            const active = isItemOrChildActive(item)
             const expanded = expandedItems.includes(item.label)
             const hasChildren = item.children && item.children.length > 0
 
@@ -435,20 +465,23 @@ export function AdminLayout({
                 {/* Child items */}
                 {hasChildren && expanded && (
                   <div className="ml-8 mt-1 space-y-1 border-l border-white/10">
-                    {item.children!.map((child) => (
-                      <Link
-                        key={child.href}
-                        href={child.href}
-                        className={cn(
-                          'block px-4 py-2 text-xs uppercase tracking-wider transition-colors',
-                          pathname === child.href
-                            ? 'text-neon'
-                            : 'text-white/40 hover:text-white/70'
-                        )}
-                      >
-                        {child.label}
-                      </Link>
-                    ))}
+                    {item.children!.map((child) => {
+                      const childActive = pathname === child.href || pathname.startsWith(child.href + '/')
+                      return (
+                        <Link
+                          key={child.href}
+                          href={child.href}
+                          className={cn(
+                            'block px-4 py-2 text-xs uppercase tracking-wider transition-colors',
+                            childActive
+                              ? 'text-neon font-bold bg-neon/5 border-l-2 border-neon -ml-[1px]'
+                              : 'text-white/40 hover:text-white/70'
+                          )}
+                        >
+                          {child.label}
+                        </Link>
+                      )
+                    })}
                   </div>
                 )}
               </div>

@@ -38,8 +38,10 @@ import {
   AlertTriangle,
   Send,
   DollarSign,
+  Shield,
 } from 'lucide-react'
 import { IncentiveSummaryPanel } from '@/components/incentives/IncentiveSummaryPanel'
+import { ScheduleBuilder } from '@/components/camp-hq/schedule'
 import type {
   CampHqOverview,
   CampHqDay,
@@ -58,6 +60,7 @@ export type CampHqTab =
   | 'campers'
   | 'groups'
   | 'schedule'
+  | 'waivers'
   | 'staffing'
   | 'reports'
   | 'incentives'
@@ -88,6 +91,7 @@ const TABS: TabConfig[] = [
   { id: 'campers', label: 'Campers', icon: Users },
   { id: 'groups', label: 'Groups & Teams', icon: UsersRound },
   { id: 'schedule', label: 'Schedule', icon: Calendar },
+  { id: 'waivers', label: 'Waivers', icon: Shield },
   { id: 'staffing', label: 'Staffing', icon: UserCog },
   { id: 'reports', label: 'Reports', icon: FileBarChart },
   { id: 'incentives', label: 'Incentives', icon: DollarSign },
@@ -223,6 +227,9 @@ export function CampHqShell({
         )}
         {activeTab === 'schedule' && (
           <ScheduleTab campId={campId} routePrefix={routePrefix} />
+        )}
+        {activeTab === 'waivers' && (
+          <WaiversTab campId={campId} routePrefix={routePrefix} />
         )}
         {activeTab === 'staffing' && (
           <StaffingTab campId={campId} routePrefix={routePrefix} />
@@ -1211,24 +1218,206 @@ function TeamColorCamperRow({
   )
 }
 
-function ScheduleTab({ campId, routePrefix }: { campId: string; routePrefix: string }) {
-  return (
-    <PortalCard>
-      <div className="text-center py-12">
-        <Calendar className="h-12 w-12 text-white/20 mx-auto mb-4" />
-        <h3 className="text-lg font-bold text-white mb-2">Schedule & Curriculum</h3>
-        <p className="text-white/50 mb-6">
-          Manage daily schedules and curriculum blocks for this camp.
-        </p>
-        <Link
-          href={`${routePrefix}/${campId}/schedule`}
-          className="inline-flex items-center gap-2 px-6 py-3 bg-neon text-black font-bold uppercase tracking-wider hover:bg-neon/90 transition-colors"
-        >
-          Open Schedule Builder
-          <ArrowRight className="h-4 w-4" />
-        </Link>
+function ScheduleTab({ campId }: { campId: string; routePrefix: string }) {
+  return <ScheduleBuilder campId={campId} canEdit={true} />
+}
+
+function WaiversTab({ campId, routePrefix }: { campId: string; routePrefix: string }) {
+  const [waiverData, setWaiverData] = useState<{
+    requirements: Array<{
+      waiverTemplateId: string
+      title: string
+      isRequired: boolean
+      isSiteWide: boolean
+    }>
+    athletes: Array<{
+      registrationId: string
+      athlete: { id: string; firstName: string; lastName: string }
+      parent: { id: string; firstName: string | null; lastName: string | null; email: string }
+      waivers: Array<{
+        waiverTemplateId: string
+        title: string
+        isRequired: boolean
+        status: string
+        signedAt?: string
+        signerName?: string
+      }>
+      totalRequired: number
+      totalSigned: number
+      allRequiredSigned: boolean
+    }>
+    stats: {
+      totalAthletes: number
+      fullyCompliant: number
+      pendingWaivers: number
+    }
+  } | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    async function loadWaiverStatus() {
+      try {
+        const res = await fetch(`/api/camps/${campId}/waivers?includeSignings=true`)
+        const json = await res.json()
+        if (res.ok) {
+          setWaiverData(json.data)
+        } else {
+          setError(json.error || 'Failed to load waiver status')
+        }
+      } catch (err) {
+        console.error('Failed to load waivers:', err)
+        setError('Failed to load waiver status')
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadWaiverStatus()
+  }, [campId])
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 text-neon animate-spin" />
       </div>
-    </PortalCard>
+    )
+  }
+
+  if (error) {
+    return (
+      <PortalCard title="Waiver Status" accent="magenta">
+        <div className="text-center py-8 text-magenta">
+          <AlertTriangle className="h-10 w-10 mx-auto mb-3 opacity-50" />
+          <p>{error}</p>
+        </div>
+      </PortalCard>
+    )
+  }
+
+  if (!waiverData) {
+    return (
+      <PortalCard title="Waiver Status" accent="purple">
+        <div className="text-center py-8 text-white/50">
+          <Shield className="h-10 w-10 mx-auto mb-3 opacity-50" />
+          <p>No waiver data available</p>
+        </div>
+      </PortalCard>
+    )
+  }
+
+  const { requirements, athletes, stats } = waiverData
+
+  return (
+    <div className="space-y-6">
+      {/* Stats Overview */}
+      <div className="grid grid-cols-3 gap-4">
+        <PortalCard accent="neon">
+          <div className="text-center py-2">
+            <div className="text-3xl font-bold text-neon">{stats.fullyCompliant}</div>
+            <div className="text-xs uppercase tracking-wider text-white/50">Compliant</div>
+          </div>
+        </PortalCard>
+        <PortalCard accent="magenta">
+          <div className="text-center py-2">
+            <div className="text-3xl font-bold text-magenta">{stats.pendingWaivers}</div>
+            <div className="text-xs uppercase tracking-wider text-white/50">Pending</div>
+          </div>
+        </PortalCard>
+        <PortalCard accent="purple">
+          <div className="text-center py-2">
+            <div className="text-3xl font-bold text-purple">{stats.totalAthletes}</div>
+            <div className="text-xs uppercase tracking-wider text-white/50">Total Athletes</div>
+          </div>
+        </PortalCard>
+      </div>
+
+      {/* Required Waivers */}
+      {requirements.length > 0 && (
+        <PortalCard title="Required Waivers" accent="purple">
+          <div className="space-y-2">
+            {requirements.map((req) => (
+              <div key={req.waiverTemplateId} className="flex items-center gap-3 p-3 bg-black/30 border border-white/10">
+                <Shield className={`h-4 w-4 ${req.isSiteWide ? 'text-magenta' : 'text-purple'}`} />
+                <span className="flex-1 text-white">{req.title}</span>
+                {req.isSiteWide && (
+                  <span className="px-2 py-0.5 text-xs bg-magenta/10 text-magenta border border-magenta/30">SITE-WIDE</span>
+                )}
+                {req.isRequired && (
+                  <span className="px-2 py-0.5 text-xs bg-neon/10 text-neon border border-neon/30">REQUIRED</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </PortalCard>
+      )}
+
+      {/* Athlete Waiver Status */}
+      <PortalCard title="Athlete Waiver Status" accent="neon">
+        {athletes.length === 0 ? (
+          <div className="text-center py-8 text-white/50">
+            <Users className="h-10 w-10 mx-auto mb-3 opacity-50" />
+            <p>No registered athletes</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {athletes.map((athlete) => (
+              <div
+                key={athlete.registrationId}
+                className={`p-4 border transition-colors ${
+                  athlete.allRequiredSigned
+                    ? 'border-neon/30 bg-neon/5'
+                    : 'border-magenta/30 bg-magenta/5'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-8 h-8 flex items-center justify-center ${
+                      athlete.allRequiredSigned ? 'bg-neon/10 text-neon' : 'bg-magenta/10 text-magenta'
+                    }`}>
+                      {athlete.allRequiredSigned ? (
+                        <CheckCircle className="h-4 w-4" />
+                      ) : (
+                        <AlertTriangle className="h-4 w-4" />
+                      )}
+                    </div>
+                    <div>
+                      <div className="font-bold text-white">
+                        {athlete.athlete.firstName} {athlete.athlete.lastName}
+                      </div>
+                      <div className="text-xs text-white/50">
+                        Parent: {athlete.parent.firstName} {athlete.parent.lastName}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className={`font-bold ${athlete.allRequiredSigned ? 'text-neon' : 'text-magenta'}`}>
+                      {athlete.totalSigned}/{athlete.totalRequired}
+                    </div>
+                    <div className="text-xs text-white/50">Signed</div>
+                  </div>
+                </div>
+                {/* Individual waiver status */}
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {athlete.waivers.map((waiver) => (
+                    <span
+                      key={waiver.waiverTemplateId}
+                      className={`px-2 py-1 text-xs ${
+                        waiver.status === 'signed'
+                          ? 'bg-neon/10 text-neon border border-neon/30'
+                          : 'bg-white/5 text-white/50 border border-white/20'
+                      }`}
+                    >
+                      {waiver.status === 'signed' ? <CheckCircle className="h-3 w-3 inline mr-1" /> : null}
+                      {waiver.title}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </PortalCard>
+    </div>
   )
 }
 

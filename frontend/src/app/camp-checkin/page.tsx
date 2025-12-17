@@ -4,14 +4,28 @@
  * Camp Check-In Landing Page
  *
  * Parent-facing page for checking in athletes to camp.
+ * - If no campId specified, shows camp selector for kiosk mode
  * - Shows athletes registered for today's camps
  * - Handles onboarding confirmations if needed
  * - Allows quick QR-based check-in
  */
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import { useBannerOffset } from '@/hooks/useBannerOffset'
+
+interface CampOption {
+  id: string
+  name: string
+  start_date: string
+  end_date: string
+  location_name: string | null
+  city: string | null
+  state: string | null
+  registered_count: number
+  checked_in_count: number
+}
 
 interface Athlete {
   id: string
@@ -52,9 +66,16 @@ interface CheckInStatus {
 export default function CampCheckInPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const campId = searchParams.get('campId')
+  const campIdParam = searchParams.get('campId')
+  const { topWithNavbar } = useBannerOffset()
 
-  const [loading, setLoading] = useState(true)
+  // Kiosk mode - when no campId in URL, show camp selector
+  const [kioskMode, setKioskMode] = useState(!campIdParam)
+  const [selectedCampId, setSelectedCampId] = useState<string | null>(campIdParam)
+  const [availableCamps, setAvailableCamps] = useState<CampOption[]>([])
+  const [loadingCamps, setLoadingCamps] = useState(!campIdParam)
+
+  const [loading, setLoading] = useState(!!campIdParam)
   const [error, setError] = useState<string | null>(null)
   const [status, setStatus] = useState<CheckInStatus | null>(null)
   const [selectedAthletes, setSelectedAthletes] = useState<Set<string>>(new Set())
@@ -69,40 +90,80 @@ export default function CampCheckInPage() {
     }
   }>({})
 
-  // Fetch check-in status
+  // Fetch available camps for kiosk mode
   useEffect(() => {
-    const fetchStatus = async () => {
-      if (!campId) {
-        setError('No camp specified. Please scan a valid check-in QR code.')
-        setLoading(false)
-        return
-      }
+    const fetchCamps = async () => {
+      if (campIdParam) return // Skip if campId provided in URL
 
       try {
-        const res = await fetch(`/api/camp-checkin/status?campId=${campId}`)
+        const res = await fetch('/api/camp-checkin/camps')
         const json = await res.json()
 
-        if (!res.ok) {
-          throw new Error(json.error || 'Failed to load check-in status')
+        if (res.ok && json.data) {
+          setAvailableCamps(json.data)
         }
-
-        setStatus(json.data)
-
-        // Pre-select athletes not yet checked in
-        const unchecked = new Set<string>()
-        json.data.registrations
-          .filter((r: RegistrationInfo) => !r.is_checked_in)
-          .forEach((r: RegistrationInfo) => unchecked.add(r.athlete.id))
-        setSelectedAthletes(unchecked)
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Something went wrong')
+        console.error('Failed to load camps:', err)
       } finally {
-        setLoading(false)
+        setLoadingCamps(false)
       }
     }
 
-    fetchStatus()
-  }, [campId])
+    fetchCamps()
+  }, [campIdParam])
+
+  // Fetch check-in status when camp is selected
+  const fetchCheckInStatus = useCallback(async (campId: string) => {
+    setLoading(true)
+    setError(null)
+
+    try {
+      const res = await fetch(`/api/camp-checkin/status?campId=${campId}`)
+      const json = await res.json()
+
+      if (!res.ok) {
+        throw new Error(json.error || 'Failed to load check-in status')
+      }
+
+      setStatus(json.data)
+
+      // Pre-select athletes not yet checked in
+      const unchecked = new Set<string>()
+      json.data.registrations
+        .filter((r: RegistrationInfo) => !r.is_checked_in)
+        .forEach((r: RegistrationInfo) => unchecked.add(r.athlete.id))
+      setSelectedAthletes(unchecked)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  // Fetch check-in status on initial load if campId provided
+  useEffect(() => {
+    if (campIdParam) {
+      fetchCheckInStatus(campIdParam)
+    }
+  }, [campIdParam, fetchCheckInStatus])
+
+  // Handle camp selection in kiosk mode
+  const handleSelectCamp = (campId: string) => {
+    setSelectedCampId(campId)
+    setKioskMode(false)
+    fetchCheckInStatus(campId)
+  }
+
+  // Handle back to camp selection
+  const handleBackToCampSelection = () => {
+    setKioskMode(true)
+    setSelectedCampId(null)
+    setStatus(null)
+    setError(null)
+    setSelectedAthletes(new Set())
+  }
+
+  const campId = selectedCampId
 
   const toggleAthleteSelection = (athleteId: string) => {
     const newSelected = new Set(selectedAthletes)
@@ -207,12 +268,130 @@ export default function CampCheckInPage() {
     }
   }
 
+  // Kiosk Mode - Camp Selector
+  if (kioskMode) {
+    if (loadingCamps) {
+      return (
+        <div
+          className="min-h-screen bg-black flex items-center justify-center"
+          style={{ paddingTop: `${topWithNavbar}px` }}
+        >
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-neon mx-auto"></div>
+            <p className="mt-4 text-white/50">Loading camps...</p>
+          </div>
+        </div>
+      )
+    }
+
+    return (
+      <div
+        className="min-h-screen bg-black"
+        style={{ paddingTop: `${topWithNavbar}px` }}
+      >
+        {/* Header */}
+        <div className="bg-dark-100 border-b border-white/10 py-6 px-4">
+          <div className="max-w-4xl mx-auto">
+            <h1 className="text-3xl font-black uppercase tracking-wider text-white">
+              Check-In Kiosk
+            </h1>
+            <p className="text-white/50 mt-2">Select a camp to begin check-in</p>
+          </div>
+        </div>
+
+        <div className="max-w-4xl mx-auto p-6">
+          {availableCamps.length === 0 ? (
+            <div className="bg-dark-100 border border-white/10 p-8 text-center">
+              <div className="text-white/30 mb-4">
+                <svg className="h-16 w-16 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              </div>
+              <h2 className="text-xl font-bold text-white mb-2">No Active Camps</h2>
+              <p className="text-white/50">
+                There are no camps available for check-in today.
+              </p>
+            </div>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2">
+              {availableCamps.map((camp) => {
+                const startDate = new Date(camp.start_date)
+                const endDate = new Date(camp.end_date)
+                const isToday = new Date().toDateString() === startDate.toDateString()
+                const isOngoing = new Date() >= startDate && new Date() <= endDate
+
+                return (
+                  <button
+                    key={camp.id}
+                    onClick={() => handleSelectCamp(camp.id)}
+                    className="bg-dark-100 border border-white/10 p-6 text-left hover:border-neon/50 hover:bg-dark-100/80 transition-all group"
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <h3 className="text-lg font-bold text-white group-hover:text-neon transition-colors">
+                        {camp.name}
+                      </h3>
+                      {(isToday || isOngoing) && (
+                        <span className="px-2 py-1 bg-neon/20 text-neon text-xs font-bold uppercase">
+                          {isToday ? 'Today' : 'Active'}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="space-y-2 text-sm text-white/50">
+                      {camp.location_name && (
+                        <div className="flex items-center gap-2">
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                          </svg>
+                          <span>{camp.location_name}</span>
+                        </div>
+                      )}
+                      {(camp.city || camp.state) && (
+                        <div className="flex items-center gap-2 pl-6">
+                          <span>{[camp.city, camp.state].filter(Boolean).join(', ')}</span>
+                        </div>
+                      )}
+                      <div className="flex items-center gap-2">
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        <span>
+                          {startDate.toLocaleDateString()} - {endDate.toLocaleDateString()}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 pt-4 border-t border-white/10 flex items-center justify-between">
+                      <div className="text-sm">
+                        <span className="text-white font-medium">{camp.checked_in_count}</span>
+                        <span className="text-white/50"> / {camp.registered_count} checked in</span>
+                      </div>
+                      <div className="text-neon group-hover:translate-x-1 transition-transform">
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </div>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div
+        className="min-h-screen bg-black flex items-center justify-center"
+        style={{ paddingTop: `${topWithNavbar}px` }}
+      >
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading check-in status...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-neon mx-auto"></div>
+          <p className="mt-4 text-white/50">Loading check-in status...</p>
         </div>
       </div>
     )
@@ -220,21 +399,34 @@ export default function CampCheckInPage() {
 
   if (error && !status) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-lg shadow-lg p-6 max-w-md w-full text-center">
-          <div className="text-red-600 mb-4">
+      <div
+        className="min-h-screen bg-black flex items-center justify-center p-4"
+        style={{ paddingTop: `${topWithNavbar}px` }}
+      >
+        <div className="bg-dark-100 border border-white/10 p-6 max-w-md w-full text-center">
+          <div className="text-red-400 mb-4">
             <svg className="h-12 w-12 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
           </div>
-          <h1 className="text-xl font-bold text-gray-900 mb-2">Check-In Error</h1>
-          <p className="text-gray-600 mb-6">{error}</p>
-          <Link
-            href="/dashboard"
-            className="inline-block bg-orange-600 text-white px-6 py-2 rounded-lg hover:bg-orange-700"
-          >
-            Go to Dashboard
-          </Link>
+          <h1 className="text-xl font-bold text-white mb-2">Check-In Error</h1>
+          <p className="text-white/50 mb-6">{error}</p>
+          {!campIdParam && (
+            <button
+              onClick={handleBackToCampSelection}
+              className="inline-block bg-neon text-black px-6 py-2 font-bold uppercase tracking-wider hover:bg-neon/90"
+            >
+              Back to Camp Selection
+            </button>
+          )}
+          {campIdParam && (
+            <Link
+              href="/dashboard"
+              className="inline-block bg-neon text-black px-6 py-2 font-bold uppercase tracking-wider hover:bg-neon/90"
+            >
+              Go to Dashboard
+            </Link>
+          )}
         </div>
       </div>
     )
@@ -242,23 +434,36 @@ export default function CampCheckInPage() {
 
   if (!status || status.registrations.length === 0) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-lg shadow-lg p-6 max-w-md w-full text-center">
-          <div className="text-gray-400 mb-4">
+      <div
+        className="min-h-screen bg-black flex items-center justify-center p-4"
+        style={{ paddingTop: `${topWithNavbar}px` }}
+      >
+        <div className="bg-dark-100 border border-white/10 p-6 max-w-md w-full text-center">
+          <div className="text-white/30 mb-4">
             <svg className="h-12 w-12 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
           </div>
-          <h1 className="text-xl font-bold text-gray-900 mb-2">No Registrations Found</h1>
-          <p className="text-gray-600 mb-6">
+          <h1 className="text-xl font-bold text-white mb-2">No Registrations Found</h1>
+          <p className="text-white/50 mb-6">
             You don&apos;t have any athletes registered for this camp.
           </p>
-          <Link
-            href="/camps"
-            className="inline-block bg-orange-600 text-white px-6 py-2 rounded-lg hover:bg-orange-700"
-          >
-            Browse Camps
-          </Link>
+          {!campIdParam && (
+            <button
+              onClick={handleBackToCampSelection}
+              className="inline-block bg-neon text-black px-6 py-2 font-bold uppercase tracking-wider hover:bg-neon/90"
+            >
+              Back to Camp Selection
+            </button>
+          )}
+          {campIdParam && (
+            <Link
+              href="/camps"
+              className="inline-block bg-neon text-black px-6 py-2 font-bold uppercase tracking-wider hover:bg-neon/90"
+            >
+              Browse Camps
+            </Link>
+          )}
         </div>
       </div>
     )
@@ -269,27 +474,44 @@ export default function CampCheckInPage() {
   const checkedInCount = status.registrations.filter((r) => r.is_checked_in).length
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div
+      className="min-h-screen bg-black"
+      style={{ paddingTop: `${topWithNavbar}px` }}
+    >
       {/* Header */}
-      <div className="bg-orange-600 text-white py-6 px-4">
+      <div className="bg-dark-100 border-b border-white/10 py-6 px-4">
         <div className="max-w-lg mx-auto">
-          <h1 className="text-2xl font-bold">Camp Check-In</h1>
-          {campInfo && (
-            <p className="text-orange-100 mt-1">{campInfo.name}</p>
-          )}
+          <div className="flex items-center gap-4">
+            {!campIdParam && (
+              <button
+                onClick={handleBackToCampSelection}
+                className="p-2 text-white/50 hover:text-white hover:bg-white/10 transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+            )}
+            <div>
+              <h1 className="text-2xl font-black uppercase tracking-wider text-white">Camp Check-In</h1>
+              {campInfo && (
+                <p className="text-white/50 mt-1">{campInfo.name}</p>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
       <div className="max-w-lg mx-auto p-4">
         {/* Camp Info Card */}
         {campInfo && (
-          <div className="bg-white rounded-lg shadow p-4 mb-4">
+          <div className="bg-dark-100 border border-white/10 p-4 mb-4">
             <div className="flex items-start justify-between">
               <div>
-                <h2 className="font-semibold text-gray-900">{campInfo.name}</h2>
-                <p className="text-sm text-gray-600">{campInfo.location}</p>
+                <h2 className="font-bold text-white">{campInfo.name}</h2>
+                <p className="text-sm text-white/50">{campInfo.location}</p>
               </div>
-              <span className="text-sm text-gray-500">
+              <span className="text-sm text-white/50">
                 {campInfo.start_time} - {campInfo.end_time}
               </span>
             </div>
@@ -298,28 +520,28 @@ export default function CampCheckInPage() {
 
         {/* Error Message */}
         {error && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
-            <p className="text-red-700">{error}</p>
+          <div className="bg-red-500/10 border border-red-500/30 p-4 mb-4">
+            <p className="text-red-400">{error}</p>
           </div>
         )}
 
         {/* Already Checked In */}
         {checkedInCount > 0 && (
-          <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
-            <h3 className="font-medium text-green-800 mb-2">Already Checked In</h3>
+          <div className="bg-green-500/10 border border-green-500/30 p-4 mb-4">
+            <h3 className="font-bold text-green-400 mb-2">Already Checked In</h3>
             {status.registrations
               .filter((r) => r.is_checked_in)
               .map((r) => (
                 <div key={r.athlete.id} className="flex items-center gap-3 py-2">
-                  <div className="w-8 h-8 rounded-full bg-green-200 flex items-center justify-center">
-                    <svg className="w-5 h-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center">
+                    <svg className="w-5 h-5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                     </svg>
                   </div>
-                  <span className="text-green-800">
+                  <span className="text-white">
                     {r.athlete.first_name} {r.athlete.last_name}
                   </span>
-                  <span className="text-sm text-green-600 ml-auto">
+                  <span className="text-sm text-green-400 ml-auto">
                     {r.check_in_time && new Date(r.check_in_time).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
                   </span>
                 </div>
@@ -330,17 +552,17 @@ export default function CampCheckInPage() {
         {/* Athletes to Check In */}
         {uncheckedCount > 0 && (
           <>
-            <h3 className="font-medium text-gray-900 mb-2">Select Athletes to Check In</h3>
+            <h3 className="font-bold text-white mb-2">Select Athletes to Check In</h3>
             <div className="space-y-2 mb-6">
               {status.registrations
                 .filter((r) => !r.is_checked_in)
                 .map((r) => (
                   <div
                     key={r.athlete.id}
-                    className={`bg-white rounded-lg shadow p-4 cursor-pointer transition-all ${
+                    className={`bg-dark-100 border p-4 cursor-pointer transition-all ${
                       selectedAthletes.has(r.athlete.id)
-                        ? 'ring-2 ring-orange-500'
-                        : 'hover:shadow-md'
+                        ? 'border-neon ring-1 ring-neon'
+                        : 'border-white/10 hover:border-white/20'
                     }`}
                     onClick={() => toggleAthleteSelection(r.athlete.id)}
                   >
@@ -348,12 +570,12 @@ export default function CampCheckInPage() {
                       <div
                         className={`w-6 h-6 rounded border-2 flex items-center justify-center ${
                           selectedAthletes.has(r.athlete.id)
-                            ? 'bg-orange-600 border-orange-600'
-                            : 'border-gray-300'
+                            ? 'bg-neon border-neon'
+                            : 'border-white/30'
                         }`}
                       >
                         {selectedAthletes.has(r.athlete.id) && (
-                          <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <svg className="w-4 h-4 text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                           </svg>
                         )}
@@ -365,22 +587,22 @@ export default function CampCheckInPage() {
                           className="w-12 h-12 rounded-full object-cover"
                         />
                       ) : (
-                        <div className="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center">
-                          <span className="text-gray-600 font-medium">
+                        <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center">
+                          <span className="text-white/70 font-medium">
                             {r.athlete.first_name[0]}{r.athlete.last_name[0]}
                           </span>
                         </div>
                       )}
                       <div className="flex-1">
-                        <p className="font-medium text-gray-900">
+                        <p className="font-medium text-white">
                           {r.athlete.first_name} {r.athlete.last_name}
                         </p>
                         {r.athlete.age_group && (
-                          <p className="text-sm text-gray-500">{r.athlete.age_group}</p>
+                          <p className="text-sm text-white/50">{r.athlete.age_group}</p>
                         )}
                       </div>
                       {r.needs_onboarding && !r.onboarding && (
-                        <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">
+                        <span className="text-xs bg-yellow-500/20 text-yellow-400 px-2 py-1">
                           Needs info
                         </span>
                       )}
@@ -391,14 +613,14 @@ export default function CampCheckInPage() {
 
             {/* Onboarding Modal */}
             {showOnboarding && (
-              <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-                <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-                  <h3 className="text-lg font-bold text-gray-900 mb-4">
+              <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-[70]">
+                <div className="bg-dark-100 border border-white/10 max-w-md w-full p-6">
+                  <h3 className="text-lg font-bold text-white mb-4">
                     Confirm Information
                   </h3>
-                  <p className="text-gray-600 mb-4">
+                  <p className="text-white/50 mb-4">
                     Please confirm the following for{' '}
-                    {status.registrations.find((r) => r.athlete.id === showOnboarding)?.athlete.first_name}:
+                    <span className="text-white">{status.registrations.find((r) => r.athlete.id === showOnboarding)?.athlete.first_name}</span>:
                   </p>
 
                   <div className="space-y-3 mb-6">
@@ -411,7 +633,7 @@ export default function CampCheckInPage() {
                       <label key={key} className="flex items-start gap-3 cursor-pointer">
                         <input
                           type="checkbox"
-                          className="mt-1 h-4 w-4 text-orange-600 rounded border-gray-300 focus:ring-orange-500"
+                          className="mt-1 h-4 w-4 accent-neon bg-transparent border-white/30 rounded focus:ring-neon focus:ring-offset-0"
                           checked={
                             onboardingConfirmations[showOnboarding]?.[
                               key as keyof typeof onboardingConfirmations[string]
@@ -425,7 +647,7 @@ export default function CampCheckInPage() {
                             )
                           }
                         />
-                        <span className="text-gray-700">{label}</span>
+                        <span className="text-white/70">{label}</span>
                       </label>
                     ))}
                   </div>
@@ -433,7 +655,7 @@ export default function CampCheckInPage() {
                   <div className="flex gap-3">
                     <button
                       onClick={() => setShowOnboarding(null)}
-                      className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+                      className="flex-1 px-4 py-2 border border-white/20 text-white/70 hover:bg-white/5"
                     >
                       Cancel
                     </button>
@@ -445,7 +667,7 @@ export default function CampCheckInPage() {
                         }
                       }}
                       disabled={!isOnboardingComplete(showOnboarding)}
-                      className="flex-1 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="flex-1 px-4 py-2 bg-neon text-black font-bold hover:bg-neon/90 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Continue
                     </button>
@@ -458,7 +680,7 @@ export default function CampCheckInPage() {
             <button
               onClick={handleCheckIn}
               disabled={selectedAthletes.size === 0 || checkingIn}
-              className="w-full py-4 bg-orange-600 text-white text-lg font-semibold rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="w-full py-4 bg-neon text-black text-lg font-bold uppercase tracking-wider hover:bg-neon/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {checkingIn ? (
                 <span className="flex items-center justify-center gap-2">
@@ -478,16 +700,16 @@ export default function CampCheckInPage() {
         {/* All Checked In */}
         {uncheckedCount === 0 && checkedInCount > 0 && (
           <div className="text-center py-8">
-            <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
-              <svg className="w-8 h-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div className="w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
             </div>
-            <h2 className="text-xl font-bold text-gray-900 mb-2">All Set!</h2>
-            <p className="text-gray-600 mb-6">All your athletes are checked in for today.</p>
+            <h2 className="text-xl font-bold text-white mb-2">All Set!</h2>
+            <p className="text-white/50 mb-6">All your athletes are checked in for today.</p>
             <Link
               href="/portal/pickup"
-              className="inline-block bg-orange-600 text-white px-6 py-2 rounded-lg hover:bg-orange-700"
+              className="inline-block bg-neon text-black px-6 py-3 font-bold uppercase tracking-wider hover:bg-neon/90"
             >
               View Pickup Codes
             </Link>

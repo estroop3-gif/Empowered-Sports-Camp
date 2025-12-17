@@ -286,3 +286,25 @@ export async function deactivateLicensee(id: string): Promise<{
     return { success: false, error: err as Error }
   }
 }
+
+/**
+ * Activate a licensee
+ */
+export async function activateLicensee(id: string): Promise<{
+  success: boolean
+  error: Error | null
+}> {
+  try {
+    await prisma.userRoleAssignment.updateMany({
+      where: {
+        userId: id,
+        role: 'licensee_owner',
+      },
+      data: { isActive: true },
+    })
+
+    return { success: true, error: null }
+  } catch (err) {
+    return { success: false, error: err as Error }
+  }
+}

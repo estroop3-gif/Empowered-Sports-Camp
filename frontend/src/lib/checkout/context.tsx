@@ -430,7 +430,7 @@ const CheckoutContext = createContext<CheckoutContextValue | undefined>(undefine
 // PROVIDER
 // =====================================================
 
-const STEP_ORDER: CheckoutStep[] = ['camp', 'campers', 'squad', 'addons', 'payment', 'confirmation']
+const STEP_ORDER: CheckoutStep[] = ['camp', 'campers', 'squad', 'addons', 'waivers', 'payment', 'confirmation']
 
 export function CheckoutProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(checkoutReducer, initialState)

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { AdminLayout, PageHeader, ContentCard } from '@/components/admin/admin-layout'
 import { DataTable, TableBadge } from '@/components/ui/data-table'
@@ -80,6 +80,8 @@ export default function AdminCampsPage() {
   const [statusFilter, setStatusFilter] = useState<string>('')
   const [searchQuery, setSearchQuery] = useState('')
   const [actionMenuOpen, setActionMenuOpen] = useState<string | null>(null)
+  const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null)
+  const buttonRefs = useRef<{ [key: string]: HTMLButtonElement | null }>({})
 
   useEffect(() => {
     loadCamps()
@@ -244,7 +246,7 @@ export default function AdminCampsPage() {
         </ContentCard>
       ) : (
         <ContentCard>
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto overflow-y-visible">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-white/10">
@@ -293,18 +295,40 @@ export default function AdminCampsPage() {
                     <td className="py-4 px-4 text-right">
                       <div className="relative inline-block">
                         <button
-                          onClick={() => setActionMenuOpen(actionMenuOpen === camp.id ? null : camp.id)}
+                          ref={(el) => { buttonRefs.current[camp.id] = el }}
+                          onClick={() => {
+                            if (actionMenuOpen === camp.id) {
+                              setActionMenuOpen(null)
+                              setMenuPosition(null)
+                            } else {
+                              const button = buttonRefs.current[camp.id]
+                              if (button) {
+                                const rect = button.getBoundingClientRect()
+                                setMenuPosition({
+                                  top: rect.bottom + 4,
+                                  left: rect.right - 192, // 192px = w-48
+                                })
+                              }
+                              setActionMenuOpen(camp.id)
+                            }
+                          }}
                           className="p-2 hover:bg-white/10 transition-colors"
                         >
                           <MoreHorizontal className="h-5 w-5 text-white/50" />
                         </button>
-                        {actionMenuOpen === camp.id && (
+                        {actionMenuOpen === camp.id && menuPosition && (
                           <>
                             <div
-                              className="fixed inset-0 z-10"
-                              onClick={() => setActionMenuOpen(null)}
+                              className="fixed inset-0 z-[70]"
+                              onClick={() => {
+                                setActionMenuOpen(null)
+                                setMenuPosition(null)
+                              }}
                             />
-                            <div className="absolute right-0 top-full mt-1 z-20 w-48 bg-dark-100 border border-white/10 shadow-xl">
+                            <div
+                              className="fixed w-48 bg-dark-100 border border-white/10 shadow-xl z-[80]"
+                              style={{ top: menuPosition.top, left: menuPosition.left }}
+                            >
                               <Link
                                 href={`/admin/camps/${camp.id}/hq`}
                                 className="flex items-center gap-3 px-4 py-3 text-sm text-neon font-bold hover:bg-neon/10 transition-colors"

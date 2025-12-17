@@ -133,11 +133,11 @@ export function RoleSwitcher({ className, variant = 'dropdown' }: RoleSwitcherPr
         <>
           {/* Backdrop */}
           <div
-            className="fixed inset-0 z-40"
+            className="fixed inset-0 z-[60]"
             onClick={() => setIsOpen(false)}
           />
           {/* Dropdown */}
-          <div className="absolute top-full left-0 mt-1 w-64 bg-black border border-white/10 shadow-xl z-50">
+          <div className="absolute top-full left-0 mt-1 w-64 bg-black border border-white/10 shadow-xl z-[70]">
             <div className="p-2 border-b border-white/10">
               <p className="text-xs text-white/40 uppercase tracking-wider px-2">
                 Preview as different role
@@ -258,8 +258,8 @@ export function RoleSwitcherCompact({ className }: { className?: string }) {
 
       {isOpen && (
         <>
-          <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
-          <div className="absolute top-full right-0 mt-1 w-56 bg-black border border-white/10 shadow-xl z-50">
+          <div className="fixed inset-0 z-[60]" onClick={() => setIsOpen(false)} />
+          <div className="absolute top-full right-0 mt-1 w-56 bg-black border border-white/10 shadow-xl z-[70]">
             <div className="p-2 border-b border-white/10">
               <p className="text-xs text-white/40 uppercase tracking-wider">View as</p>
             </div>

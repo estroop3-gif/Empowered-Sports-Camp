@@ -201,6 +201,15 @@ export async function fetchAdminCamps(options: {
           location: { select: { id: true, name: true, city: true, state: true } },
           venue: { select: { id: true, name: true, shortName: true, city: true, state: true, addressLine1: true, facilityType: true, indoorOutdoor: true } },
           tenant: { select: { id: true, name: true, slug: true } },
+          _count: {
+            select: {
+              registrations: {
+                where: {
+                  status: { in: ['confirmed', 'pending'] },
+                },
+              },
+            },
+          },
         },
         orderBy: { startDate: 'desc' },
         skip: (page - 1) * pageSize,
@@ -255,6 +264,7 @@ export async function fetchAdminCamps(options: {
           name: c.tenant.name,
           slug: c.tenant.slug,
         } : null,
+        registration_count: c._count?.registrations || 0,
       })),
       total,
     }

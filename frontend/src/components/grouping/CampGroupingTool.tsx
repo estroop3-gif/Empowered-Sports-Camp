@@ -33,6 +33,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import Link from 'next/link'
+import { useBannerOffset } from '@/hooks/useBannerOffset'
 
 // Types
 interface GroupingCamper {
@@ -108,16 +109,20 @@ function CamperCard({
   camper,
   isDragging = false,
   isOverlay = false,
+  onEdit,
+  showEditButton = false,
 }: {
   camper: GroupingCamper
   isDragging?: boolean
   isOverlay?: boolean
+  onEdit?: (camper: GroupingCamper) => void
+  showEditButton?: boolean
 }) {
   return (
     <div
-      className={`bg-white border rounded-lg p-3 ${
-        isDragging ? 'opacity-50 border-dashed' : 'border-gray-200'
-      } ${isOverlay ? 'shadow-lg' : 'hover:border-gray-300'}`}
+      className={`bg-dark-100 border p-3 ${
+        isDragging ? 'opacity-50 border-dashed border-white/20' : 'border-white/10'
+      } ${isOverlay ? 'shadow-lg shadow-black/50' : 'hover:border-white/30'}`}
     >
       <div className="flex items-center gap-3">
         {/* Avatar */}
@@ -129,15 +134,15 @@ function CamperCard({
               className="w-10 h-10 rounded-full object-cover"
             />
           ) : (
-            <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center">
-              <span className="text-gray-600 font-medium text-sm">
+            <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center">
+              <span className="text-white/70 font-medium text-sm">
                 {camper.first_name[0]}{camper.last_name[0]}
               </span>
             </div>
           )}
           {/* Friend group indicator */}
           {camper.friend_group_number && (
-            <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-pink-500 text-white text-xs rounded-full flex items-center justify-center font-bold">
+            <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-magenta text-white text-xs rounded-full flex items-center justify-center font-bold">
               {camper.friend_group_number}
             </div>
           )}
@@ -145,18 +150,18 @@ function CamperCard({
 
         {/* Info */}
         <div className="flex-1 min-w-0">
-          <p className="font-medium text-gray-900 text-sm truncate">{camper.name}</p>
-          <div className="flex items-center gap-2 text-xs text-gray-500">
+          <p className="font-medium text-white text-sm truncate">{camper.name}</p>
+          <div className="flex items-center gap-2 text-xs text-white/50">
             <span>Grade {camper.grade_level ?? '?'}</span>
             {camper.has_medical_notes && (
-              <span className="text-red-500" title="Medical notes">
+              <span className="text-red-400" title="Medical notes">
                 <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
                 </svg>
               </span>
             )}
             {camper.has_allergies && (
-              <span className="text-yellow-500" title="Allergies">
+              <span className="text-amber-400" title="Allergies">
                 <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                 </svg>
@@ -165,8 +170,24 @@ function CamperCard({
           </div>
         </div>
 
+        {/* Edit button */}
+        {showEditButton && onEdit && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              onEdit(camper)
+            }}
+            className="p-1.5 text-white/40 hover:text-neon hover:bg-white/10 transition-colors"
+            title="Assign to group"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+          </button>
+        )}
+
         {/* Drag handle */}
-        <div className="text-gray-400">
+        <div className="text-white/30">
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
           </svg>
@@ -177,7 +198,15 @@ function CamperCard({
 }
 
 // Sortable Camper Card
-function SortableCamperCard({ camper }: { camper: GroupingCamper }) {
+function SortableCamperCard({
+  camper,
+  onEdit,
+  showEditButton = false,
+}: {
+  camper: GroupingCamper
+  onEdit?: (camper: GroupingCamper) => void
+  showEditButton?: boolean
+}) {
   const {
     attributes,
     listeners,
@@ -194,7 +223,12 @@ function SortableCamperCard({ camper }: { camper: GroupingCamper }) {
 
   return (
     <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
-      <CamperCard camper={camper} isDragging={isDragging} />
+      <CamperCard
+        camper={camper}
+        isDragging={isDragging}
+        onEdit={onEdit}
+        showEditButton={showEditButton}
+      />
     </div>
   )
 }
@@ -204,30 +238,34 @@ function GroupColumn({
   group,
   maxGradeSpread,
   isOver,
+  onEditCamper,
+  isFinalized,
 }: {
   group: GroupingGroup
   maxGradeSpread: number
   isOver?: boolean
+  onEditCamper?: (camper: GroupingCamper) => void
+  isFinalized?: boolean
 }) {
   const hasViolations = group.stats.has_size_violation || group.stats.has_grade_violation
-  const borderColor = group.group_color || '#e5e7eb'
+  const borderColor = group.group_color || '#333'
 
   return (
     <div
-      className={`bg-white rounded-lg border-2 flex flex-col min-h-[400px] ${
-        isOver ? 'ring-2 ring-blue-400' : ''
+      className={`bg-dark-100 border-2 flex flex-col min-h-[400px] ${
+        isOver ? 'ring-2 ring-neon' : ''
       }`}
       style={{ borderColor: hasViolations ? '#ef4444' : borderColor }}
     >
       {/* Header */}
       <div
-        className="p-4 border-b"
-        style={{ backgroundColor: `${borderColor}20` }}
+        className="p-4 border-b border-white/10"
+        style={{ backgroundColor: `${borderColor}30` }}
       >
         <div className="flex items-center justify-between mb-2">
-          <h3 className="font-bold text-gray-900">{group.group_name}</h3>
+          <h3 className="font-bold text-white">{group.group_name}</h3>
           {hasViolations && (
-            <span className="text-red-500">
+            <span className="text-red-400">
               <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
               </svg>
@@ -235,10 +273,10 @@ function GroupColumn({
           )}
         </div>
         <div className="flex items-center gap-4 text-sm">
-          <span className={`font-medium ${group.stats.has_size_violation ? 'text-red-600' : 'text-gray-700'}`}>
+          <span className={`font-medium ${group.stats.has_size_violation ? 'text-red-400' : 'text-white/70'}`}>
             {group.stats.count}/{group.max_size}
           </span>
-          <span className={`${group.stats.has_grade_violation ? 'text-red-600' : 'text-gray-500'}`}>
+          <span className={`${group.stats.has_grade_violation ? 'text-red-400' : 'text-white/50'}`}>
             Grades:{' '}
             {group.stats.min_grade !== null && group.stats.max_grade !== null
               ? group.stats.min_grade === group.stats.max_grade
@@ -251,24 +289,24 @@ function GroupColumn({
         {/* Constraint indicators */}
         <div className="flex gap-2 mt-2">
           {!group.stats.has_size_violation && !group.stats.is_full ? (
-            <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">
+            <span className="text-xs bg-green-500/20 text-green-400 px-2 py-0.5">
               Size OK
             </span>
           ) : group.stats.has_size_violation ? (
-            <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded">
+            <span className="text-xs bg-red-500/20 text-red-400 px-2 py-0.5">
               Over capacity
             </span>
           ) : (
-            <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded">
+            <span className="text-xs bg-amber-500/20 text-amber-400 px-2 py-0.5">
               Full
             </span>
           )}
           {group.stats.grade_spread > maxGradeSpread ? (
-            <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded">
+            <span className="text-xs bg-red-500/20 text-red-400 px-2 py-0.5">
               Grade gap: {group.stats.grade_spread}
             </span>
           ) : group.stats.count > 0 ? (
-            <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">
+            <span className="text-xs bg-green-500/20 text-green-400 px-2 py-0.5">
               Grade OK
             </span>
           ) : null}
@@ -282,12 +320,17 @@ function GroupColumn({
           strategy={verticalListSortingStrategy}
         >
           {group.campers.map(camper => (
-            <SortableCamperCard key={camper.camper_session_id} camper={camper} />
+            <SortableCamperCard
+              key={camper.camper_session_id}
+              camper={camper}
+              onEdit={onEditCamper}
+              showEditButton={!isFinalized}
+            />
           ))}
         </SortableContext>
 
         {group.campers.length === 0 && (
-          <div className="text-center py-8 text-gray-400 text-sm">
+          <div className="text-center py-8 text-white/30 text-sm">
             Drop campers here
           </div>
         )}
@@ -309,6 +352,9 @@ export default function CampGroupingTool({
   const [activeCamper, setActiveCamper] = useState<GroupingCamper | null>(null)
   const [overGroupId, setOverGroupId] = useState<string | null>(null)
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
+  const [editingCamper, setEditingCamper] = useState<GroupingCamper | null>(null)
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null)
+  const { topWithNavbar } = useBannerOffset()
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -541,12 +587,63 @@ export default function CampGroupingTool({
     }
   }
 
+  // Open edit modal for a camper
+  const handleOpenEditModal = (camper: GroupingCamper) => {
+    setEditingCamper(camper)
+    // Set the current group as default selection
+    setSelectedGroupId(camper.current_group_id)
+  }
+
+  // Assign camper to selected group via edit modal
+  const handleAssignCamper = async () => {
+    if (!editingCamper || !state) return
+
+    // If same group, just close
+    const currentGroupId = editingCamper.current_group_id
+    if (selectedGroupId === currentGroupId) {
+      setEditingCamper(null)
+      setSelectedGroupId(null)
+      return
+    }
+
+    setActionLoading('assign')
+    try {
+      const res = await fetch(`/api/grouping/${campId}/update`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          updates: [{
+            camper_session_id: editingCamper.camper_session_id,
+            new_group_id: selectedGroupId,
+          }],
+        }),
+      })
+      const json = await res.json()
+
+      if (!res.ok) {
+        throw new Error(json.error || 'Failed to assign camper')
+      }
+
+      setState(json.data)
+      showToast(`${editingCamper.name} assigned successfully`, 'success')
+      setEditingCamper(null)
+      setSelectedGroupId(null)
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Assignment failed', 'error')
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+      <div
+        className="min-h-screen bg-black flex items-center justify-center"
+        style={{ paddingTop: `${topWithNavbar}px` }}
+      >
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#CCFF00] mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading grouping tool...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-neon mx-auto"></div>
+          <p className="mt-4 text-white/50">Loading grouping tool...</p>
         </div>
       </div>
     )
@@ -554,18 +651,21 @@ export default function CampGroupingTool({
 
   if (error || !state) {
     return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
-        <div className="bg-white rounded-lg shadow p-6 max-w-md w-full text-center">
-          <div className="text-red-600 mb-4">
+      <div
+        className="min-h-screen bg-black flex items-center justify-center p-4"
+        style={{ paddingTop: `${topWithNavbar}px` }}
+      >
+        <div className="bg-dark-100 border border-white/10 p-6 max-w-md w-full text-center">
+          <div className="text-red-400 mb-4">
             <svg className="h-12 w-12 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
           </div>
-          <h1 className="text-xl font-bold text-gray-900 mb-2">Error</h1>
-          <p className="text-gray-600 mb-6">{error || 'Failed to load grouping'}</p>
+          <h1 className="text-xl font-bold text-white mb-2">Error</h1>
+          <p className="text-white/50 mb-6">{error || 'Failed to load grouping'}</p>
           <Link
             href={backUrl}
-            className="inline-block bg-[#CCFF00] text-black px-6 py-2 rounded-lg hover:bg-[#b8e600] font-medium"
+            className="inline-block bg-neon text-black px-6 py-2 hover:bg-neon/90 font-bold uppercase tracking-wider"
           >
             Go Back
           </Link>
@@ -586,25 +686,25 @@ export default function CampGroupingTool({
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
-      <div className="min-h-screen bg-gray-100">
+      <div className="min-h-screen bg-black" style={{ paddingTop: `${topWithNavbar}px` }}>
         {/* Toast */}
         {toast && (
-          <div className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg ${
+          <div className={`fixed top-4 right-4 z-50 px-4 py-3 shadow-lg ${
             toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'
-          } text-white`}>
+          } text-white`} style={{ top: `${topWithNavbar + 16}px` }}>
             {toast.message}
           </div>
         )}
 
         {/* Header */}
-        <div className="bg-black text-white py-4 px-6 sticky top-0 z-40">
+        <div className="bg-dark-100 border-b border-white/10 text-white py-4 px-6">
           <div className="max-w-[1800px] mx-auto">
             <div className="flex items-center justify-between gap-4">
               {/* Left - Back and title */}
               <div className="flex items-center gap-4">
                 <Link
                   href={backUrl}
-                  className="p-2 hover:bg-gray-800 rounded-lg transition-colors"
+                  className="p-2 hover:bg-white/10 transition-colors"
                 >
                   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -612,7 +712,7 @@ export default function CampGroupingTool({
                 </Link>
                 <div>
                   <h1 className="text-lg font-bold uppercase tracking-wide">{state.camp_name}</h1>
-                  <p className="text-gray-400 text-sm">
+                  <p className="text-white/50 text-sm">
                     Grouping Tool • {state.total_campers} campers • {state.friend_groups_count} friend groups
                   </p>
                 </div>
@@ -621,15 +721,15 @@ export default function CampGroupingTool({
               {/* Center - Status */}
               <div className="flex items-center gap-4">
                 {state.is_finalized ? (
-                  <span className="px-3 py-1 bg-green-600 text-white text-sm font-medium rounded-full">
+                  <span className="px-3 py-1 bg-green-500/20 text-green-400 text-sm font-medium">
                     Finalized
                   </span>
                 ) : allValid ? (
-                  <span className="px-3 py-1 bg-green-600 text-white text-sm font-medium rounded-full">
+                  <span className="px-3 py-1 bg-green-500/20 text-green-400 text-sm font-medium">
                     All groups valid
                   </span>
                 ) : (
-                  <span className="px-3 py-1 bg-yellow-500 text-black text-sm font-medium rounded-full">
+                  <span className="px-3 py-1 bg-amber-500/20 text-amber-400 text-sm font-medium">
                     {violationCount} issue{violationCount !== 1 ? 's' : ''} •{' '}
                     {state.ungrouped_campers.length} ungrouped
                   </span>
@@ -643,14 +743,14 @@ export default function CampGroupingTool({
                     <button
                       onClick={handleAutoGroup}
                       disabled={actionLoading !== null}
-                      className="px-4 py-2 bg-[#CCFF00] text-black font-medium rounded-lg hover:bg-[#b8e600] disabled:opacity-50 transition-colors"
+                      className="px-4 py-2 bg-neon text-black font-bold uppercase tracking-wider hover:bg-neon/90 disabled:opacity-50 transition-colors"
                     >
                       {actionLoading === 'auto' ? 'Processing...' : 'Auto-Group'}
                     </button>
                     <button
                       onClick={handleFinalize}
                       disabled={actionLoading !== null || !allValid}
-                      className="px-4 py-2 bg-white text-black font-medium rounded-lg hover:bg-gray-100 disabled:opacity-50 transition-colors"
+                      className="px-4 py-2 border border-white/20 text-white font-bold uppercase tracking-wider hover:bg-white/10 disabled:opacity-50 transition-colors"
                     >
                       {actionLoading === 'finalize' ? 'Processing...' : 'Finalize'}
                     </button>
@@ -660,14 +760,14 @@ export default function CampGroupingTool({
                   <button
                     onClick={handleUnfinalize}
                     disabled={actionLoading !== null}
-                    className="px-4 py-2 bg-white text-black font-medium rounded-lg hover:bg-gray-100 disabled:opacity-50 transition-colors"
+                    className="px-4 py-2 border border-white/20 text-white font-bold uppercase tracking-wider hover:bg-white/10 disabled:opacity-50 transition-colors"
                   >
                     {actionLoading === 'unfinalize' ? 'Processing...' : 'Unlock'}
                   </button>
                 )}
                 <button
                   onClick={handlePrint}
-                  className="px-4 py-2 border border-gray-600 text-white font-medium rounded-lg hover:bg-gray-800 transition-colors"
+                  className="px-4 py-2 border border-white/20 text-white font-bold uppercase tracking-wider hover:bg-white/10 transition-colors"
                 >
                   Print Report
                 </button>
@@ -678,23 +778,23 @@ export default function CampGroupingTool({
 
         {/* Warnings */}
         {state.warnings.length > 0 && (
-          <div className="bg-yellow-50 border-b border-yellow-200 py-2 px-6">
+          <div className="bg-amber-500/10 border-b border-amber-500/30 py-2 px-6">
             <div className="max-w-[1800px] mx-auto flex items-center gap-4 overflow-x-auto">
-              <span className="text-yellow-800 text-sm font-medium shrink-0">Warnings:</span>
+              <span className="text-amber-400 text-sm font-medium shrink-0">Warnings:</span>
               {state.warnings.slice(0, 5).map((warning, i) => (
                 <span
                   key={i}
-                  className={`text-sm px-2 py-1 rounded shrink-0 ${
+                  className={`text-sm px-2 py-1 shrink-0 ${
                     warning.severity === 'error'
-                      ? 'bg-red-100 text-red-800'
-                      : 'bg-yellow-100 text-yellow-800'
+                      ? 'bg-red-500/20 text-red-400'
+                      : 'bg-amber-500/20 text-amber-400'
                   }`}
                 >
                   {warning.message}
                 </span>
               ))}
               {state.warnings.length > 5 && (
-                <span className="text-sm text-yellow-600 shrink-0">
+                <span className="text-sm text-amber-400/70 shrink-0">
                   +{state.warnings.length - 5} more
                 </span>
               )}
@@ -714,18 +814,20 @@ export default function CampGroupingTool({
                 group={group}
                 maxGradeSpread={state.max_grade_spread}
                 isOver={overGroupId === group.id}
+                onEditCamper={handleOpenEditModal}
+                isFinalized={state.is_finalized}
               />
             ))}
 
             {/* Ungrouped */}
             <div
-              className={`bg-gray-50 rounded-lg border-2 border-dashed flex flex-col min-h-[400px] ${
-                overGroupId === 'ungrouped' ? 'border-blue-400' : 'border-gray-300'
+              className={`bg-dark-100 border-2 border-dashed flex flex-col min-h-[400px] ${
+                overGroupId === 'ungrouped' ? 'border-neon' : 'border-white/20'
               }`}
             >
-              <div className="p-4 border-b border-gray-200">
-                <h3 className="font-bold text-gray-900">Ungrouped</h3>
-                <p className="text-sm text-gray-500">{state.ungrouped_campers.length} campers</p>
+              <div className="p-4 border-b border-white/10">
+                <h3 className="font-bold text-white">Ungrouped</h3>
+                <p className="text-sm text-white/50">{state.ungrouped_campers.length} campers</p>
               </div>
               <div className="flex-1 p-3 space-y-2 overflow-y-auto">
                 <SortableContext
@@ -733,12 +835,17 @@ export default function CampGroupingTool({
                   strategy={verticalListSortingStrategy}
                 >
                   {state.ungrouped_campers.map(camper => (
-                    <SortableCamperCard key={camper.camper_session_id} camper={camper} />
+                    <SortableCamperCard
+                      key={camper.camper_session_id}
+                      camper={camper}
+                      onEdit={handleOpenEditModal}
+                      showEditButton={!state.is_finalized}
+                    />
                   ))}
                 </SortableContext>
 
                 {state.ungrouped_campers.length === 0 && (
-                  <div className="text-center py-8 text-gray-400 text-sm">
+                  <div className="text-center py-8 text-white/30 text-sm">
                     All campers assigned!
                   </div>
                 )}
@@ -747,27 +854,177 @@ export default function CampGroupingTool({
           </div>
 
           {/* Summary Stats */}
-          <div className="mt-6 bg-white rounded-lg p-4 flex items-center justify-between">
+          <div className="mt-6 bg-dark-100 border border-white/10 p-4 flex items-center justify-between">
             <div className="flex items-center gap-6 text-sm">
-              <span className="text-gray-600">
-                <strong className="text-gray-900">{groupedCount}</strong> grouped
+              <span className="text-white/50">
+                <strong className="text-white">{groupedCount}</strong> grouped
               </span>
-              <span className="text-gray-600">
-                <strong className="text-gray-900">{state.ungrouped_campers.length}</strong> ungrouped
+              <span className="text-white/50">
+                <strong className="text-white">{state.ungrouped_campers.length}</strong> ungrouped
               </span>
-              <span className="text-gray-600">
-                Max group size: <strong className="text-gray-900">{state.max_group_size}</strong>
+              <span className="text-white/50">
+                Max group size: <strong className="text-white">{state.max_group_size}</strong>
               </span>
-              <span className="text-gray-600">
-                Max grade spread: <strong className="text-gray-900">{state.max_grade_spread}</strong>
+              <span className="text-white/50">
+                Max grade spread: <strong className="text-white">{state.max_grade_spread}</strong>
               </span>
             </div>
-            <div className="text-sm text-gray-500">
-              Status: <span className="font-medium capitalize">{state.status.replace('_', ' ')}</span>
+            <div className="text-sm text-white/50">
+              Status: <span className="font-medium text-white capitalize">{state.status.replace('_', ' ')}</span>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Edit Camper Modal */}
+      {editingCamper && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/80"
+            onClick={() => {
+              setEditingCamper(null)
+              setSelectedGroupId(null)
+            }}
+          />
+          <div className="relative w-full max-w-md bg-dark-100 border border-white/20">
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b border-white/10">
+              <h2 className="text-lg font-bold text-white">Assign Camper</h2>
+              <button
+                onClick={() => {
+                  setEditingCamper(null)
+                  setSelectedGroupId(null)
+                }}
+                className="p-2 text-white/50 hover:text-white transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-4 space-y-4">
+              {/* Camper Info */}
+              <div className="p-4 bg-white/5 border border-white/10">
+                <div className="flex items-center gap-3">
+                  {editingCamper.photo_url ? (
+                    <img
+                      src={editingCamper.photo_url}
+                      alt={editingCamper.name}
+                      className="w-12 h-12 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center">
+                      <span className="text-white/70 font-medium">
+                        {editingCamper.first_name[0]}{editingCamper.last_name[0]}
+                      </span>
+                    </div>
+                  )}
+                  <div>
+                    <p className="font-bold text-white">{editingCamper.name}</p>
+                    <p className="text-sm text-white/50">
+                      Grade {editingCamper.grade_level ?? '?'}
+                      {editingCamper.friend_group_number && (
+                        <span className="ml-2 px-2 py-0.5 bg-magenta/20 text-magenta text-xs">
+                          Friend Group {editingCamper.friend_group_number}
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Group Selection */}
+              <div>
+                <label className="block text-xs text-white/40 uppercase tracking-wider mb-2">
+                  Assign to Group
+                </label>
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {/* Ungrouped Option */}
+                  <button
+                    onClick={() => setSelectedGroupId(null)}
+                    className={`w-full text-left p-3 border transition-colors ${
+                      selectedGroupId === null
+                        ? 'border-neon bg-neon/10 text-white'
+                        : 'border-white/10 text-white/70 hover:border-white/30'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium">Ungrouped</span>
+                      {selectedGroupId === null && (
+                        <svg className="w-5 h-5 text-neon" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                      )}
+                    </div>
+                  </button>
+
+                  {/* Group Options */}
+                  {state.groups.map(group => (
+                    <button
+                      key={group.id}
+                      onClick={() => setSelectedGroupId(group.id)}
+                      className={`w-full text-left p-3 border transition-colors ${
+                        selectedGroupId === group.id
+                          ? 'border-neon bg-neon/10 text-white'
+                          : 'border-white/10 text-white/70 hover:border-white/30'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <span className="font-medium">{group.group_name}</span>
+                          <span className="ml-2 text-sm text-white/50">
+                            ({group.stats.count}/{group.max_size})
+                          </span>
+                        </div>
+                        {selectedGroupId === group.id && (
+                          <svg className="w-5 h-5 text-neon" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                          </svg>
+                        )}
+                      </div>
+                      {group.stats.is_full && (
+                        <span className="text-xs text-amber-400">Full</span>
+                      )}
+                      {group.stats.has_size_violation && (
+                        <span className="text-xs text-red-400">Over capacity</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-white/10">
+                <button
+                  onClick={() => {
+                    setEditingCamper(null)
+                    setSelectedGroupId(null)
+                  }}
+                  className="px-4 py-2 text-white/60 hover:text-white transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleAssignCamper}
+                  disabled={actionLoading === 'assign'}
+                  className="flex items-center gap-2 px-6 py-2 bg-neon text-black font-bold uppercase tracking-wider hover:bg-neon/90 transition-colors disabled:opacity-50"
+                >
+                  {actionLoading === 'assign' ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-black"></div>
+                      Assigning...
+                    </>
+                  ) : (
+                    'Assign'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Drag Overlay */}
       <DragOverlay>

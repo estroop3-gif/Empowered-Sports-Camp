@@ -76,6 +76,8 @@ export default function RootLayout({
             <Footer />
           </RoleDashboardRouter>
         </AuthProvider>
+        {/* Portal container for modals - must be outside all other content */}
+        <div id="modal-root" />
       </body>
     </html>
   )

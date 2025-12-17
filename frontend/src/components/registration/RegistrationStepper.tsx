@@ -31,8 +31,9 @@ const STEPS: StepConfig[] = [
   { id: 'campers', label: 'CAMPER INFO', number: 2 },
   { id: 'squad', label: 'HER SQUAD', number: 3 },
   { id: 'addons', label: 'ADD-ONS', number: 4 },
-  { id: 'payment', label: 'PAYMENT', number: 5 },
-  { id: 'confirmation', label: 'CONFIRMED', number: 6 },
+  { id: 'waivers', label: 'WAIVERS', number: 5 },
+  { id: 'payment', label: 'PAYMENT', number: 6 },
+  { id: 'confirmation', label: 'CONFIRMED', number: 7 },
 ]
 
 export function RegistrationStepper({
@@ -42,9 +43,11 @@ export function RegistrationStepper({
   const currentIndex = STEPS.findIndex((s) => s.id === currentStep)
 
   if (variant === 'horizontal') {
+    // Show first 6 steps in horizontal mode (exclude confirmation)
+    const visibleSteps = STEPS.slice(0, 6)
     return (
       <div className="flex items-center justify-between">
-        {STEPS.slice(0, 5).map((step, index) => {
+        {visibleSteps.map((step, index) => {
           const isCompleted = index < currentIndex
           const isCurrent = step.id === currentStep
           const isUpcoming = index > currentIndex
@@ -81,7 +84,7 @@ export function RegistrationStepper({
               </div>
 
               {/* Connector line */}
-              {index < 4 && (
+              {index < visibleSteps.length - 1 && (
                 <div
                   className={cn(
                     'flex-1 h-[2px] mx-2',

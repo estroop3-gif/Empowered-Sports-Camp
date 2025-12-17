@@ -156,7 +156,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Calculate per-camper pricing
-    const campPrice = camp.priceCents
+    // Check if early bird pricing applies
+    const today = new Date()
+    const isEarlyBird = camp.earlyBirdPriceCents !== null &&
+      camp.earlyBirdDeadline !== null &&
+      today < new Date(camp.earlyBirdDeadline)
+    const campPrice = isEarlyBird ? camp.earlyBirdPriceCents! : camp.priceCents
     const numCampers = campers.length
     // Sibling discount - 10% for 2nd+ campers (standard rate)
     const siblingDiscountPercent = 10

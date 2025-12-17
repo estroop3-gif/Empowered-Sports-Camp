@@ -329,28 +329,12 @@ export default function AdminCreateCampPage() {
       return
     }
 
-    try {
-      // Create camp via API
-      const response = await fetch('/api/admin/camps?action=create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(formData),
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to create camp')
-      }
-
-      const data = await response.json()
-      // Stay in admin section - navigate to camp edit page
-      router.replace(`/admin/camps/${data.camp.id}`)
-    } catch (err) {
-      console.error('Failed to create camp:', err)
-      setError(err instanceof Error ? err.message : 'Failed to create camp')
-      setSaving(false)
-    }
+    // Store form data in sessionStorage and navigate to step 2
+    sessionStorage.setItem('campCreateFormData', JSON.stringify({
+      ...formData,
+      selectedTerritoryId,
+    }))
+    router.push('/admin/camps/new/schedule')
   }
 
   const isHqAdmin = userRole === 'hq_admin'
@@ -557,24 +541,30 @@ export default function AdminCreateCampPage() {
 
                   {/* Dropdown Panel */}
                   {venueDropdownOpen && (
-                    <div className="absolute z-50 w-full mt-1 bg-dark-100 border border-white/20 shadow-xl max-h-80 overflow-hidden">
-                      {/* Search Input */}
-                      <div className="p-3 border-b border-white/10">
-                        <div className="relative">
-                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
-                          <input
-                            type="text"
-                            value={venueSearchQuery}
-                            onChange={(e) => setVenueSearchQuery(e.target.value)}
-                            placeholder="Search venues..."
-                            className="w-full pl-10 pr-4 py-2 bg-black border border-white/20 text-white placeholder:text-white/30 focus:border-magenta focus:outline-none text-sm"
-                            autoFocus
-                          />
+                    <>
+                      {/* Backdrop overlay */}
+                      <div
+                        className="fixed inset-0 z-[60]"
+                        onClick={() => setVenueDropdownOpen(false)}
+                      />
+                      <div className="absolute z-[70] w-full mt-1 bg-dark-100 border border-white/20 shadow-2xl">
+                        {/* Search Input */}
+                        <div className="p-3 border-b border-white/10">
+                          <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
+                            <input
+                              type="text"
+                              value={venueSearchQuery}
+                              onChange={(e) => setVenueSearchQuery(e.target.value)}
+                              placeholder="Search venues..."
+                              className="w-full pl-10 pr-4 py-2 bg-black border border-white/20 text-white placeholder:text-white/30 focus:border-magenta focus:outline-none text-sm"
+                              autoFocus
+                            />
+                          </div>
                         </div>
-                      </div>
 
-                      {/* Venue List */}
-                      <div className="max-h-56 overflow-y-auto">
+                        {/* Venue List */}
+                        <div className="max-h-[60vh] overflow-y-auto">
                         {filteredVenues.length === 0 ? (
                           <div className="p-4 text-center text-white/40 text-sm">
                             {venueSearchQuery ? 'No venues match your search' : 'No venues available'}
@@ -623,17 +613,18 @@ export default function AdminCreateCampPage() {
                         )}
                       </div>
 
-                      {/* Add New Venue Link */}
-                      <div className="p-3 border-t border-white/10">
-                        <Link
-                          href="/admin/venues/new"
-                          className="flex items-center gap-2 text-sm text-neon hover:underline"
-                        >
-                          <MapPin className="h-4 w-4" />
-                          Add a new venue
-                        </Link>
+                        {/* Add New Venue Link */}
+                        <div className="p-3 border-t border-white/10">
+                          <Link
+                            href="/admin/venues/new"
+                            className="flex items-center gap-2 text-sm text-neon hover:underline"
+                          >
+                            <MapPin className="h-4 w-4" />
+                            Add a new venue
+                          </Link>
+                        </div>
                       </div>
-                    </div>
+                    </>
                   )}
                 </div>
 
@@ -877,17 +868,8 @@ export default function AdminCreateCampPage() {
                   disabled={saving}
                   className="flex items-center justify-center gap-2 w-full py-4 bg-neon text-black font-bold uppercase tracking-widest hover:bg-neon/90 transition-colors disabled:opacity-50"
                 >
-                  {saving ? (
-                    <>
-                      <Loader2 className="h-5 w-5 animate-spin" />
-                      Creating...
-                    </>
-                  ) : (
-                    <>
-                      Create Camp
-                      <ArrowRight className="h-5 w-5" />
-                    </>
-                  )}
+                  Next: Schedule & Waivers
+                  <ArrowRight className="h-5 w-5" />
                 </button>
 
                 <Link

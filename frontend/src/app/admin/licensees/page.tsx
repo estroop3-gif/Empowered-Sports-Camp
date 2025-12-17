@@ -36,8 +36,10 @@ import {
   CheckCircle,
   Clock,
   XCircle,
+  UserCheck,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { LicenseeEditModal } from '@/components/admin/LicenseeEditModal'
 
 /**
  * All Licensees Page
@@ -57,6 +59,8 @@ export default function AllLicenseesPage() {
   const [statusFilter, setStatusFilter] = useState<LicenseeStatus>('')
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null)
   const [deactivating, setDeactivating] = useState<string | null>(null)
+  const [activating, setActivating] = useState<string | null>(null)
+  const [editModalLicensee, setEditModalLicensee] = useState<Licensee | null>(null)
 
   // Fetch licensees on mount
   useEffect(() => {
@@ -140,9 +144,52 @@ export default function AllLicenseesPage() {
     setActiveDropdown(null)
   }
 
+  // Handle activate licensee
+  const handleActivate = async (id: string) => {
+    if (!confirm('Are you sure you want to reactivate this licensee?')) return
+
+    setActivating(id)
+
+    try {
+      const res = await fetch('/api/licensees', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'activate', id }),
+      })
+      const { success, error: activateError } = await res.json()
+
+      if (success) {
+        // Update local state
+        setLicensees((prev) =>
+          prev.map((l) => (l.id === id ? { ...l, is_active: true } : l))
+        )
+      } else {
+        alert(activateError || 'Failed to activate licensee')
+      }
+    } catch (err) {
+      alert('Failed to activate licensee')
+    }
+
+    setActivating(null)
+    setActiveDropdown(null)
+  }
+
+  // Handle edit modal save
+  const handleEditSave = (updatedLicensee: Licensee) => {
+    setLicensees((prev) =>
+      prev.map((l) => (l.id === updatedLicensee.id ? updatedLicensee : l))
+    )
+    setEditModalLicensee(null)
+  }
+
   // Close dropdown when clicking outside
   useEffect(() => {
-    const handleClickOutside = () => setActiveDropdown(null)
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      // Don't close if clicking inside a dropdown or on the dropdown trigger
+      if (target.closest('[data-dropdown]')) return
+      setActiveDropdown(null)
+    }
     document.addEventListener('click', handleClickOutside)
     return () => document.removeEventListener('click', handleClickOutside)
   }, [])
@@ -385,7 +432,7 @@ export default function AllLicenseesPage() {
                         </button>
 
                         {/* Actions Dropdown */}
-                        <div className="relative">
+                        <div className="relative" data-dropdown>
                           <button
                             onClick={(e) => {
                               e.stopPropagation()
@@ -403,39 +450,52 @@ export default function AllLicenseesPage() {
                           {activeDropdown === licensee.id && (
                             <div
                               className="absolute right-0 top-full mt-1 w-48 bg-black border border-white/10 shadow-xl z-50"
-                              onClick={(e) => e.stopPropagation()}
+                              data-dropdown
                             >
-                              <Link
-                                href={`/admin/licensees/${licensee.id}`}
-                                className="flex items-center gap-2 px-4 py-3 text-sm text-white/70 hover:bg-white/5 hover:text-white transition-colors"
-                              >
-                                <Eye className="h-4 w-4" />
-                                View Details
-                              </Link>
-                              <Link
-                                href={`/admin/licensees/${licensee.id}/edit`}
-                                className="flex items-center gap-2 px-4 py-3 text-sm text-white/70 hover:bg-white/5 hover:text-white transition-colors"
+                              <button
+                                onClick={() => {
+                                  setEditModalLicensee(licensee)
+                                  setActiveDropdown(null)
+                                }}
+                                className="flex items-center gap-2 w-full px-4 py-3 text-sm text-white/70 hover:bg-white/5 hover:text-white transition-colors"
                               >
                                 <Edit className="h-4 w-4" />
                                 Edit Licensee
-                              </Link>
-                              <button
-                                onClick={() => handleDeactivate(licensee.id)}
-                                disabled={deactivating === licensee.id || !licensee.is_active}
-                                className={cn(
-                                  'flex items-center gap-2 w-full px-4 py-3 text-sm transition-colors',
-                                  licensee.is_active
-                                    ? 'text-red-400 hover:bg-red-500/10'
-                                    : 'text-white/30 cursor-not-allowed'
-                                )}
-                              >
-                                {deactivating === licensee.id ? (
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                  <UserMinus className="h-4 w-4" />
-                                )}
-                                {licensee.is_active ? 'Deactivate' : 'Already Inactive'}
                               </button>
+                              <Link
+                                href={`/admin/analytics/licensees/${licensee.id}`}
+                                className="flex items-center gap-2 px-4 py-3 text-sm text-white/70 hover:bg-white/5 hover:text-white transition-colors"
+                              >
+                                <Eye className="h-4 w-4" />
+                                View Analytics
+                              </Link>
+                              {licensee.is_active ? (
+                                <button
+                                  onClick={() => handleDeactivate(licensee.id)}
+                                  disabled={deactivating === licensee.id}
+                                  className="flex items-center gap-2 w-full px-4 py-3 text-sm text-red-400 hover:bg-red-500/10 transition-colors"
+                                >
+                                  {deactivating === licensee.id ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <UserMinus className="h-4 w-4" />
+                                  )}
+                                  Deactivate
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => handleActivate(licensee.id)}
+                                  disabled={activating === licensee.id}
+                                  className="flex items-center gap-2 w-full px-4 py-3 text-sm text-neon hover:bg-neon/10 transition-colors"
+                                >
+                                  {activating === licensee.id ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <UserCheck className="h-4 w-4" />
+                                  )}
+                                  Reactivate
+                                </button>
+                              )}
                             </div>
                           )}
                         </div>
@@ -455,6 +515,15 @@ export default function AllLicenseesPage() {
             </p>
           </div>
         </ContentCard>
+      )}
+
+      {/* Edit Modal */}
+      {editModalLicensee && (
+        <LicenseeEditModal
+          licensee={editModalLicensee}
+          onClose={() => setEditModalLicensee(null)}
+          onSave={handleEditSave}
+        />
       )}
     </AdminLayout>
   )

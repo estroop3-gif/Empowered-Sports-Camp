@@ -130,7 +130,7 @@ export interface CheckoutState {
   squadId: string | null // "Build Her Squad" feature
 }
 
-export type CheckoutStep = 'camp' | 'campers' | 'squad' | 'addons' | 'payment' | 'confirmation'
+export type CheckoutStep = 'camp' | 'campers' | 'squad' | 'addons' | 'waivers' | 'payment' | 'confirmation'
 
 export interface CamperFormData {
   id: string // Temporary client-side ID

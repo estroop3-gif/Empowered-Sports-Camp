@@ -9,6 +9,7 @@ import {
   createLicensee,
   updateLicensee,
   deactivateLicensee,
+  activateLicensee,
 } from '@/lib/services/licensees'
 
 export async function GET(request: NextRequest) {
@@ -62,6 +63,14 @@ export async function POST(request: NextRequest) {
         const { id } = data
         if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
         const { success, error } = await deactivateLicensee(id)
+        if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+        return NextResponse.json({ success })
+      }
+
+      case 'activate': {
+        const { id } = data
+        if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
+        const { success, error } = await activateLicensee(id)
         if (error) return NextResponse.json({ error: error.message }, { status: 500 })
         return NextResponse.json({ success })
       }

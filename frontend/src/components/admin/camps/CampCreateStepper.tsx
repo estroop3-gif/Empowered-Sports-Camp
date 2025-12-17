@@ -105,8 +105,8 @@ export const CAMP_CREATE_STEPS: Step[] = [
   },
   {
     id: 2,
-    name: 'Curriculum & Schedule',
-    description: 'Assign template, build daily schedule',
+    name: 'Schedule & Waivers',
+    description: 'Assign template, select required waivers',
     status: 'upcoming',
   },
 ]

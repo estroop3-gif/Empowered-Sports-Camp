@@ -126,8 +126,8 @@ export function ViewAsControl({ className, variant = 'full' }: ViewAsControlProp
 
         {isOpen && (
           <>
-            <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
-            <div className="absolute top-full right-0 mt-2 w-72 bg-black border border-white/10 shadow-2xl z-50">
+            <div className="fixed inset-0 z-[60]" onClick={() => setIsOpen(false)} />
+            <div className="absolute top-full right-0 mt-2 w-72 bg-black border border-white/10 shadow-2xl z-[70]">
               <ViewAsDropdownContent
                 viewAsOptions={viewAsOptions}
                 actualRole={actualRole}
@@ -164,8 +164,8 @@ export function ViewAsControl({ className, variant = 'full' }: ViewAsControlProp
 
       {isOpen && (
         <>
-          <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
-          <div className="absolute top-full left-0 mt-2 w-80 bg-black border border-white/10 shadow-2xl z-50">
+          <div className="fixed inset-0 z-[60]" onClick={() => setIsOpen(false)} />
+          <div className="absolute top-full left-0 mt-2 w-80 bg-black border border-white/10 shadow-2xl z-[70]">
             <ViewAsDropdownContent
               viewAsOptions={viewAsOptions}
               actualRole={actualRole}
