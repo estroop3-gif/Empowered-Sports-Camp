@@ -1,0 +1,7 @@
+{
+  "type": "hosting:amplify",
+  "config": {
+    "framework": "next",
+    "type": "SSR"
+  }
+}

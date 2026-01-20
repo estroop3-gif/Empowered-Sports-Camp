@@ -1,0 +1,3189 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Tenant {
+  id                       String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                     String
+  slug                     String                    @unique
+  logoUrl                  String?                   @map("logo_url")
+  primaryColor             String?                   @default("#CCFF00") @map("primary_color")
+  secondaryColor           String?                   @default("#FF2DCE") @map("secondary_color")
+  contactEmail             String?                   @map("contact_email")
+  contactPhone             String?                   @map("contact_phone")
+  address                  String?
+  city                     String?
+  state                    String?
+  zip                      String?
+  timezone                 String?                   @default("America/New_York")
+  licenseStatus            LicenseStatus             @default(active) @map("license_status")
+  licenseStartDate         DateTime?                 @map("license_start_date") @db.Date
+  licenseEndDate           DateTime?                 @map("license_end_date") @db.Date
+  royaltyRate              Decimal?                  @default(0.08) @map("royalty_rate") @db.Decimal(5, 4)
+  createdAt                DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime                  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  stripeAccountId          String?                   @map("stripe_account_id")
+  stripeOnboardingComplete Boolean                   @default(false) @map("stripe_onboarding_complete")
+  taxRatePercent           Decimal?                  @default(0) @map("tax_rate_percent") @db.Decimal(5, 2)
+  addons                   Addon[]
+  athleteWaiverSignings    AthleteWaiverSigning[]
+  athletes                 Athlete[]
+  campDayRecaps            CampDayRecap[]
+  campGroups               CampGroup[]
+  sessionCompensations     CampSessionCompensation[]
+  campWaiverRequirements   CampWaiverRequirement[]
+  camperSessionData        CamperSessionData[]
+  camps                    Camp[]
+  constraintViolations     ConstraintViolation[]
+  curriculumBlocks         CurriculumBlock[]
+  curriculumSubmissions    CurriculumSubmission[]
+  curriculumTemplates      CurriculumTemplate[]
+  emailLogs                EmailLog[]
+  emailTemplates           EmailTemplate[]
+  friendGroups             FriendGroup[]
+  groupAssignments         GroupAssignment[]
+  groupReportSnapshots     GroupReportSnapshot[]
+  groupingRuns             GroupingRun[]
+  guestSpeakers            GuestSpeaker[]
+  jobApplications          JobApplication[]
+  locations                Location[]
+  messageThreads           MessageThread[]
+  notificationPreferences  NotificationPreference[]
+  notifications            Notification[]
+  pdfReports               PdfReport[]
+  promoCodes               PromoCode[]
+  registrations            Registration[]
+  revenueSnapshots         RevenueSnapshot[]
+  roleInvites              RoleInvite[]
+  royaltyInvoices          RoyaltyInvoice[]
+  scheduleTemplates        ScheduleTemplate[]
+  settings                 Setting[]
+  shopOrders               ShopOrder[]
+  shopProducts             ShopProduct[]
+  territories              Territory[]
+  territoryAssignments     TerritoryAssignment[]     @relation("TerritoryAssignmentTenant")
+  testimonies              Testimony[]
+  userRoles                UserRoleAssignment[]
+  venueContracts           VenueContract[]
+  venues                   Venue[]
+  volunteerCertifications  VolunteerCertification[]
+  waiverTemplates          WaiverTemplate[]
+
+  @@map("tenants")
+}
+
+model Location {
+  id            String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String         @map("tenant_id") @db.Uuid
+  name          String
+  address       String?
+  city          String?
+  state         String?
+  zip           String?
+  latitude      Decimal?       @db.Decimal(10, 7)
+  longitude     Decimal?       @db.Decimal(10, 7)
+  indoorOutdoor IndoorOutdoor? @map("indoor_outdoor")
+  capacity      Int?
+  amenities     String[]       @default([])
+  notes         String?
+  isActive      Boolean        @default(true) @map("is_active")
+  createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  camps         Camp[]
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("locations")
+}
+
+model Venue {
+  id                  String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId            String?         @map("tenant_id") @db.Uuid
+  name                String
+  shortName           String?         @map("short_name")
+  addressLine1        String          @map("address_line_1")
+  addressLine2        String?         @map("address_line_2")
+  city                String
+  state               String
+  postalCode          String          @map("postal_code")
+  country             String          @default("US")
+  latitude            Decimal?        @db.Decimal(10, 7)
+  longitude           Decimal?        @db.Decimal(10, 7)
+  regionLabel         String?         @map("region_label")
+  facilityType        FacilityType?   @default(other) @map("facility_type")
+  indoorOutdoor       IndoorOutdoor?  @default(both) @map("indoor_outdoor")
+  sportsSupported     String[]        @default([]) @map("sports_supported")
+  maxDailyCapacity    Int?            @map("max_daily_capacity")
+  primaryContactName  String?         @map("primary_contact_name")
+  primaryContactEmail String?         @map("primary_contact_email")
+  primaryContactPhone String?         @map("primary_contact_phone")
+  notes               String?
+  heroImageUrl        String?         @map("hero_image_url")
+  galleryImageUrls    String[]        @default([]) @map("gallery_image_urls")
+  isActive            Boolean         @default(true) @map("is_active")
+  createdAt           DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  camps               Camp[]          @relation("CampVenue")
+  contracts           VenueContract[]
+  tenant              Tenant?         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([city, state])
+  @@index([isActive])
+  @@map("venues")
+}
+
+model VenueContract {
+  id                    String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  venueId               String              @map("venue_id") @db.Uuid
+  tenantId              String?             @map("tenant_id") @db.Uuid
+  rentalRateCents       Int                 @map("rental_rate_cents")
+  currency              String              @default("USD")
+  contractStartDate     DateTime            @map("contract_start_date") @db.Date
+  contractEndDate       DateTime            @map("contract_end_date") @db.Date
+  depositCents          Int?                @map("deposit_cents")
+  paymentDueDate        DateTime?           @map("payment_due_date") @db.Date
+  insuranceRequirements String?             @map("insurance_requirements")
+  cancellationPolicy    String?             @map("cancellation_policy")
+  setupTimeMinutes      Int?                @map("setup_time_minutes")
+  cleanupTimeMinutes    Int?                @map("cleanup_time_minutes")
+  specialConditions     String?             @map("special_conditions")
+  documentUrl           String?             @map("document_url")
+  documentName          String?             @map("document_name")
+  status                VenueContractStatus @default(draft)
+  sentAt                DateTime?           @map("sent_at") @db.Timestamptz(6)
+  sentToEmail           String?             @map("sent_to_email")
+  signedAt              DateTime?           @map("signed_at") @db.Timestamptz(6)
+  expirationDate        DateTime?           @map("expiration_date") @db.Date
+  createdBy             String?             @map("created_by") @db.Uuid
+  createdAt             DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tenant                Tenant?             @relation(fields: [tenantId], references: [id])
+  venue                 Venue               @relation(fields: [venueId], references: [id], onDelete: Cascade)
+
+  @@index([venueId])
+  @@index([tenantId])
+  @@index([status])
+  @@map("venue_contracts")
+}
+
+model Camp {
+  id                       String                        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId                 String?                       @map("tenant_id") @db.Uuid
+  locationId               String?                       @map("location_id") @db.Uuid
+  name                     String
+  slug                     String
+  description              String?
+  startDate                DateTime                      @map("start_date") @db.Date
+  endDate                  DateTime                      @map("end_date") @db.Date
+  startTime                DateTime?                     @map("start_time") @db.Time(6)
+  endTime                  DateTime?                     @map("end_time") @db.Time(6)
+  minAge                   Int?                          @default(5) @map("min_age")
+  maxAge                   Int?                          @default(14) @map("max_age")
+  capacity                 Int?                          @default(60)
+  priceCents               Int                           @default(0) @map("price_cents")
+  earlyBirdPriceCents      Int?                          @map("early_bird_price_cents")
+  earlyBirdDeadline        DateTime?                     @map("early_bird_deadline") @db.Date
+  registrationOpen         DateTime?                     @map("registration_open") @db.Date
+  registrationClose        DateTime?                     @map("registration_close") @db.Date
+  status                   CampStatus                    @default(draft)
+  groupingStatus           GroupingStatus                @default(pending) @map("grouping_status")
+  groupingRunAt            DateTime?                     @map("grouping_run_at") @db.Timestamptz(6)
+  groupingFinalizedAt      DateTime?                     @map("grouping_finalized_at") @db.Timestamptz(6)
+  groupingFinalizedBy      String?                       @map("grouping_finalized_by") @db.Uuid
+  maxGroupSize             Int?                          @default(12) @map("max_group_size")
+  numGroups                Int?                          @default(5) @map("num_groups")
+  maxGradeSpread           Int?                          @default(2) @map("max_grade_spread")
+  createdAt                DateTime                      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime                      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  featured                 Boolean                       @default(false)
+  highlights               String[]                      @default([])
+  imageUrl                 String?                       @map("image_url")
+  maxGrade                 Int?                          @map("max_grade")
+  minGrade                 Int?                          @map("min_grade")
+  programType              String                        @default("all_girls_sports_camp") @map("program_type")
+  sportsOffered            String[]                      @default([]) @map("sports_offered")
+  curriculumAdherenceScore Decimal?                      @map("curriculum_adherence_score") @db.Decimal(5, 2)
+  venueId                  String?                       @map("venue_id") @db.Uuid
+  archivedAt               DateTime?                     @map("archived_at") @db.Timestamptz(6)
+  archivedBy               String?                       @map("archived_by") @db.Uuid
+  concludedAt              DateTime?                     @map("concluded_at") @db.Timestamptz(6)
+  concludedBy              String?                       @map("concluded_by") @db.Uuid
+  finalEmailSentAt         DateTime?                     @map("final_email_sent_at") @db.Timestamptz(6)
+  finalEmailSentCount      Int?                          @map("final_email_sent_count")
+  isLocked                 Boolean                       @default(false) @map("is_locked")
+  lockReason               String?                       @map("lock_reason")
+  addons                   Addon[]
+  athleteWaiverSignings    AthleteWaiverSigning[]
+  dayCompensationSnapshots CampDayCompensationSnapshot[]
+  campDays                 CampDay[]
+  friendSquads             CampFriendSquad[]
+  campGroups               CampGroup[]
+  sessionCompensations     CampSessionCompensation[]
+  campSessionCurriculum    CampSessionCurriculum?
+  campSessionDays          CampSessionDay[]
+  staffAssignments         CampStaffAssignment[]
+  waiverRequirements       CampWaiverRequirement[]
+  camperSessionData        CamperSessionData[]
+  location                 Location?                     @relation(fields: [locationId], references: [id])
+  tenant                   Tenant?                       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  venue                    Venue?                        @relation("CampVenue", fields: [venueId], references: [id])
+  constraintViolations     ConstraintViolation[]
+  friendGroups             FriendGroup[]
+  groupAssignments         GroupAssignment[]
+  groupReportSnapshots     GroupReportSnapshot[]
+  groupingRuns             GroupingRun[]
+  guestSpeakers            GuestSpeaker[]
+  parentOnboarding         ParentOnboarding[]
+  registrations            Registration[]
+  royaltyInvoices          RoyaltyInvoice[]
+  sessionComplaints        SessionComplaint[]
+  sessionSurveys           SessionSurvey[]
+  staffAssignmentRequests  StaffAssignmentRequest[]
+  testimonies              Testimony[]
+
+  @@unique([tenantId, slug])
+  @@index([tenantId])
+  @@index([startDate, endDate])
+  @@index([status])
+  @@map("camps")
+}
+
+model Profile {
+  id                            String                        @id @db.Uuid
+  email                         String
+  firstName                     String?                       @map("first_name")
+  lastName                      String?                       @map("last_name")
+  phone                         String?
+  avatarUrl                     String?                       @map("avatar_url")
+  hasCompletedLmsCore           Boolean                       @default(false) @map("has_completed_lms_core")
+  hasCompletedLmsDirector       Boolean                       @default(false) @map("has_completed_lms_director")
+  hasCompletedLmsVolunteer      Boolean                       @default(false) @map("has_completed_lms_volunteer")
+  onboardingCompletedAt         DateTime?                     @map("onboarding_completed_at") @db.Timestamptz(6)
+  createdAt                     DateTime                      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                     DateTime                      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  city                          String?
+  state                         String?
+  zipCode                       String?                       @map("zip_code")
+  addressLine1                  String?                       @map("address_line_1")
+  addressLine2                  String?                       @map("address_line_2")
+  emergencyContactName          String?                       @map("emergency_contact_name")
+  emergencyContactPhone         String?                       @map("emergency_contact_phone")
+  emergencyContactRelationship  String?                       @map("emergency_contact_relationship")
+  waiverSigningsAsParent        AthleteWaiverSigning[]        @relation("WaiverSignedByParent")
+  athletes                      Athlete[]
+  authorizedPickups             AuthorizedPickup[]            @relation("AuthorizedPickups")
+  parentAttendance              CampAttendance[]              @relation("ParentAttendance")
+  dailyCompensationSnapshots    CampDayCompensationSnapshot[] @relation("DailyCompensationSnapshots")
+  submittedCampDayRecaps        CampDayRecap[]
+  squadMemberships              CampFriendSquadMember[]       @relation("SquadMemberParent")
+  createdSquads                 CampFriendSquad[]             @relation("SquadCreator")
+  sessionCompensations          CampSessionCompensation[]     @relation("StaffCompensation")
+  campSessionCurriculumAssigned CampSessionCurriculum[]       @relation("AssignedBy")
+  staffAssignments              CampStaffAssignment[]         @relation("StaffAssignments")
+  curriculumBlocksCreated       CurriculumBlock[]             @relation("CreatedBy")
+  reviewedCurriculums           CurriculumSubmission[]        @relation("ReviewedCurriculums")
+  submittedCurriculums          CurriculumSubmission[]        @relation("SubmittedCurriculums")
+  curriculumTemplatesCreated    CurriculumTemplate[]          @relation("CreatedBy")
+  emailLogs                     EmailLog[]
+  lmsProgress                   LmsProgress[]
+  messageParticipations         MessageParticipant[]
+  sentMessages                  Message[]
+  notificationPreferences       NotificationPreference[]
+  notifications                 Notification[]
+  parentOnboarding              ParentOnboarding[]            @relation("ParentOnboarding")
+  parentPickupTokens            PickupToken[]                 @relation("ParentPickupTokens")
+  registrations                 Registration[]
+  acceptedInvites               RoleInvite[]                  @relation("AcceptedInvites")
+  sentInvites                   RoleInvite[]                  @relation("SentInvites")
+  scheduleTemplatesCreated      ScheduleTemplate[]            @relation("CreatedBy")
+  settingsUpdated               Setting[]                     @relation("SettingsUpdatedBy")
+  settingsAuditLogs             SettingsAuditLog[]            @relation("SettingsAuditChangedBy")
+  shopOrders                    ShopOrder[]
+  staffRequestsSent             StaffAssignmentRequest[]      @relation("StaffRequestsSent")
+  staffRequestsReceived         StaffAssignmentRequest[]      @relation("StaffRequestsReceived")
+  territoryAssignments          TerritoryAssignment[]         @relation("TerritoryAssignmentLicensee")
+  createdTestimonies            Testimony[]                   @relation("TestimonyCreator")
+  reviewedTestimonies           Testimony[]                   @relation("TestimonyReviewer")
+  userRoles                     UserRoleAssignment[]
+  volunteerCertifications       VolunteerCertification[]      @relation("Owner")
+  certificationsReviewed        VolunteerCertification[]      @relation("Reviewer")
+  waiverVersionsCreated         WaiverTemplateVersion[]       @relation("WaiverVersionCreator")
+  waiverTemplatesCreated        WaiverTemplate[]              @relation("WaiverTemplateCreator")
+  waiverTemplatesUpdated        WaiverTemplate[]              @relation("WaiverTemplateUpdater")
+
+  @@map("profiles")
+}
+
+model UserRoleAssignment {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  tenantId  String?  @map("tenant_id") @db.Uuid
+  role      UserRole
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenant    Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  profile   Profile  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, tenantId, role])
+  @@index([userId])
+  @@index([tenantId])
+  @@map("user_roles")
+}
+
+model Athlete {
+  id                           String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  parentId                     String                  @map("parent_id") @db.Uuid
+  firstName                    String                  @map("first_name")
+  lastName                     String                  @map("last_name")
+  dateOfBirth                  DateTime                @map("date_of_birth") @db.Date
+  gender                       Gender?
+  grade                        String?
+  school                       String?
+  medicalNotes                 String?                 @map("medical_notes")
+  allergies                    String?
+  emergencyContactName         String?                 @map("emergency_contact_name")
+  emergencyContactPhone        String?                 @map("emergency_contact_phone")
+  emergencyContactRelationship String?                 @map("emergency_contact_relationship")
+  photoUrl                     String?                 @map("photo_url")
+  createdAt                    DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                    DateTime                @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  internalNotes                String?                 @map("internal_notes")
+  isActive                     Boolean                 @default(true) @map("is_active")
+  jerseyNumberPreference       String?                 @map("jersey_number_preference")
+  pickupNotes                  String?                 @map("pickup_notes")
+  primarySportInterest         String?                 @map("primary_sport_interest")
+  riskFlag                     AthleteRiskFlag?        @map("risk_flag")
+  secondarySportInterest       String?                 @map("secondary_sport_interest")
+  tShirtSize                   String?                 @map("t_shirt_size")
+  tenantId                     String?                 @map("tenant_id") @db.Uuid
+  waiverSignings               AthleteWaiverSigning[]
+  parent                       Profile                 @relation(fields: [parentId], references: [id], onDelete: Cascade)
+  tenant                       Tenant?                 @relation(fields: [tenantId], references: [id])
+  authorizedPickups            AuthorizedPickup[]
+  attendance                   CampAttendance[]
+  squadMemberships             CampFriendSquadMember[]
+  incidents                    CampIncident[]
+  camperSessionData            CamperSessionData[]
+  parentOnboarding             ParentOnboarding[]
+  pickupTokens                 PickupToken[]
+  registrations                Registration[]
+
+  @@index([parentId])
+  @@index([tenantId])
+  @@map("athletes")
+}
+
+model Registration {
+  id                      String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId                String                 @map("tenant_id") @db.Uuid
+  campId                  String                 @map("camp_id") @db.Uuid
+  athleteId               String                 @map("athlete_id") @db.Uuid
+  parentId                String                 @map("parent_id") @db.Uuid
+  basePriceCents          Int                    @map("base_price_cents")
+  discountCents           Int                    @default(0) @map("discount_cents")
+  addonsTotalCents        Int                    @default(0) @map("addons_total_cents")
+  totalPriceCents         Int                    @map("total_price_cents")
+  paymentStatus           PaymentStatus          @default(pending) @map("payment_status")
+  paymentMethod           String?                @map("payment_method")
+  stripePaymentIntentId   String?                @map("stripe_payment_intent_id")
+  paidAt                  DateTime?              @map("paid_at") @db.Timestamptz(6)
+  friendRequests          String[]               @default([]) @map("friend_requests")
+  specialConsiderations   String?                @map("special_considerations")
+  shirtSize               String?                @map("shirt_size")
+  promoCodeId             String?                @map("promo_code_id") @db.Uuid
+  promoDiscountCents      Int                    @default(0) @map("promo_discount_cents")
+  waiverSigned            Boolean                @default(false) @map("waiver_signed")
+  waiverSignedAt          DateTime?              @map("waiver_signed_at") @db.Timestamptz(6)
+  waiverSignedBy          String?                @map("waiver_signed_by")
+  status                  RegistrationStatus     @default(pending)
+  cancelledAt             DateTime?              @map("cancelled_at") @db.Timestamptz(6)
+  cancellationReason      String?                @map("cancellation_reason")
+  createdAt               DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt               DateTime               @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  friendSquadId           String?                @map("friend_squad_id") @db.Uuid
+  stripeCheckoutSessionId String?                @map("stripe_checkout_session_id")
+  taxCents                Int                    @default(0) @map("tax_cents")
+  athleteWaiverSignings   AthleteWaiverSigning[]
+  attendance              CampAttendance[]
+  camperSessionData       CamperSessionData?
+  registrationAddons      RegistrationAddon[]
+  athlete                 Athlete                @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+  camp                    Camp                   @relation(fields: [campId], references: [id], onDelete: Cascade)
+  parent                  Profile                @relation(fields: [parentId], references: [id], onDelete: Cascade)
+  promoCode               PromoCode?             @relation(fields: [promoCodeId], references: [id])
+  tenant                  Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([campId, athleteId])
+  @@index([campId])
+  @@index([athleteId])
+  @@index([parentId])
+  @@index([status])
+  @@map("registrations")
+}
+
+model PromoCode {
+  id               String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId         String         @map("tenant_id") @db.Uuid
+  code             String
+  description      String?
+  discountType     DiscountType   @map("discount_type")
+  discountValue    Int            @map("discount_value")
+  maxUses          Int?           @map("max_uses")
+  currentUses      Int            @default(0) @map("current_uses")
+  minPurchaseCents Int?           @map("min_purchase_cents")
+  validFrom        DateTime?      @map("valid_from") @db.Date
+  validUntil       DateTime?      @map("valid_until") @db.Date
+  isActive         Boolean        @default(true) @map("is_active")
+  createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenant           Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  registrations    Registration[]
+
+  @@unique([tenantId, code])
+  @@map("promo_codes")
+}
+
+model Addon {
+  id                 String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId           String              @map("tenant_id") @db.Uuid
+  campId             String?             @map("camp_id") @db.Uuid
+  name               String
+  description        String?
+  priceCents         Int                 @default(0) @map("price_cents")
+  isRequired         Boolean             @default(false) @map("is_required")
+  maxQuantity        Int                 @default(1) @map("max_quantity")
+  isActive           Boolean             @default(true) @map("is_active")
+  createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  isTaxable          Boolean             @default(false) @map("is_taxable")
+  variants           AddonVariant[]
+  camp               Camp?               @relation(fields: [campId], references: [id], onDelete: Cascade)
+  tenant             Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  registrationAddons RegistrationAddon[]
+
+  @@map("addons")
+}
+
+model AddonVariant {
+  id                   String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  addonId              String              @map("addon_id") @db.Uuid
+  name                 String
+  priceAdjustmentCents Int                 @default(0) @map("price_adjustment_cents")
+  inventory            Int?
+  isActive             Boolean             @default(true) @map("is_active")
+  createdAt            DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  addon                Addon               @relation(fields: [addonId], references: [id], onDelete: Cascade)
+  registrationAddons   RegistrationAddon[]
+
+  @@map("addon_variants")
+}
+
+model RegistrationAddon {
+  id             String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  registrationId String        @map("registration_id") @db.Uuid
+  addonId        String        @map("addon_id") @db.Uuid
+  variantId      String?       @map("variant_id") @db.Uuid
+  quantity       Int           @default(1)
+  priceCents     Int           @map("price_cents")
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  addon          Addon         @relation(fields: [addonId], references: [id], onDelete: Cascade)
+  registration   Registration  @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  variant        AddonVariant? @relation(fields: [variantId], references: [id])
+
+  @@map("registration_addons")
+}
+
+model CamperSessionData {
+  id                         String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  registrationId             String            @unique @map("registration_id") @db.Uuid
+  campId                     String            @map("camp_id") @db.Uuid
+  athleteId                  String            @map("athlete_id") @db.Uuid
+  tenantId                   String            @map("tenant_id") @db.Uuid
+  ageAtCampStart             Int               @map("age_at_camp_start")
+  ageMonthsAtCampStart       Int               @map("age_months_at_camp_start")
+  gradeFromRegistration      String?           @map("grade_from_registration")
+  gradeValidated             Int?              @map("grade_validated")
+  gradeComputedFromDob       Int?              @map("grade_computed_from_dob")
+  gradeDiscrepancy           Boolean           @default(false) @map("grade_discrepancy")
+  gradeDiscrepancyResolved   Boolean           @default(false) @map("grade_discrepancy_resolved")
+  gradeDiscrepancyResolution String?           @map("grade_discrepancy_resolution")
+  friendRequests             String[]          @default([]) @map("friend_requests")
+  friendRequestAthleteIds    String[]          @default([]) @map("friend_request_athlete_ids") @db.Uuid
+  friendGroupId              String?           @map("friend_group_id") @db.Uuid
+  medicalNotes               String?           @map("medical_notes")
+  allergies                  String?
+  specialConsiderations      String?           @map("special_considerations")
+  leadershipPotential        Boolean           @default(false) @map("leadership_potential")
+  leadershipNotes            String?           @map("leadership_notes")
+  registeredAt               DateTime          @map("registered_at") @db.Timestamptz(6)
+  isLateRegistration         Boolean           @default(false) @map("is_late_registration")
+  assignedGroupId            String?           @map("assigned_group_id") @db.Uuid
+  assignmentType             AssignmentType?   @map("assignment_type")
+  assignmentReason           String?           @map("assignment_reason")
+  createdAt                  DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                  DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  teamColor                  TeamColor?        @map("team_color")
+  assignedGroup              CampGroup?        @relation(fields: [assignedGroupId], references: [id])
+  athlete                    Athlete           @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+  camp                       Camp              @relation(fields: [campId], references: [id], onDelete: Cascade)
+  friendGroup                FriendGroup?      @relation(fields: [friendGroupId], references: [id])
+  registration               Registration      @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  tenant                     Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  groupAssignments           GroupAssignment[]
+
+  @@unique([campId, athleteId])
+  @@index([campId])
+  @@index([tenantId])
+  @@index([friendGroupId])
+  @@index([assignedGroupId])
+  @@map("camper_session_data")
+}
+
+model FriendGroup {
+  id                     String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  campId                 String                @map("camp_id") @db.Uuid
+  tenantId               String                @map("tenant_id") @db.Uuid
+  groupNumber            Int                   @map("group_number")
+  memberCount            Int                   @default(0) @map("member_count")
+  minGrade               Int?                  @map("min_grade")
+  maxGrade               Int?                  @map("max_grade")
+  gradeSpread            Int?                  @map("grade_spread")
+  exceedsGradeConstraint Boolean               @default(false) @map("exceeds_grade_constraint")
+  exceedsSizeConstraint  Boolean               @default(false) @map("exceeds_size_constraint")
+  canBePlacedIntact      Boolean               @default(true) @map("can_be_placed_intact")
+  placementNotes         String?               @map("placement_notes")
+  createdAt              DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  camperSessionData      CamperSessionData[]
+  constraintViolations   ConstraintViolation[]
+  camp                   Camp                  @relation(fields: [campId], references: [id], onDelete: Cascade)
+  tenant                 Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([campId, groupNumber])
+  @@index([campId])
+  @@map("friend_groups")
+}
+
+model CampFriendSquad {
+  id                String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String                  @map("tenant_id") @db.Uuid
+  campId            String                  @map("camp_id") @db.Uuid
+  label             String                  @default("Her Squad")
+  createdByParentId String                  @map("created_by_parent_id") @db.Uuid
+  createdAt         DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime                @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  members           CampFriendSquadMember[]
+  camp              Camp                    @relation(fields: [campId], references: [id], onDelete: Cascade)
+  createdByParent   Profile                 @relation("SquadCreator", fields: [createdByParentId], references: [id], onDelete: Cascade)
+
+  @@unique([campId, createdByParentId])
+  @@index([campId])
+  @@index([tenantId])
+  @@index([createdByParentId])
+  @@map("camp_friend_squads")
+}
+
+model CampFriendSquadMember {
+  id             String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  squadId        String            @map("squad_id") @db.Uuid
+  parentId       String            @map("parent_id") @db.Uuid
+  athleteId      String            @map("athlete_id") @db.Uuid
+  status         SquadMemberStatus @default(requested)
+  invitedByEmail String?           @map("invited_by_email")
+  respondedAt    DateTime?         @map("responded_at") @db.Timestamptz(6)
+  createdAt      DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  athlete        Athlete           @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+  parent         Profile           @relation("SquadMemberParent", fields: [parentId], references: [id], onDelete: Cascade)
+  squad          CampFriendSquad   @relation(fields: [squadId], references: [id], onDelete: Cascade)
+
+  @@unique([squadId, athleteId])
+  @@index([squadId])
+  @@index([parentId])
+  @@index([athleteId])
+  @@index([status])
+  @@map("camp_friend_squad_members")
+}
+
+model PendingSquadInvite {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  squadId         String?   @map("squad_id") @db.Uuid
+  invitedEmail    String    @map("invited_email")
+  invitedByName   String?   @map("invited_by_name")
+  campName        String    @map("camp_name")
+  campId          String    @map("camp_id") @db.Uuid
+  tenantId        String    @map("tenant_id") @db.Uuid
+  expiresAt       DateTime  @map("expires_at") @db.Timestamptz(6)
+  claimedAt       DateTime? @map("claimed_at") @db.Timestamptz(6)
+  claimedByUserId String?   @map("claimed_by_user_id") @db.Uuid
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  athleteNames    String[]  @default([]) @map("athlete_names")
+  inviterEmail    String?   @map("inviter_email")
+  status          String    @default("pending")
+
+  @@index([invitedEmail])
+  @@index([inviterEmail])
+  @@index([squadId])
+  @@index([expiresAt])
+  @@index([status])
+  @@map("pending_squad_invites")
+}
+
+model CampGroup {
+  id                   String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  campId               String                @map("camp_id") @db.Uuid
+  tenantId             String                @map("tenant_id") @db.Uuid
+  groupNumber          Int                   @map("group_number")
+  groupName            String?               @map("group_name")
+  groupColor           String?               @map("group_color")
+  camperCount          Int                   @default(0) @map("camper_count")
+  minGrade             Int?                  @map("min_grade")
+  maxGrade             Int?                  @map("max_grade")
+  gradeSpread          Int                   @default(0) @map("grade_spread")
+  sizeViolation        Boolean               @default(false) @map("size_violation")
+  gradeViolation       Boolean               @default(false) @map("grade_violation")
+  friendViolation      Boolean               @default(false) @map("friend_violation")
+  hasWarnings          Boolean               @default(false) @map("has_warnings")
+  hasHardViolations    Boolean               @default(false) @map("has_hard_violations")
+  displayOrder         Int?                  @map("display_order")
+  createdAt            DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime              @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  attendance           CampAttendance[]
+  camp                 Camp                  @relation(fields: [campId], references: [id], onDelete: Cascade)
+  tenant               Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  camperSessionData    CamperSessionData[]
+  constraintViolations ConstraintViolation[]
+  groupAssignmentsFrom GroupAssignment[]     @relation("FromGroup")
+  groupAssignmentsTo   GroupAssignment[]     @relation("ToGroup")
+
+  @@unique([campId, groupNumber])
+  @@index([campId])
+  @@map("camp_groups")
+}
+
+model GroupAssignment {
+  id                    String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  camperSessionId       String            @map("camper_session_id") @db.Uuid
+  campId                String            @map("camp_id") @db.Uuid
+  tenantId              String            @map("tenant_id") @db.Uuid
+  fromGroupId           String?           @map("from_group_id") @db.Uuid
+  toGroupId             String            @map("to_group_id") @db.Uuid
+  assignmentType        AssignmentType    @map("assignment_type")
+  reason                String?
+  causedSizeViolation   Boolean           @default(false) @map("caused_size_violation")
+  causedGradeViolation  Boolean           @default(false) @map("caused_grade_violation")
+  causedFriendViolation Boolean           @default(false) @map("caused_friend_violation")
+  overrideAcknowledged  Boolean           @default(false) @map("override_acknowledged")
+  overrideNote          String?           @map("override_note")
+  assignedBy            String?           @map("assigned_by") @db.Uuid
+  assignedAt            DateTime          @default(now()) @map("assigned_at") @db.Timestamptz(6)
+  createdAt             DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  camp                  Camp              @relation(fields: [campId], references: [id], onDelete: Cascade)
+  camperSession         CamperSessionData @relation(fields: [camperSessionId], references: [id], onDelete: Cascade)
+  fromGroup             CampGroup?        @relation("FromGroup", fields: [fromGroupId], references: [id])
+  tenant                Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  toGroup               CampGroup         @relation("ToGroup", fields: [toGroupId], references: [id])
+
+  @@index([campId])
+  @@index([camperSessionId])
+  @@map("group_assignments")
+}
+
+model GroupingRun {
+  id                         String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  campId                     String                @map("camp_id") @db.Uuid
+  tenantId                   String                @map("tenant_id") @db.Uuid
+  runType                    GroupingRunType       @map("run_type")
+  triggeredBy                String?               @map("triggered_by") @db.Uuid
+  triggerReason              String?               @map("trigger_reason")
+  totalCampers               Int                   @map("total_campers")
+  totalFriendGroups          Int?                  @map("total_friend_groups")
+  lateRegistrations          Int                   @default(0) @map("late_registrations")
+  gradeDiscrepancies         Int                   @default(0) @map("grade_discrepancies")
+  maxGroupSize               Int                   @map("max_group_size")
+  numGroups                  Int                   @map("num_groups")
+  maxGradeSpread             Int                   @map("max_grade_spread")
+  algorithmVersion           String?               @default("1.0") @map("algorithm_version")
+  executionTimeMs            Int?                  @map("execution_time_ms")
+  campersAutoPlaced          Int                   @default(0) @map("campers_auto_placed")
+  friendGroupsPlacedIntact   Int                   @default(0) @map("friend_groups_placed_intact")
+  friendGroupsSplit          Int                   @default(0) @map("friend_groups_split")
+  constraintViolations       Int                   @default(0) @map("constraint_violations")
+  success                    Boolean               @default(true)
+  errorMessage               String?               @map("error_message")
+  warnings                   String[]              @default([])
+  preservedManualOverrides   Boolean               @default(true) @map("preserved_manual_overrides")
+  overridesPreservedCount    Int                   @default(0) @map("overrides_preserved_count")
+  createdAt                  DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  constraintViolationRecords ConstraintViolation[]
+  camp                       Camp                  @relation(fields: [campId], references: [id], onDelete: Cascade)
+  tenant                     Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([campId])
+  @@map("grouping_runs")
+}
+
+model ConstraintViolation {
+  id                    String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  campId                String            @map("camp_id") @db.Uuid
+  tenantId              String            @map("tenant_id") @db.Uuid
+  groupingRunId         String?           @map("grouping_run_id") @db.Uuid
+  violationType         ViolationType     @map("violation_type")
+  severity              ViolationSeverity
+  affectedGroupId       String?           @map("affected_group_id") @db.Uuid
+  affectedCamperIds     String[]          @default([]) @map("affected_camper_ids") @db.Uuid
+  affectedFriendGroupId String?           @map("affected_friend_group_id") @db.Uuid
+  title                 String
+  description           String
+  suggestedResolution   String?           @map("suggested_resolution")
+  resolved              Boolean           @default(false)
+  resolvedBy            String?           @map("resolved_by") @db.Uuid
+  resolvedAt            DateTime?         @map("resolved_at") @db.Timestamptz(6)
+  resolutionType        ResolutionType?   @map("resolution_type")
+  resolutionNote        String?           @map("resolution_note")
+  createdAt             DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  affectedFriendGroup   FriendGroup?      @relation(fields: [affectedFriendGroupId], references: [id])
+  affectedGroup         CampGroup?        @relation(fields: [affectedGroupId], references: [id])
+  camp                  Camp              @relation(fields: [campId], references: [id], onDelete: Cascade)
+  groupingRun           GroupingRun?      @relation(fields: [groupingRunId], references: [id])
+  tenant                Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([campId])
+  @@index([campId, resolved])
+  @@map("constraint_violations")
+}
+
+model GradeLevel {
+  id              Int    @id @default(autoincrement())
+  gradeName       String @unique @map("grade_name")
+  gradeShort      String @unique @map("grade_short")
+  gradeNumeric    Int    @unique @map("grade_numeric")
+  typicalAgeStart Int    @map("typical_age_start")
+  typicalAgeEnd   Int    @map("typical_age_end")
+
+  @@map("grade_levels")
+}
+
+model GroupReportSnapshot {
+  id                 String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  campId             String                @map("camp_id") @db.Uuid
+  tenantId           String                @map("tenant_id") @db.Uuid
+  reportType         ReportType            @map("report_type")
+  version            Int                   @default(1)
+  groupsSnapshot     Json                  @map("groups_snapshot")
+  campersSnapshot    Json                  @map("campers_snapshot")
+  violationsSnapshot Json?                 @map("violations_snapshot")
+  statsSnapshot      Json                  @map("stats_snapshot")
+  generatedBy        String?               @map("generated_by") @db.Uuid
+  generatedAt        DateTime              @default(now()) @map("generated_at") @db.Timestamptz(6)
+  notes              String?
+  amendsReportId     String?               @map("amends_report_id") @db.Uuid
+  amendmentReason    String?               @map("amendment_reason")
+  createdAt          DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  amendsReport       GroupReportSnapshot?  @relation("ReportAmendments", fields: [amendsReportId], references: [id])
+  amendments         GroupReportSnapshot[] @relation("ReportAmendments")
+  camp               Camp                  @relation(fields: [campId], references: [id], onDelete: Cascade)
+  tenant             Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([campId])
+  @@map("group_report_snapshots")
+}
+
+model CurriculumTemplate {
+  id                     String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  licenseeId             String?                 @map("licensee_id") @db.Uuid
+  sport                  SportType               @default(multi_sport)
+  name                   String
+  description            String?
+  ageMin                 Int?                    @map("age_min")
+  ageMax                 Int?                    @map("age_max")
+  difficulty             DifficultyLevel         @default(intro)
+  isGlobal               Boolean                 @default(false) @map("is_global")
+  totalDays              Int                     @default(1) @map("total_days")
+  isActive               Boolean                 @default(true) @map("is_active")
+  isPublished            Boolean                 @default(false) @map("is_published")
+  createdBy              String?                 @map("created_by") @db.Uuid
+  createdAt              DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime                @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  isPdfOnly              Boolean                 @default(false) @map("is_pdf_only")
+  pdfName                String?                 @map("pdf_name")
+  pdfUrl                 String?                 @map("pdf_url")
+  campSessionCurriculums CampSessionCurriculum[]
+  days                   CurriculumTemplateDay[]
+  creator                Profile?                @relation("CreatedBy", fields: [createdBy], references: [id])
+  licensee               Tenant?                 @relation(fields: [licenseeId], references: [id], onDelete: Cascade)
+
+  @@index([licenseeId])
+  @@index([sport])
+  @@index([isGlobal])
+  @@index([isActive])
+  @@map("curriculum_templates")
+}
+
+model CurriculumBlock {
+  id                  String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  licenseeId          String?                    @map("licensee_id") @db.Uuid
+  sport               SportType                  @default(multi_sport)
+  title               String
+  description         String?
+  durationMinutes     Int                        @default(15) @map("duration_minutes")
+  category            BlockCategory              @default(drill)
+  intensity           IntensityLevel             @default(moderate)
+  equipmentNeeded     String?                    @map("equipment_needed")
+  setupNotes          String?                    @map("setup_notes")
+  coachingPoints      String?                    @map("coaching_points")
+  isGlobal            Boolean                    @default(false) @map("is_global")
+  isActive            Boolean                    @default(true) @map("is_active")
+  createdBy           String?                    @map("created_by") @db.Uuid
+  createdAt           DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime                   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  pdfName             String?                    @map("pdf_name")
+  pdfUrl              String?                    @map("pdf_url")
+  scheduleBlocks      CampSessionScheduleBlock[]
+  creator             Profile?                   @relation("CreatedBy", fields: [createdBy], references: [id])
+  licensee            Tenant?                    @relation(fields: [licenseeId], references: [id], onDelete: Cascade)
+  dayBlocks           CurriculumDayBlock[]
+  approvedSubmissions CurriculumSubmission[]
+
+  @@index([licenseeId])
+  @@index([sport])
+  @@index([category])
+  @@index([isGlobal])
+  @@map("curriculum_blocks")
+}
+
+model CurriculumTemplateDay {
+  id                   String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  templateId           String               @map("template_id") @db.Uuid
+  dayNumber            Int                  @map("day_number")
+  title                String
+  theme                String?
+  notes                String?
+  totalDurationMinutes Int                  @default(0) @map("total_duration_minutes")
+  createdAt            DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  dayBlocks            CurriculumDayBlock[]
+  template             CurriculumTemplate   @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@unique([templateId, dayNumber])
+  @@index([templateId])
+  @@map("curriculum_template_days")
+}
+
+model CurriculumDayBlock {
+  id                    String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  dayId                 String                @map("day_id") @db.Uuid
+  blockId               String                @map("block_id") @db.Uuid
+  orderIndex            Int                   @default(0) @map("order_index")
+  customTitle           String?               @map("custom_title")
+  customDurationMinutes Int?                  @map("custom_duration_minutes")
+  customNotes           String?               @map("custom_notes")
+  fieldLocation         String?               @map("field_location")
+  createdAt             DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime              @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  block                 CurriculumBlock       @relation(fields: [blockId], references: [id], onDelete: Cascade)
+  day                   CurriculumTemplateDay @relation(fields: [dayId], references: [id], onDelete: Cascade)
+
+  @@unique([dayId, orderIndex])
+  @@index([dayId])
+  @@index([blockId])
+  @@map("curriculum_day_blocks")
+}
+
+model CampSessionCurriculum {
+  id         String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  campId     String             @unique @map("camp_id") @db.Uuid
+  templateId String             @map("template_id") @db.Uuid
+  assignedBy String?            @map("assigned_by") @db.Uuid
+  assignedAt DateTime           @default(now()) @map("assigned_at") @db.Timestamptz(6)
+  notes      String?
+  assigner   Profile?           @relation("AssignedBy", fields: [assignedBy], references: [id])
+  camp       Camp               @relation(fields: [campId], references: [id], onDelete: Cascade)
+  template   CurriculumTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([campId])
+  @@index([templateId])
+  @@map("camp_session_curriculum")
+}
+
+model CampSessionDay {
+  id             String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  campId         String                     @map("camp_id") @db.Uuid
+  dayNumber      Int                        @map("day_number")
+  actualDate     DateTime?                  @map("actual_date") @db.Date
+  title          String
+  theme          String?
+  notes          String?
+  status         SessionDayStatus           @default(planned)
+  createdAt      DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime                   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  camp           Camp                       @relation(fields: [campId], references: [id], onDelete: Cascade)
+  scheduleBlocks CampSessionScheduleBlock[]
+
+  @@unique([campId, dayNumber])
+  @@index([campId])
+  @@index([actualDate])
+  @@map("camp_session_days")
+}
+
+model CampSessionScheduleBlock {
+  id                 String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  campSessionDayId   String                  @map("camp_session_day_id") @db.Uuid
+  startTime          DateTime                @map("start_time") @db.Time(6)
+  endTime            DateTime                @map("end_time") @db.Time(6)
+  label              String
+  description        String?
+  curriculumBlockId  String?                 @map("curriculum_block_id") @db.Uuid
+  location           String?
+  assignedStaffNotes String?                 @map("assigned_staff_notes")
+  orderIndex         Int                     @default(0) @map("order_index")
+  blockType          ScheduleBlockType       @default(activity) @map("block_type")
+  colorCode          String?                 @map("color_code")
+  createdAt          DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime                @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  campSessionDay     CampSessionDay          @relation(fields: [campSessionDayId], references: [id], onDelete: Cascade)
+  curriculumBlock    CurriculumBlock?        @relation(fields: [curriculumBlockId], references: [id])
+  progress           ScheduleBlockProgress[]
+
+  @@index([campSessionDayId])
+  @@index([curriculumBlockId])
+  @@index([campSessionDayId, orderIndex])
+  @@index([campSessionDayId, startTime])
+  @@map("camp_session_schedule_blocks")
+}
+
+model ScheduleTemplate {
+  id               String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  licenseeId       String?                 @map("licensee_id") @db.Uuid
+  name             String
+  description      String?
+  defaultStartTime DateTime                @default(dbgenerated("'09:00:00'::time without time zone")) @map("default_start_time") @db.Time(6)
+  defaultEndTime   DateTime                @default(dbgenerated("'15:00:00'::time without time zone")) @map("default_end_time") @db.Time(6)
+  totalDays        Int                     @default(1) @map("total_days")
+  sport            String?
+  isGlobal         Boolean                 @default(false) @map("is_global")
+  isActive         Boolean                 @default(true) @map("is_active")
+  createdBy        String?                 @map("created_by") @db.Uuid
+  createdAt        DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime                @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  blocks           ScheduleTemplateBlock[]
+  creator          Profile?                @relation("CreatedBy", fields: [createdBy], references: [id])
+  licensee         Tenant?                 @relation(fields: [licenseeId], references: [id], onDelete: Cascade)
+
+  @@index([licenseeId])
+  @@index([isGlobal])
+  @@map("schedule_templates")
+}
+
+model ScheduleTemplateBlock {
+  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  templateId      String            @map("template_id") @db.Uuid
+  dayNumber       Int               @default(1) @map("day_number")
+  startTime       DateTime          @map("start_time") @db.Time(6)
+  endTime         DateTime          @map("end_time") @db.Time(6)
+  label           String
+  description     String?
+  defaultLocation String?           @map("default_location")
+  blockType       ScheduleBlockType @default(activity) @map("block_type")
+  orderIndex      Int               @default(0) @map("order_index")
+  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  template        ScheduleTemplate  @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([templateId])
+  @@index([templateId, dayNumber])
+  @@map("schedule_template_blocks")
+}
+
+model VolunteerCertification {
+  id                  String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  profileId           String              @map("profile_id") @db.Uuid
+  documentUrl         String              @map("document_url")
+  documentType        String              @map("document_type")
+  documentName        String?             @map("document_name")
+  status              CertificationStatus @default(pending_review)
+  submittedAt         DateTime            @default(now()) @map("submitted_at") @db.Timestamptz(6)
+  expiresAt           DateTime?           @map("expires_at") @db.Timestamptz(6)
+  reviewedAt          DateTime?           @map("reviewed_at") @db.Timestamptz(6)
+  reviewedByProfileId String?             @map("reviewed_by_profile_id") @db.Uuid
+  notes               String?
+  reviewerNotes       String?             @map("reviewer_notes")
+  tenantId            String?             @map("tenant_id") @db.Uuid
+  createdAt           DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  profile             Profile             @relation("Owner", fields: [profileId], references: [id], onDelete: Cascade)
+  reviewer            Profile?            @relation("Reviewer", fields: [reviewedByProfileId], references: [id])
+  tenant              Tenant?             @relation(fields: [tenantId], references: [id])
+
+  @@index([profileId])
+  @@index([status])
+  @@index([tenantId])
+  @@map("volunteer_certifications")
+}
+
+model LmsModule {
+  id               String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  slug             String        @unique
+  title            String
+  description      String?
+  requiredForRoles String[]      @default([]) @map("required_for_roles")
+  contentUrl       String?       @map("content_url")
+  durationMinutes  Int           @default(30) @map("duration_minutes")
+  orderIndex       Int           @default(0) @map("order_index")
+  isActive         Boolean       @default(true) @map("is_active")
+  createdAt        DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  progress         LmsProgress[]
+
+  @@map("lms_modules")
+}
+
+model LmsProgress {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  profileId       String    @map("profile_id") @db.Uuid
+  moduleId        String    @map("module_id") @db.Uuid
+  startedAt       DateTime? @map("started_at") @db.Timestamptz(6)
+  completedAt     DateTime? @map("completed_at") @db.Timestamptz(6)
+  progressPercent Int       @default(0) @map("progress_percent")
+  quizScore       Int?      @map("quiz_score")
+  quizPassed      Boolean?  @map("quiz_passed")
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  module          LmsModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  profile         Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, moduleId])
+  @@index([profileId])
+  @@index([completedAt])
+  @@map("lms_progress")
+}
+
+model ShopProduct {
+  id                String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  licenseeId        String?              @map("licensee_id") @db.Uuid
+  name              String
+  slug              String               @unique
+  description       String?
+  category          ShopCategory         @default(apparel)
+  tags              String[]             @default([])
+  priceCents        Int                  @map("price_cents")
+  currency          String               @default("usd")
+  imageUrl          String?              @map("image_url")
+  isActive          Boolean              @default(true) @map("is_active")
+  isFeatured        Boolean              @default(false) @map("is_featured")
+  stripeProductId   String?              @map("stripe_product_id")
+  stripePriceId     String?              @map("stripe_price_id")
+  inventoryQuantity Int?                 @map("inventory_quantity")
+  createdAt         DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  orderItems        ShopOrderItem[]
+  variants          ShopProductVariant[]
+  licensee          Tenant?              @relation(fields: [licenseeId], references: [id])
+
+  @@index([slug])
+  @@index([category])
+  @@index([licenseeId])
+  @@index([isActive, isFeatured])
+  @@map("shop_products")
+}
+
+model ShopProductVariant {
+  id                String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  productId         String          @map("product_id") @db.Uuid
+  name              String
+  sku               String?
+  priceCents        Int?            @map("price_cents")
+  inventoryQuantity Int?            @map("inventory_quantity")
+  stripePriceId     String?         @map("stripe_price_id")
+  sortOrder         Int             @default(0) @map("sort_order")
+  createdAt         DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  orderItems        ShopOrderItem[]
+  product           ShopProduct     @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@map("shop_product_variants")
+}
+
+model ShopOrder {
+  id                      String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  profileId               String?         @map("profile_id") @db.Uuid
+  licenseeId              String?         @map("licensee_id") @db.Uuid
+  stripeCheckoutSessionId String?         @unique @map("stripe_checkout_session_id")
+  stripePaymentIntentId   String?         @map("stripe_payment_intent_id")
+  status                  OrderStatus     @default(pending)
+  subtotalCents           Int             @default(0) @map("subtotal_cents")
+  taxCents                Int             @default(0) @map("tax_cents")
+  shippingCents           Int             @default(0) @map("shipping_cents")
+  totalCents              Int             @default(0) @map("total_cents")
+  currency                String          @default("usd")
+  customerName            String?         @map("customer_name")
+  customerEmail           String?         @map("customer_email")
+  shippingAddress         Json?           @map("shipping_address")
+  notes                   String?
+  createdAt               DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt               DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  items                   ShopOrderItem[]
+  licensee                Tenant?         @relation(fields: [licenseeId], references: [id])
+  profile                 Profile?        @relation(fields: [profileId], references: [id])
+
+  @@index([profileId])
+  @@index([licenseeId])
+  @@index([status])
+  @@index([stripeCheckoutSessionId])
+  @@map("shop_orders")
+}
+
+model ShopOrderItem {
+  id              String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderId         String              @map("order_id") @db.Uuid
+  productId       String              @map("product_id") @db.Uuid
+  variantId       String?             @map("variant_id") @db.Uuid
+  quantity        Int
+  unitPriceCents  Int                 @map("unit_price_cents")
+  totalPriceCents Int                 @map("total_price_cents")
+  productName     String              @map("product_name")
+  variantName     String?             @map("variant_name")
+  createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  order           ShopOrder           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product         ShopProduct         @relation(fields: [productId], references: [id])
+  variant         ShopProductVariant? @relation(fields: [variantId], references: [id], onDelete: Restrict)
+
+  @@index([orderId])
+  @@index([productId])
+  @@map("shop_order_items")
+}
+
+model ShopSetting {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  key         String   @unique
+  value       Json     @default("null")
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([key])
+  @@map("shop_settings")
+}
+
+model Territory {
+  id          String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String
+  description String?
+  country     String
+  stateRegion String                @map("state_region")
+  city        String?
+  postalCodes String?               @map("postal_codes")
+  tenantId    String?               @map("tenant_id") @db.Uuid
+  status      TerritoryStatus       @default(open)
+  notes       String?
+  createdAt   DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime              @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tenant      Tenant?               @relation(fields: [tenantId], references: [id])
+  assignments TerritoryAssignment[]
+
+  @@index([tenantId])
+  @@index([status])
+  @@map("territories")
+}
+
+model TerritoryAssignment {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  territoryId String    @map("territory_id") @db.Uuid
+  tenantId    String?   @map("tenant_id") @db.Uuid
+  licenseeId  String?   @map("licensee_id") @db.Uuid
+  assignedAt  DateTime  @default(now()) @map("assigned_at") @db.Timestamptz(6)
+  assignedBy  String?   @map("assigned_by") @db.Uuid
+  notes       String?
+  licensee    Profile?  @relation("TerritoryAssignmentLicensee", fields: [licenseeId], references: [id], onDelete: Cascade)
+  tenant      Tenant?   @relation("TerritoryAssignmentTenant", fields: [tenantId], references: [id], onDelete: Cascade)
+  territory   Territory @relation(fields: [territoryId], references: [id], onDelete: Cascade)
+
+  @@unique([territoryId, tenantId], name: "unique_territory_tenant")
+  @@unique([territoryId, licenseeId], name: "unique_territory_licensee")
+  @@index([territoryId])
+  @@index([tenantId])
+  @@index([licenseeId])
+  @@map("territory_assignments")
+}
+
+model CitApplication {
+  id                   String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId               String?              @map("user_id") @db.Uuid
+  firstName            String               @map("first_name")
+  lastName             String               @map("last_name")
+  email                String
+  phone                String?
+  city                 String?
+  state                String?
+  schoolName           String?              @map("school_name")
+  gradeLevel           String?              @map("grade_level")
+  graduationYear       String?              @map("graduation_year")
+  sportsPlayed         String?              @map("sports_played")
+  experienceSummary    String?              @map("experience_summary")
+  whyCit               String?              @map("why_cit")
+  leadershipExperience String?              @map("leadership_experience")
+  availabilityNotes    String?              @map("availability_notes")
+  parentName           String?              @map("parent_name")
+  parentEmail          String?              @map("parent_email")
+  parentPhone          String?              @map("parent_phone")
+  status               CitApplicationStatus @default(applied)
+  assignedLicenseeId   String?              @map("assigned_licensee_id") @db.Uuid
+  assignedDirectorId   String?              @map("assigned_director_id") @db.Uuid
+  notesInternal        String?              @map("notes_internal")
+  howHeard             String?              @map("how_heard")
+  createdAt            DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  assignments          CitAssignment[]
+  progressEvents       CitProgressEvent[]
+
+  @@index([email])
+  @@index([status])
+  @@index([assignedLicenseeId])
+  @@index([createdAt])
+  @@map("cit_applications")
+}
+
+model CitProgressEvent {
+  id               String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  citApplicationId String                @map("cit_application_id") @db.Uuid
+  type             CitProgressEventType
+  fromStatus       CitApplicationStatus? @map("from_status")
+  toStatus         CitApplicationStatus? @map("to_status")
+  details          String?
+  changedByUserId  String?               @map("changed_by_user_id") @db.Uuid
+  createdAt        DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  citApplication   CitApplication        @relation(fields: [citApplicationId], references: [id], onDelete: Cascade)
+
+  @@index([citApplicationId])
+  @@index([createdAt])
+  @@map("cit_progress_events")
+}
+
+model CitAssignment {
+  id               String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  citApplicationId String         @map("cit_application_id") @db.Uuid
+  campId           String         @map("camp_id") @db.Uuid
+  role             String         @default("cit")
+  status           String         @default("planned")
+  notes            String?
+  assignedByUserId String?        @map("assigned_by_user_id") @db.Uuid
+  createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  citApplication   CitApplication @relation(fields: [citApplicationId], references: [id], onDelete: Cascade)
+
+  @@unique([citApplicationId, campId])
+  @@index([citApplicationId])
+  @@index([campId])
+  @@index([status])
+  @@map("cit_assignments")
+}
+
+model ContactSubmission {
+  id            String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name          String
+  email         String
+  phone         String?
+  inquiryType   String                  @map("inquiry_type")
+  message       String
+  athleteInfo   String?                 @map("athlete_info")
+  organization  String?
+  location      String?
+  status        ContactSubmissionStatus @default(new)
+  respondedBy   String?                 @map("responded_by") @db.Uuid
+  respondedAt   DateTime?               @map("responded_at") @db.Timestamptz(6)
+  internalNotes String?                 @map("internal_notes")
+  createdAt     DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime                @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([email])
+  @@index([status])
+  @@index([inquiryType])
+  @@index([createdAt])
+  @@map("contact_submissions")
+}
+
+model Testimony {
+  id                 String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId           String?             @map("tenant_id") @db.Uuid
+  authorName         String              @map("author_name")
+  authorEmail        String?             @map("author_email")
+  authorRole         TestimonyRole       @map("author_role")
+  authorRelationship String?             @map("author_relationship")
+  headline           String?
+  body               String
+  photoUrl           String?             @map("photo_url")
+  videoUrl           String?             @map("video_url")
+  campSessionId      String?             @map("camp_session_id") @db.Uuid
+  programType        String?             @map("program_type")
+  status             TestimonyStatus     @default(pending_review)
+  sourceType         TestimonySourceType @default(submitted) @map("source_type")
+  isFeatured         Boolean             @default(false) @map("is_featured")
+  displayOrder       Int?                @map("display_order")
+  reviewNotes        String?             @map("review_notes")
+  reviewedBy         String?             @map("reviewed_by") @db.Uuid
+  reviewedAt         DateTime?           @map("reviewed_at") @db.Timestamptz(6)
+  createdByUserId    String?             @map("created_by_user_id") @db.Uuid
+  createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  camp               Camp?               @relation(fields: [campSessionId], references: [id])
+  createdByUser      Profile?            @relation("TestimonyCreator", fields: [createdByUserId], references: [id])
+  reviewedByUser     Profile?            @relation("TestimonyReviewer", fields: [reviewedBy], references: [id])
+  tenant             Tenant?             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([status])
+  @@index([isFeatured])
+  @@index([createdAt])
+  @@index([authorRole])
+  @@map("testimonies")
+}
+
+model LicenseeApplication {
+  id                  String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  firstName           String                    @map("first_name")
+  lastName            String                    @map("last_name")
+  email               String
+  phone               String?
+  companyName         String?                   @map("company_name")
+  website             String?
+  city                String?
+  state               String?
+  territoryInterest   String?                   @map("territory_interest")
+  businessExperience  String?                   @map("business_experience")
+  sportsBackground    String?                   @map("sports_background")
+  whyInterested       String?                   @map("why_interested")
+  investmentCapacity  String?                   @map("investment_capacity")
+  howHeard            String?                   @map("how_heard")
+  status              LicenseeApplicationStatus @default(submitted)
+  assignedTerritoryId String?                   @map("assigned_territory_id") @db.Uuid
+  internalNotes       String?                   @map("internal_notes")
+  reviewedBy          String?                   @map("reviewed_by") @db.Uuid
+  reviewedAt          DateTime?                 @map("reviewed_at") @db.Timestamptz(6)
+  createdAt           DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime                  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([email])
+  @@index([status])
+  @@index([state])
+  @@index([createdAt])
+  @@map("licensee_applications")
+}
+
+model JobPosting {
+  id                      String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title                   String
+  slug                    String           @unique
+  shortDescription        String           @map("short_description")
+  fullDescription         String           @map("full_description")
+  locationLabel           String           @map("location_label")
+  employmentType          EmploymentType   @default(seasonal) @map("employment_type")
+  isRemoteFriendly        Boolean          @default(false) @map("is_remote_friendly")
+  minCompCents            Int?             @map("min_comp_cents")
+  maxCompCents            Int?             @map("max_comp_cents")
+  compFrequency           String?          @map("comp_frequency")
+  applicationInstructions String?          @map("application_instructions")
+  applicationEmail        String?          @map("application_email")
+  applicationUrl          String?          @map("application_url")
+  status                  JobStatus        @default(draft)
+  priority                Int              @default(0)
+  tenantId                String?          @map("tenant_id") @db.Uuid
+  createdByUserId         String           @map("created_by_user_id") @db.Uuid
+  publishedAt             DateTime?        @map("published_at") @db.Timestamptz(6)
+  createdAt               DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt               DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  applications            JobApplication[]
+
+  @@index([status])
+  @@index([tenantId])
+  @@index([employmentType])
+  @@index([createdAt])
+  @@index([priority])
+  @@map("job_postings")
+}
+
+model JobApplication {
+  id                          String                       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  jobId                       String                       @map("job_id") @db.Uuid
+  firstName                   String                       @map("first_name")
+  lastName                    String                       @map("last_name")
+  email                       String
+  phone                       String?
+  city                        String?
+  state                       String?
+  resumeUrl                   String?                      @map("resume_url")
+  coverLetter                 String?                      @map("cover_letter")
+  linkedinUrl                 String?                      @map("linkedin_url")
+  howHeard                    String?                      @map("how_heard")
+  status                      JobApplicationStatus         @default(submitted)
+  reviewedAt                  DateTime?                    @map("reviewed_at") @db.Timestamptz(6)
+  createdAt                   DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                   DateTime                     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  age                         Int?
+  applicantNotes              String?                      @map("applicant_notes")
+  availabilityJson            Json?                        @map("availability_json")
+  backgroundCheckAcknowledged Boolean                      @default(false) @map("background_check_acknowledged")
+  certificationsJson          Json?                        @map("certifications_json")
+  reviewedByUserId            String?                      @map("reviewed_by_user_id") @db.Uuid
+  tenantId                    String?                      @map("tenant_id") @db.Uuid
+  attachments                 JobApplicationAttachment[]
+  internalNotes               JobApplicationInternalNote[]
+  statusChanges               JobApplicationStatusChange[]
+  job                         JobPosting                   @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  tenant                      Tenant?                      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([jobId])
+  @@index([status])
+  @@index([email])
+  @@index([createdAt])
+  @@map("job_applications")
+}
+
+model JobApplicationAttachment {
+  id            String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  applicationId String         @map("application_id") @db.Uuid
+  fileName      String         @map("file_name")
+  fileType      String         @map("file_type")
+  fileSize      Int            @map("file_size")
+  s3Key         String         @map("s3_key")
+  uploadedAt    DateTime       @default(now()) @map("uploaded_at") @db.Timestamptz(6)
+  application   JobApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+  @@map("job_application_attachments")
+}
+
+model JobApplicationInternalNote {
+  id            String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  applicationId String         @map("application_id") @db.Uuid
+  authorUserId  String         @map("author_user_id") @db.Uuid
+  authorName    String         @map("author_name")
+  content       String
+  createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  application   JobApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+  @@index([createdAt])
+  @@map("job_application_internal_notes")
+}
+
+model JobApplicationStatusChange {
+  id              String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  applicationId   String               @map("application_id") @db.Uuid
+  fromStatus      JobApplicationStatus @map("from_status")
+  toStatus        JobApplicationStatus @map("to_status")
+  changedByUserId String               @map("changed_by_user_id") @db.Uuid
+  changedByName   String               @map("changed_by_name")
+  reason          String?
+  createdAt       DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  application     JobApplication       @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+  @@index([createdAt])
+  @@map("job_application_status_changes")
+}
+
+model CampDay {
+  id                    String                        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  campId                String                        @map("camp_id") @db.Uuid
+  date                  DateTime                      @db.Date
+  dayNumber             Int                           @map("day_number")
+  title                 String?
+  status                CampDayStatus                 @default(not_started)
+  notes                 String?
+  completedAt           DateTime?                     @map("completed_at") @db.Timestamptz(6)
+  completedBy           String?                       @map("completed_by") @db.Uuid
+  createdAt             DateTime                      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime                      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  attendance            CampAttendance[]
+  compensationSnapshots CampDayCompensationSnapshot[]
+  recap                 CampDayRecap?
+  camp                  Camp                          @relation(fields: [campId], references: [id], onDelete: Cascade)
+  incidents             CampIncident[]
+  pickupTokens          PickupToken[]
+  scheduleBlockProgress ScheduleBlockProgress[]
+
+  @@unique([campId, date])
+  @@unique([campId, dayNumber])
+  @@index([campId])
+  @@index([date])
+  @@index([status])
+  @@map("camp_days")
+}
+
+model CampAttendance {
+  id                               String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  campDayId                        String            @map("camp_day_id") @db.Uuid
+  athleteId                        String            @map("athlete_id") @db.Uuid
+  parentProfileId                  String            @map("parent_profile_id") @db.Uuid
+  registrationId                   String            @map("registration_id") @db.Uuid
+  groupId                          String?           @map("group_id") @db.Uuid
+  checkInTime                      DateTime?         @map("check_in_time") @db.Timestamptz(6)
+  checkInMethod                    CheckMethod?      @map("check_in_method")
+  checkInByUserId                  String?           @map("check_in_by_user_id") @db.Uuid
+  checkInNotes                     String?           @map("check_in_notes")
+  checkOutTime                     DateTime?         @map("check_out_time") @db.Timestamptz(6)
+  checkOutMethod                   CheckMethod?      @map("check_out_method")
+  checkOutByUserId                 String?           @map("check_out_by_user_id") @db.Uuid
+  checkOutNotes                    String?           @map("check_out_notes")
+  status                           AttendanceStatus  @default(not_arrived)
+  notes                            String?
+  createdAt                        DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                        DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  checkOutPickupPersonId           String?           @map("check_out_pickup_person_id") @db.Uuid
+  checkOutPickupPersonName         String?           @map("check_out_pickup_person_name")
+  checkOutPickupPersonRelationship String?           @map("check_out_pickup_person_relationship")
+  checkOutVerificationMethod       String?           @map("check_out_verification_method")
+  checkOutVerificationTypedName    String?           @map("check_out_verification_typed_name")
+  athlete                          Athlete           @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+  campDay                          CampDay           @relation(fields: [campDayId], references: [id], onDelete: Cascade)
+  checkOutPickupPerson             AuthorizedPickup? @relation(fields: [checkOutPickupPersonId], references: [id])
+  group                            CampGroup?        @relation(fields: [groupId], references: [id])
+  parentProfile                    Profile           @relation("ParentAttendance", fields: [parentProfileId], references: [id])
+  registration                     Registration      @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+
+  @@unique([campDayId, athleteId])
+  @@index([campDayId])
+  @@index([athleteId])
+  @@index([parentProfileId])
+  @@index([registrationId])
+  @@index([status])
+  @@map("camp_attendance")
+}
+
+model PickupToken {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  campDayId       String    @map("camp_day_id") @db.Uuid
+  athleteId       String    @map("athlete_id") @db.Uuid
+  parentProfileId String    @map("parent_profile_id") @db.Uuid
+  token           String    @unique
+  isUsed          Boolean   @default(false) @map("is_used")
+  usedAt          DateTime? @map("used_at") @db.Timestamptz(6)
+  usedByUserId    String?   @map("used_by_user_id") @db.Uuid
+  manualReason    String?   @map("manual_reason")
+  expiresAt       DateTime  @map("expires_at") @db.Timestamptz(6)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  athlete         Athlete   @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+  campDay         CampDay   @relation(fields: [campDayId], references: [id], onDelete: Cascade)
+  parentProfile   Profile   @relation("ParentPickupTokens", fields: [parentProfileId], references: [id])
+
+  @@index([campDayId])
+  @@index([athleteId])
+  @@index([parentProfileId])
+  @@index([token])
+  @@index([isUsed])
+  @@map("pickup_tokens")
+}
+
+model CampIncident {
+  id               String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  campDayId        String           @map("camp_day_id") @db.Uuid
+  athleteId        String?          @map("athlete_id") @db.Uuid
+  scheduleBlockId  String?          @map("schedule_block_id") @db.Uuid
+  reportedByUserId String           @map("reported_by_user_id") @db.Uuid
+  incidentType     String           @map("incident_type")
+  severity         IncidentSeverity @default(low)
+  description      String
+  actionTaken      String?          @map("action_taken")
+  parentNotified   Boolean          @default(false) @map("parent_notified")
+  parentNotifiedAt DateTime?        @map("parent_notified_at") @db.Timestamptz(6)
+  resolvedAt       DateTime?        @map("resolved_at") @db.Timestamptz(6)
+  resolvedByUserId String?          @map("resolved_by_user_id") @db.Uuid
+  createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  athlete          Athlete?         @relation(fields: [athleteId], references: [id])
+  campDay          CampDay          @relation(fields: [campDayId], references: [id], onDelete: Cascade)
+
+  @@index([campDayId])
+  @@index([athleteId])
+  @@index([severity])
+  @@map("camp_incidents")
+}
+
+model ScheduleBlockProgress {
+  id                String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  campDayId         String                   @map("camp_day_id") @db.Uuid
+  scheduleBlockId   String                   @map("schedule_block_id") @db.Uuid
+  startedAt         DateTime?                @map("started_at") @db.Timestamptz(6)
+  completedAt       DateTime?                @map("completed_at") @db.Timestamptz(6)
+  startedByUserId   String?                  @map("started_by_user_id") @db.Uuid
+  completedByUserId String?                  @map("completed_by_user_id") @db.Uuid
+  notes             String?
+  createdAt         DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime                 @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  campDay           CampDay                  @relation(fields: [campDayId], references: [id], onDelete: Cascade)
+  scheduleBlock     CampSessionScheduleBlock @relation(fields: [scheduleBlockId], references: [id], onDelete: Cascade)
+
+  @@unique([campDayId, scheduleBlockId])
+  @@index([campDayId])
+  @@index([scheduleBlockId])
+  @@map("schedule_block_progress")
+}
+
+model ParentOnboarding {
+  id                        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  parentProfileId           String    @map("parent_profile_id") @db.Uuid
+  campId                    String    @map("camp_id") @db.Uuid
+  athleteId                 String    @map("athlete_id") @db.Uuid
+  emergencyContactConfirmed Boolean   @default(false) @map("emergency_contact_confirmed")
+  medicalInfoConfirmed      Boolean   @default(false) @map("medical_info_confirmed")
+  pickupAuthConfirmed       Boolean   @default(false) @map("pickup_auth_confirmed")
+  waiverAccepted            Boolean   @default(false) @map("waiver_accepted")
+  waiverAcceptedAt          DateTime? @map("waiver_accepted_at") @db.Timestamptz(6)
+  completedAt               DateTime? @map("completed_at") @db.Timestamptz(6)
+  createdAt                 DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                 DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  athlete                   Athlete   @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+  camp                      Camp      @relation(fields: [campId], references: [id], onDelete: Cascade)
+  parentProfile             Profile   @relation("ParentOnboarding", fields: [parentProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([parentProfileId, campId, athleteId])
+  @@index([parentProfileId])
+  @@index([campId])
+  @@index([athleteId])
+  @@map("parent_onboarding")
+}
+
+model AuthorizedPickup {
+  id                String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  parentProfileId   String           @map("parent_profile_id") @db.Uuid
+  athleteId         String           @map("athlete_id") @db.Uuid
+  name              String
+  relationship      String
+  phone             String?
+  photoIdOnFile     Boolean          @default(false) @map("photo_id_on_file")
+  isActive          Boolean          @default(true) @map("is_active")
+  createdAt         DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  athlete           Athlete          @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+  parentProfile     Profile          @relation("AuthorizedPickups", fields: [parentProfileId], references: [id], onDelete: Cascade)
+  attendancePickups CampAttendance[]
+
+  @@index([parentProfileId])
+  @@index([athleteId])
+  @@map("authorized_pickups")
+}
+
+model CampStaffAssignment {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  campId         String    @map("camp_id") @db.Uuid
+  userId         String?   @map("user_id") @db.Uuid
+  role           String
+  isLead         Boolean   @default(false) @map("is_lead")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  callTime       DateTime? @map("call_time") @db.Time(6)
+  endTime        DateTime? @map("end_time") @db.Time(6)
+  notes          String?
+  stationName    String?   @map("station_name")
+  adHocEmail     String?   @map("ad_hoc_email")
+  adHocFirstName String?   @map("ad_hoc_first_name")
+  adHocLastName  String?   @map("ad_hoc_last_name")
+  adHocPhone     String?   @map("ad_hoc_phone")
+  isAdHoc        Boolean   @default(false) @map("is_ad_hoc")
+  camp           Camp      @relation(fields: [campId], references: [id], onDelete: Cascade)
+  user           Profile?  @relation("StaffAssignments", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([campId, userId])
+  @@index([campId])
+  @@index([userId])
+  @@map("camp_staff_assignments")
+}
+
+model StaffAssignmentRequest {
+  id                String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  campId            String             @map("camp_id") @db.Uuid
+  requestedUserId   String             @map("requested_user_id") @db.Uuid
+  requestedByUserId String             @map("requested_by_user_id") @db.Uuid
+  role              String
+  status            StaffRequestStatus @default(pending)
+  requestedAt       DateTime           @default(now()) @map("requested_at") @db.Timestamptz(6)
+  respondedAt       DateTime?          @map("responded_at") @db.Timestamptz(6)
+  notes             String?
+  isLead            Boolean            @default(false) @map("is_lead")
+  callTime          DateTime?          @map("call_time") @db.Time(6)
+  endTime           DateTime?          @map("end_time") @db.Time(6)
+  stationName       String?            @map("station_name")
+  camp              Camp               @relation(fields: [campId], references: [id], onDelete: Cascade)
+  requestedByUser   Profile            @relation("StaffRequestsSent", fields: [requestedByUserId], references: [id], onDelete: Cascade)
+  requestedUser     Profile            @relation("StaffRequestsReceived", fields: [requestedUserId], references: [id], onDelete: Cascade)
+
+  @@unique([campId, requestedUserId])
+  @@index([requestedUserId, status])
+  @@map("staff_assignment_requests")
+}
+
+model EmpowerUModule {
+  id                String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String?                    @map("tenant_id") @db.Uuid
+  title             String
+  slug              String
+  description       String?
+  portalType        PortalType                 @map("portal_type")
+  level             Int                        @default(1)
+  videoProvider     VideoProvider              @default(YOUTUBE) @map("video_provider")
+  videoUrl          String?                    @map("video_url")
+  estimatedMinutes  Int                        @default(30) @map("estimated_minutes")
+  isPublished       Boolean                    @default(false) @map("is_published")
+  createdByUserId   String?                    @map("created_by_user_id") @db.Uuid
+  contributionId    String?                    @map("contribution_id") @db.Uuid
+  createdAt         DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime                   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  progress          EmpowerUModuleProgress[]
+  contribution      EmpowerUContribution?      @relation(fields: [contributionId], references: [id])
+  quiz              EmpowerUQuiz?
+  unlockRuleModules EmpowerUUnlockRuleModule[]
+  roleRequirements  EmpowerURoleRequirement[]
+
+  @@unique([tenantId, slug])
+  @@index([tenantId])
+  @@index([portalType])
+  @@index([level])
+  @@index([isPublished])
+  @@map("empoweru_modules")
+}
+
+model EmpowerUQuiz {
+  id           String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  moduleId     String                 @unique @map("module_id") @db.Uuid
+  title        String
+  passingScore Int                    @default(100) @map("passing_score")
+  createdAt    DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime               @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  questions    EmpowerUQuizQuestion[]
+  module       EmpowerUModule         @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@index([moduleId])
+  @@map("empoweru_quizzes")
+}
+
+model EmpowerUQuizQuestion {
+  id            String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  quizId        String               @map("quiz_id") @db.Uuid
+  questionText  String               @map("question_text")
+  questionType  QuestionType         @default(MULTIPLE_CHOICE) @map("question_type")
+  orderIndex    Int                  @default(0) @map("order_index")
+  correctAnswer String?              @map("correct_answer") // For SHORT_ANSWER type
+  createdAt     DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  options       EmpowerUQuizOption[]
+  quiz          EmpowerUQuiz         @relation(fields: [quizId], references: [id], onDelete: Cascade)
+
+  @@index([quizId])
+  @@index([quizId, orderIndex])
+  @@map("empoweru_quiz_questions")
+}
+
+model EmpowerUQuizOption {
+  id         String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  questionId String               @map("question_id") @db.Uuid
+  optionText String               @map("option_text")
+  isCorrect  Boolean              @default(false) @map("is_correct")
+  orderIndex Int                  @default(0) @map("order_index")
+  createdAt  DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  question   EmpowerUQuizQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@index([questionId])
+  @@map("empoweru_quiz_options")
+}
+
+model EmpowerUModuleProgress {
+  id                String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  moduleId          String                 @map("module_id") @db.Uuid
+  userId            String                 @map("user_id") @db.Uuid
+  role              String
+  tenantId          String?                @map("tenant_id") @db.Uuid
+  status            EmpowerUProgressStatus @default(NOT_STARTED)
+  quizScore         Int?                   @map("quiz_score")
+  quizPassed        Boolean?               @map("quiz_passed")
+  completedAt       DateTime?              @map("completed_at") @db.Timestamptz(6)
+  createdAt         DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime               @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  // New fields for retry tracking
+  attemptCount      Int                    @default(0) @map("attempt_count")
+  lastAttemptAt     DateTime?              @map("last_attempt_at") @db.Timestamptz(6)
+  missedQuestionIds String[]               @default([]) @map("missed_question_ids")
+
+  module   EmpowerUModule        @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  attempts EmpowerUQuizAttempt[]
+
+  @@unique([moduleId, userId, tenantId])
+  @@index([moduleId])
+  @@index([userId])
+  @@index([tenantId])
+  @@index([status])
+  @@map("empoweru_module_progress")
+}
+
+model EmpowerUContribution {
+  id                String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String?            @map("tenant_id") @db.Uuid
+  submittedByUserId String             @map("submitted_by_user_id") @db.Uuid
+  submittedByRole   String             @map("submitted_by_role")
+  title             String
+  description       String?
+  portalType        PortalType         @map("portal_type")
+  videoUrl          String?            @map("video_url")
+  attachmentUrl     String?            @map("attachment_url")
+  status            ContributionStatus @default(PENDING)
+  adminReviewerId   String?            @map("admin_reviewer_id") @db.Uuid
+  adminNotes        String?            @map("admin_notes")
+  createdAt         DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdModules    EmpowerUModule[]
+
+  @@index([tenantId])
+  @@index([submittedByUserId])
+  @@index([status])
+  @@index([portalType])
+  @@map("empoweru_contributions")
+}
+
+model EmpowerUUnlockRule {
+  id                String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  portalType        PortalType                 @map("portal_type")
+  unlockFeatureCode String                     @map("unlock_feature_code")
+  description       String?
+  createdAt         DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime                   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  requiredModules   EmpowerUUnlockRuleModule[]
+
+  @@unique([portalType, unlockFeatureCode])
+  @@index([portalType])
+  @@index([unlockFeatureCode])
+  @@map("empoweru_unlock_rules")
+}
+
+model EmpowerUUnlockRuleModule {
+  id        String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ruleId    String             @map("rule_id") @db.Uuid
+  moduleId  String             @map("module_id") @db.Uuid
+  createdAt DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  module    EmpowerUModule     @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  rule      EmpowerUUnlockRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  @@unique([ruleId, moduleId])
+  @@index([ruleId])
+  @@index([moduleId])
+  @@map("empoweru_unlock_rule_modules")
+}
+
+model EmpowerUUserUnlock {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  tenantId    String?  @map("tenant_id") @db.Uuid
+  featureCode String   @map("feature_code")
+  unlockedAt  DateTime @default(now()) @map("unlocked_at") @db.Timestamptz(6)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([userId, tenantId, featureCode])
+  @@index([userId])
+  @@index([tenantId])
+  @@index([featureCode])
+  @@map("empoweru_user_unlocks")
+}
+
+// Role-based module requirements (HQ admin configurable)
+model EmpowerURoleRequirement {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  role      UserRole
+  moduleId  String   @map("module_id") @db.Uuid
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdBy String?  @map("created_by") @db.Uuid
+
+  module EmpowerUModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@unique([role, moduleId])
+  @@index([role])
+  @@index([moduleId])
+  @@map("empoweru_role_requirements")
+}
+
+// User certification records
+model EmpowerUCertification {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId            String   @map("user_id") @db.Uuid
+  role              UserRole
+  tenantId          String?  @map("tenant_id") @db.Uuid
+  certifiedAt       DateTime @default(now()) @map("certified_at") @db.Timestamptz(6)
+  certificateUrl    String?  @map("certificate_url")
+  certificateNumber String   @unique @map("certificate_number")
+
+  @@unique([userId, role, tenantId])
+  @@index([userId])
+  @@index([role])
+  @@map("empoweru_certifications")
+}
+
+// Quiz attempt history for retry tracking
+model EmpowerUQuizAttempt {
+  id            String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  progressId    String                 @map("progress_id") @db.Uuid
+  attemptNumber Int                    @default(1) @map("attempt_number")
+  score         Int
+  passed        Boolean
+  attemptedAt   DateTime               @default(now()) @map("attempted_at") @db.Timestamptz(6)
+  answers       Json // [{questionId, optionId, isCorrect}]
+
+  progress EmpowerUModuleProgress @relation(fields: [progressId], references: [id], onDelete: Cascade)
+
+  @@index([progressId])
+  @@map("empoweru_quiz_attempts")
+}
+
+model CompensationPlan {
+  id                        String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                      String
+  planCode                  CompensationPlanCode      @unique @map("plan_code")
+  preCampStipendAmount      Decimal                   @map("pre_camp_stipend_amount") @db.Decimal(10, 2)
+  onSiteStipendAmount       Decimal                   @map("on_site_stipend_amount") @db.Decimal(10, 2)
+  enrollmentThreshold       Int?                      @map("enrollment_threshold")
+  enrollmentBonusPerCamper  Decimal?                  @map("enrollment_bonus_per_camper") @db.Decimal(10, 2)
+  csatRequiredScore         Decimal?                  @map("csat_required_score") @db.Decimal(3, 2)
+  csatBonusAmount           Decimal?                  @map("csat_bonus_amount") @db.Decimal(10, 2)
+  budgetEfficiencyRate      Decimal?                  @map("budget_efficiency_rate") @db.Decimal(5, 4)
+  guestSpeakerRequiredCount Int?                      @map("guest_speaker_required_count")
+  guestSpeakerBonusAmount   Decimal?                  @map("guest_speaker_bonus_amount") @db.Decimal(10, 2)
+  isActive                  Boolean                   @default(true) @map("is_active")
+  createdAt                 DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                 DateTime                  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  sessionCompensations      CampSessionCompensation[]
+
+  @@index([planCode])
+  @@index([isActive])
+  @@map("compensation_plans")
+}
+
+model CampSessionCompensation {
+  id                          String                        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  campId                      String                        @map("camp_id") @db.Uuid
+  tenantId                    String                        @map("tenant_id") @db.Uuid
+  staffProfileId              String                        @map("staff_profile_id") @db.Uuid
+  compensationPlanId          String                        @map("compensation_plan_id") @db.Uuid
+  preCampStipendAmount        Decimal                       @map("pre_camp_stipend_amount") @db.Decimal(10, 2)
+  onSiteStipendAmount         Decimal                       @map("on_site_stipend_amount") @db.Decimal(10, 2)
+  enrollmentThreshold         Int?                          @map("enrollment_threshold")
+  enrollmentBonusPerCamper    Decimal?                      @map("enrollment_bonus_per_camper") @db.Decimal(10, 2)
+  csatRequiredScore           Decimal?                      @map("csat_required_score") @db.Decimal(3, 2)
+  csatBonusAmount             Decimal?                      @map("csat_bonus_amount") @db.Decimal(10, 2)
+  budgetEfficiencyRate        Decimal?                      @map("budget_efficiency_rate") @db.Decimal(5, 4)
+  guestSpeakerRequiredCount   Int?                          @map("guest_speaker_required_count")
+  guestSpeakerBonusAmount     Decimal?                      @map("guest_speaker_bonus_amount") @db.Decimal(10, 2)
+  totalEnrolledCampers        Int?                          @map("total_enrolled_campers")
+  csatAvgScore                Decimal?                      @map("csat_avg_score") @db.Decimal(3, 2)
+  budgetPreapprovedTotal      Decimal?                      @map("budget_preapproved_total") @db.Decimal(10, 2)
+  budgetActualTotal           Decimal?                      @map("budget_actual_total") @db.Decimal(10, 2)
+  budgetSavingsAmount         Decimal?                      @map("budget_savings_amount") @db.Decimal(10, 2)
+  guestSpeakerCount           Int?                          @map("guest_speaker_count")
+  enrollmentBonusEarned       Decimal?                      @map("enrollment_bonus_earned") @db.Decimal(10, 2)
+  csatBonusEarned             Decimal?                      @map("csat_bonus_earned") @db.Decimal(10, 2)
+  budgetEfficiencyBonusEarned Decimal?                      @map("budget_efficiency_bonus_earned") @db.Decimal(10, 2)
+  guestSpeakerBonusEarned     Decimal?                      @map("guest_speaker_bonus_earned") @db.Decimal(10, 2)
+  fixedStipendTotal           Decimal?                      @map("fixed_stipend_total") @db.Decimal(10, 2)
+  totalVariableBonus          Decimal?                      @map("total_variable_bonus") @db.Decimal(10, 2)
+  totalCompensation           Decimal?                      @map("total_compensation") @db.Decimal(10, 2)
+  calculatedAt                DateTime?                     @map("calculated_at") @db.Timestamptz(6)
+  isFinalized                 Boolean                       @default(false) @map("is_finalized")
+  createdAt                   DateTime                      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                   DateTime                      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  dailySnapshots              CampDayCompensationSnapshot[]
+  camp                        Camp                          @relation(fields: [campId], references: [id], onDelete: Cascade)
+  compensationPlan            CompensationPlan              @relation(fields: [compensationPlanId], references: [id])
+  staffProfile                Profile                       @relation("StaffCompensation", fields: [staffProfileId], references: [id], onDelete: Cascade)
+  tenant                      Tenant                        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([campId, staffProfileId])
+  @@index([campId])
+  @@index([tenantId])
+  @@index([staffProfileId])
+  @@index([isFinalized])
+  @@map("camp_session_compensations")
+}
+
+model CampDayCompensationSnapshot {
+  id                    String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  campDayId             String                  @map("camp_day_id") @db.Uuid
+  campId                String                  @map("camp_id") @db.Uuid
+  staffProfileId        String                  @map("staff_profile_id") @db.Uuid
+  sessionCompensationId String                  @map("session_compensation_id") @db.Uuid
+  dayEnrolledCampers    Int?                    @map("day_enrolled_campers")
+  dayCheckedInCount     Int?                    @map("day_checked_in_count")
+  dayCheckedOutCount    Int?                    @map("day_checked_out_count")
+  dayNoShowCount        Int?                    @map("day_no_show_count")
+  dayCsatAvgScore       Decimal?                @map("day_csat_avg_score") @db.Decimal(3, 2)
+  dayGuestSpeakerCount  Int?                    @map("day_guest_speaker_count")
+  notes                 String?
+  createdAt             DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  campDay               CampDay                 @relation(fields: [campDayId], references: [id], onDelete: Cascade)
+  camp                  Camp                    @relation(fields: [campId], references: [id], onDelete: Cascade)
+  sessionCompensation   CampSessionCompensation @relation(fields: [sessionCompensationId], references: [id], onDelete: Cascade)
+  staffProfile          Profile                 @relation("DailyCompensationSnapshots", fields: [staffProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([campDayId, staffProfileId])
+  @@index([campDayId])
+  @@index([campId])
+  @@index([staffProfileId])
+  @@index([sessionCompensationId])
+  @@map("camp_day_compensation_snapshots")
+}
+
+model RoyaltyInvoice {
+  id                       String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId                 String               @map("tenant_id") @db.Uuid
+  campId                   String?              @map("camp_id") @db.Uuid
+  invoiceNumber            String               @unique @map("invoice_number")
+  periodType               RoyaltyPeriodType    @default(camp_session) @map("period_type")
+  periodStart              DateTime             @map("period_start") @db.Date
+  periodEnd                DateTime             @map("period_end") @db.Date
+  grossRevenueCents        Int                  @map("gross_revenue_cents")
+  registrationRevenueCents Int                  @map("registration_revenue_cents")
+  addonRevenueCents        Int                  @default(0) @map("addon_revenue_cents")
+  merchandiseRevenueCents  Int                  @default(0) @map("merchandise_revenue_cents")
+  refundsTotalCents        Int                  @default(0) @map("refunds_total_cents")
+  netRevenueCents          Int                  @map("net_revenue_cents")
+  royaltyRateBps           Int                  @map("royalty_rate_bps")
+  royaltyDueCents          Int                  @map("royalty_due_cents")
+  adjustmentCents          Int                  @default(0) @map("adjustment_cents")
+  adjustmentNotes          String?              @map("adjustment_notes")
+  totalDueCents            Int                  @map("total_due_cents")
+  status                   RoyaltyInvoiceStatus @default(pending)
+  dueDate                  DateTime             @map("due_date") @db.Date
+  generatedAt              DateTime             @default(now()) @map("generated_at") @db.Timestamptz(6)
+  generatedBy              String?              @map("generated_by") @db.Uuid
+  paidAt                   DateTime?            @map("paid_at") @db.Timestamptz(6)
+  paidAmountCents          Int?                 @map("paid_amount_cents")
+  paymentMethod            String?              @map("payment_method")
+  paymentReference         String?              @map("payment_reference")
+  paidBy                   String?              @map("paid_by") @db.Uuid
+  notes                    String?
+  disputeReason            String?              @map("dispute_reason")
+  disputedAt               DateTime?            @map("disputed_at") @db.Timestamptz(6)
+  resolvedAt               DateTime?            @map("resolved_at") @db.Timestamptz(6)
+  createdAt                DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  camp                     Camp?                @relation(fields: [campId], references: [id])
+  tenant                   Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lineItems                RoyaltyLineItem[]
+
+  @@index([tenantId])
+  @@index([campId])
+  @@index([status])
+  @@index([dueDate])
+  @@index([periodStart, periodEnd])
+  @@map("royalty_invoices")
+}
+
+model RoyaltyLineItem {
+  id               String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  invoiceId        String         @map("invoice_id") @db.Uuid
+  description      String
+  category         String
+  quantity         Int            @default(1)
+  unitAmountCents  Int            @map("unit_amount_cents")
+  totalAmountCents Int            @map("total_amount_cents")
+  royaltyApplies   Boolean        @default(true) @map("royalty_applies")
+  notes            String?
+  createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  invoice          RoyaltyInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@index([category])
+  @@map("royalty_line_items")
+}
+
+model PdfReport {
+  id          String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String        @map("tenant_id") @db.Uuid
+  type        PdfReportType
+  resourceId  String        @map("resource_id") @db.Uuid
+  url         String?
+  fileName    String?       @map("file_name")
+  generatedBy String?       @map("generated_by") @db.Uuid
+  status      String        @default("pending")
+  error       String?
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  expiresAt   DateTime?     @map("expires_at") @db.Timestamptz(6)
+  tenant      Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([type])
+  @@index([resourceId])
+  @@index([status])
+  @@map("pdf_reports")
+}
+
+model Notification {
+  id        String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String               @map("user_id") @db.Uuid
+  tenantId  String?              @map("tenant_id") @db.Uuid
+  type      NotificationType
+  title     String
+  body      String
+  actionUrl String?              @map("action_url")
+  isRead    Boolean              @default(false) @map("is_read")
+  readAt    DateTime?            @map("read_at") @db.Timestamptz(6)
+  createdAt DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  category  NotificationCategory @default(system)
+  data      Json?
+  severity  NotificationSeverity @default(info)
+  updatedAt DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tenant    Tenant?              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user      Profile              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tenantId])
+  @@index([type])
+  @@index([category])
+  @@index([isRead])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+model NotificationPreference {
+  id           String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId       String               @map("user_id") @db.Uuid
+  tenantId     String?              @map("tenant_id") @db.Uuid
+  category     NotificationCategory
+  enabledInApp Boolean              @default(true) @map("enabled_in_app")
+  enabledEmail Boolean              @default(true) @map("enabled_email")
+  createdAt    DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tenant       Tenant?              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user         Profile              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, tenantId, category])
+  @@index([userId])
+  @@index([tenantId])
+  @@map("notification_preferences")
+}
+
+model MessageThread {
+  id            String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String?              @map("tenant_id") @db.Uuid
+  type          MessageThreadType    @default(general)
+  subject       String?
+  lastMessageAt DateTime?            @map("last_message_at") @db.Timestamptz(6)
+  isArchived    Boolean              @default(false) @map("is_archived")
+  createdAt     DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  participants  MessageParticipant[]
+  tenant        Tenant?              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  messages      Message[]
+
+  @@index([tenantId])
+  @@index([type])
+  @@index([lastMessageAt])
+  @@map("message_threads")
+}
+
+model MessageParticipant {
+  id         String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  threadId   String        @map("thread_id") @db.Uuid
+  userId     String        @map("user_id") @db.Uuid
+  lastReadAt DateTime?     @map("last_read_at") @db.Timestamptz(6)
+  isActive   Boolean       @default(true) @map("is_active")
+  createdAt  DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  thread     MessageThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  user       Profile       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([threadId, userId])
+  @@index([threadId])
+  @@index([userId])
+  @@map("message_participants")
+}
+
+model Message {
+  id         String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  threadId   String        @map("thread_id") @db.Uuid
+  fromUserId String        @map("from_user_id") @db.Uuid
+  body       String
+  isDeleted  Boolean       @default(false) @map("is_deleted")
+  createdAt  DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  fromUser   Profile       @relation(fields: [fromUserId], references: [id], onDelete: Cascade)
+  thread     MessageThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@index([threadId])
+  @@index([fromUserId])
+  @@index([createdAt])
+  @@map("messages")
+}
+
+model RevenueSnapshot {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String   @map("tenant_id") @db.Uuid
+  periodStart       DateTime @map("period_start") @db.Date
+  periodEnd         DateTime @map("period_end") @db.Date
+  grossRevenueCents Int      @map("gross_revenue_cents")
+  netRevenueCents   Int      @map("net_revenue_cents")
+  refundsCents      Int      @default(0) @map("refunds_cents")
+  totalCampers      Int      @default(0) @map("total_campers")
+  arpcCents         Int      @default(0) @map("arpc_cents")
+  sessionsHeld      Int      @default(0) @map("sessions_held")
+  metadata          Json?
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, periodStart, periodEnd])
+  @@index([tenantId])
+  @@index([periodStart])
+  @@index([periodEnd])
+  @@map("revenue_snapshots")
+}
+
+model CurriculumSubmission {
+  id                String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String                     @map("tenant_id") @db.Uuid
+  submittedByUserId String                     @map("submitted_by_user_id") @db.Uuid
+  title             String
+  description       String
+  sport             String?
+  level             Int                        @default(1)
+  videoUrl          String?                    @map("video_url")
+  attachmentUrl     String?                    @map("attachment_url")
+  status            CurriculumSubmissionStatus @default(draft)
+  adminNotes        String?                    @map("admin_notes")
+  reviewedByUserId  String?                    @map("reviewed_by_user_id") @db.Uuid
+  reviewedAt        DateTime?                  @map("reviewed_at") @db.Timestamptz(6)
+  approvedBlockId   String?                    @map("approved_block_id") @db.Uuid
+  createdAt         DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime                   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  approvedBlock     CurriculumBlock?           @relation(fields: [approvedBlockId], references: [id])
+  reviewedBy        Profile?                   @relation("ReviewedCurriculums", fields: [reviewedByUserId], references: [id])
+  submittedBy       Profile                    @relation("SubmittedCurriculums", fields: [submittedByUserId], references: [id], onDelete: Cascade)
+  tenant            Tenant                     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([submittedByUserId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("curriculum_submissions")
+}
+
+model SessionSurvey {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  campId              String   @map("camp_id") @db.Uuid
+  tenantId            String   @map("tenant_id") @db.Uuid
+  parentProfileId     String   @map("parent_profile_id") @db.Uuid
+  athleteId           String?  @map("athlete_id") @db.Uuid
+  rating              Int
+  comment             String?
+  staffRating         Int?     @map("staff_rating")
+  activitiesRating    Int?     @map("activities_rating")
+  communicationRating Int?     @map("communication_rating")
+  safetyRating        Int?     @map("safety_rating")
+  valueRating         Int?     @map("value_rating")
+  wouldRecommend      Boolean? @map("would_recommend")
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  camp                Camp     @relation(fields: [campId], references: [id], onDelete: Cascade)
+
+  @@unique([campId, parentProfileId, athleteId])
+  @@index([campId])
+  @@index([tenantId])
+  @@index([rating])
+  @@index([createdAt])
+  @@map("session_surveys")
+}
+
+model SessionComplaint {
+  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  campId          String            @map("camp_id") @db.Uuid
+  tenantId        String            @map("tenant_id") @db.Uuid
+  parentProfileId String?           @map("parent_profile_id") @db.Uuid
+  athleteId       String?           @map("athlete_id") @db.Uuid
+  category        String
+  severity        ComplaintSeverity @default(medium)
+  subject         String
+  description     String
+  status          ComplaintStatus   @default(open)
+  assignedToId    String?           @map("assigned_to_id") @db.Uuid
+  resolution      String?
+  resolvedAt      DateTime?         @map("resolved_at") @db.Timestamptz(6)
+  resolvedById    String?           @map("resolved_by_id") @db.Uuid
+  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  camp            Camp              @relation(fields: [campId], references: [id], onDelete: Cascade)
+
+  @@index([campId])
+  @@index([tenantId])
+  @@index([severity])
+  @@index([status])
+  @@index([createdAt])
+  @@map("session_complaints")
+}
+
+model EmailLog {
+  id                String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String?     @map("tenant_id") @db.Uuid
+  userId            String?     @map("user_id") @db.Uuid
+  toEmail           String      @map("to_email")
+  fromEmail         String?     @map("from_email")
+  subject           String
+  emailType         EmailType   @map("email_type")
+  payload           Json?
+  providerMessageId String?     @map("provider_message_id")
+  status            EmailStatus @default(sent)
+  errorMessage      String?     @map("error_message")
+  createdAt         DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenant            Tenant?     @relation(fields: [tenantId], references: [id])
+  user              Profile?    @relation(fields: [userId], references: [id])
+
+  @@index([tenantId])
+  @@index([userId])
+  @@index([emailType])
+  @@index([status])
+  @@index([toEmail])
+  @@index([createdAt])
+  @@map("email_logs")
+}
+
+model EmailTemplate {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String?   @map("tenant_id") @db.Uuid
+  emailType     EmailType @map("email_type")
+  name          String
+  subject       String
+  bodyHtml      String    @map("body_html")
+  bodyText      String?   @map("body_text")
+  isActive      Boolean   @default(true) @map("is_active")
+  description   String?
+  availableVars String[]  @default([]) @map("available_vars")
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdBy     String?   @map("created_by") @db.Uuid
+  updatedBy     String?   @map("updated_by") @db.Uuid
+  tenant        Tenant?   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, emailType])
+  @@index([emailType])
+  @@index([tenantId])
+  @@map("email_templates")
+}
+
+model CampDayRecap {
+  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  campDayId            String    @unique @map("camp_day_id") @db.Uuid
+  tenantId             String    @map("tenant_id") @db.Uuid
+  submittedByUserId    String    @map("submitted_by_user_id") @db.Uuid
+  dayTheme             String?   @map("day_theme")
+  wordOfTheDay         String?   @map("word_of_the_day")
+  wordOfTheDayExample  String?   @map("word_of_the_day_example")
+  primarySport         String?   @map("primary_sport")
+  primarySportFocus    String?   @map("primary_sport_focus")
+  secondarySport       String?   @map("secondary_sport")
+  secondarySportFocus  String?   @map("secondary_sport_focus")
+  guestSpeakerName     String?   @map("guest_speaker_name")
+  guestSpeakerTitle    String?   @map("guest_speaker_title")
+  guestSpeakerTopic    String?   @map("guest_speaker_topic")
+  pinkPointSkill       String?   @map("pink_point_skill")
+  purplePointSkill     String?   @map("purple_point_skill")
+  tomorrowSport1       String?   @map("tomorrow_sport_1")
+  tomorrowSport2       String?   @map("tomorrow_sport_2")
+  tomorrowWordOfTheDay String?   @map("tomorrow_word_of_the_day")
+  localResources       Json?     @map("local_resources")
+  photoUrls            Json?     @map("photo_urls")
+  highlights           String?
+  emailsSentAt         DateTime? @map("emails_sent_at") @db.Timestamptz(6)
+  emailsSentCount      Int?      @map("emails_sent_count")
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  campDay              CampDay   @relation(fields: [campDayId], references: [id], onDelete: Cascade)
+  submittedBy          Profile   @relation(fields: [submittedByUserId], references: [id], onDelete: Cascade)
+  tenant               Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([campDayId])
+  @@index([createdAt])
+  @@map("camp_day_recaps")
+}
+
+model RoleInvite {
+  id              String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId        String?      @map("tenant_id") @db.Uuid
+  invitedByUserId String       @map("invited_by_user_id") @db.Uuid
+  email           String
+  firstName       String?      @map("first_name")
+  lastName        String?      @map("last_name")
+  phone           String?
+  targetRole      UserRole     @map("target_role")
+  token           String       @unique @default(dbgenerated("gen_random_uuid()"))
+  status          InviteStatus @default(pending)
+  expiresAt       DateTime     @map("expires_at") @db.Timestamptz(6)
+  acceptedAt      DateTime?    @map("accepted_at") @db.Timestamptz(6)
+  acceptedUserId  String?      @map("accepted_user_id") @db.Uuid
+  lastEmailSentAt DateTime?    @map("last_email_sent_at") @db.Timestamptz(6)
+  emailSentCount  Int          @default(0) @map("email_sent_count")
+  notes           String?
+  createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  acceptedUser    Profile?     @relation("AcceptedInvites", fields: [acceptedUserId], references: [id])
+  invitedBy       Profile      @relation("SentInvites", fields: [invitedByUserId], references: [id], onDelete: Cascade)
+  tenant          Tenant?      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([email])
+  @@index([token])
+  @@index([tenantId])
+  @@index([invitedByUserId])
+  @@index([targetRole])
+  @@index([status])
+  @@index([expiresAt])
+  @@map("role_invites")
+}
+
+model Setting {
+  id              String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  scope           SettingScope       @default(GLOBAL)
+  tenantId        String?            @map("tenant_id") @db.Uuid
+  key             String
+  valueJson       Json               @default("null") @map("value_json")
+  valueType       SettingValueType   @default(STRING) @map("value_type")
+  description     String?
+  updatedAt       DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedByUserId String?            @map("updated_by_user_id") @db.Uuid
+  createdAt       DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenant          Tenant?            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  updatedByUser   Profile?           @relation("SettingsUpdatedBy", fields: [updatedByUserId], references: [id])
+  auditLogs       SettingsAuditLog[]
+
+  @@unique([scope, tenantId, key])
+  @@index([tenantId, key])
+  @@index([key])
+  @@map("settings")
+}
+
+model SettingsAuditLog {
+  id              String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  settingId       String?            @map("setting_id") @db.Uuid
+  scope           SettingScope
+  tenantId        String?            @map("tenant_id") @db.Uuid
+  key             String
+  oldValueJson    Json?              @map("old_value_json")
+  newValueJson    Json               @map("new_value_json")
+  changedAt       DateTime           @default(now()) @map("changed_at") @db.Timestamptz(6)
+  changedByUserId String?            @map("changed_by_user_id") @db.Uuid
+  source          SettingAuditSource @default(ADMIN_UI)
+  changedByUser   Profile?           @relation("SettingsAuditChangedBy", fields: [changedByUserId], references: [id])
+  setting         Setting?           @relation(fields: [settingId], references: [id])
+
+  @@index([settingId])
+  @@index([tenantId])
+  @@index([key])
+  @@index([changedAt])
+  @@map("settings_audit_logs")
+}
+
+model WaiverTemplate {
+  id                  String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId            String?                 @map("tenant_id") @db.Uuid
+  title               String
+  description         String?
+  contentHtml         String                  @map("content_html")
+  isMandatorySiteWide Boolean                 @default(false) @map("is_mandatory_site_wide")
+  isActive            Boolean                 @default(true) @map("is_active")
+  currentVersion      Int                     @default(1) @map("current_version")
+  createdAt           DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime                @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdByUserId     String?                 @map("created_by_user_id") @db.Uuid
+  updatedByUserId     String?                 @map("updated_by_user_id") @db.Uuid
+  athleteSignings     AthleteWaiverSigning[]
+  campRequirements    CampWaiverRequirement[]
+  versions            WaiverTemplateVersion[]
+  createdByUser       Profile?                @relation("WaiverTemplateCreator", fields: [createdByUserId], references: [id])
+  tenant              Tenant?                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  updatedByUser       Profile?                @relation("WaiverTemplateUpdater", fields: [updatedByUserId], references: [id])
+
+  @@index([tenantId])
+  @@index([isMandatorySiteWide])
+  @@index([isActive])
+  @@map("waiver_templates")
+}
+
+model WaiverTemplateVersion {
+  id               String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  waiverTemplateId String                 @map("waiver_template_id") @db.Uuid
+  version          Int
+  contentHtml      String                 @map("content_html")
+  createdAt        DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdByUserId  String?                @map("created_by_user_id") @db.Uuid
+  athleteSignings  AthleteWaiverSigning[]
+  createdByUser    Profile?               @relation("WaiverVersionCreator", fields: [createdByUserId], references: [id])
+  waiverTemplate   WaiverTemplate         @relation(fields: [waiverTemplateId], references: [id], onDelete: Cascade)
+
+  @@unique([waiverTemplateId, version])
+  @@index([waiverTemplateId])
+  @@map("waiver_template_versions")
+}
+
+model CampWaiverRequirement {
+  id                    String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId              String?                @map("tenant_id") @db.Uuid
+  campId                String                 @map("camp_id") @db.Uuid
+  waiverTemplateId      String                 @map("waiver_template_id") @db.Uuid
+  waiverTemplateVersion Int?                   @map("waiver_template_version")
+  displayOrder          Int                    @default(0) @map("display_order")
+  isRequired            Boolean                @default(true) @map("is_required")
+  createdAt             DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime               @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  athleteSignings       AthleteWaiverSigning[]
+  camp                  Camp                   @relation(fields: [campId], references: [id], onDelete: Cascade)
+  tenant                Tenant?                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  waiverTemplate        WaiverTemplate         @relation(fields: [waiverTemplateId], references: [id], onDelete: Cascade)
+
+  @@unique([campId, waiverTemplateId])
+  @@index([campId])
+  @@index([waiverTemplateId])
+  @@map("camp_waiver_requirements")
+}
+
+model AthleteWaiverSigning {
+  id                      String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId                String?                @map("tenant_id") @db.Uuid
+  campId                  String?                @map("camp_id") @db.Uuid
+  registrationId          String?                @map("registration_id") @db.Uuid
+  athleteId               String                 @map("athlete_id") @db.Uuid
+  parentProfileId         String                 @map("parent_profile_id") @db.Uuid
+  waiverTemplateId        String                 @map("waiver_template_id") @db.Uuid
+  waiverTemplateVersionId String?                @map("waiver_template_version_id") @db.Uuid
+  campWaiverRequirementId String?                @map("camp_waiver_requirement_id") @db.Uuid
+  versionSigned           Int                    @map("version_signed")
+  status                  WaiverSigningStatus    @default(pending)
+  signedAt                DateTime?              @map("signed_at") @db.Timestamptz(6)
+  signerName              String?                @map("signer_name")
+  signerEmail             String?                @map("signer_email")
+  signerIpAddress         String?                @map("signer_ip_address")
+  signaturePayloadJson    Json?                  @map("signature_payload_json")
+  createdAt               DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt               DateTime               @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  signatureDateEntered    DateTime?              @map("signature_date_entered") @db.Date
+  signatureTyped          String?                @map("signature_typed")
+  athlete                 Athlete                @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+  camp                    Camp?                  @relation(fields: [campId], references: [id], onDelete: Cascade)
+  campWaiverRequirement   CampWaiverRequirement? @relation(fields: [campWaiverRequirementId], references: [id])
+  parentProfile           Profile                @relation("WaiverSignedByParent", fields: [parentProfileId], references: [id], onDelete: Cascade)
+  registration            Registration?          @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  tenant                  Tenant?                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  waiverTemplate          WaiverTemplate         @relation(fields: [waiverTemplateId], references: [id], onDelete: Cascade)
+  waiverTemplateVersion   WaiverTemplateVersion? @relation(fields: [waiverTemplateVersionId], references: [id])
+
+  @@index([tenantId])
+  @@index([campId])
+  @@index([registrationId])
+  @@index([athleteId])
+  @@index([parentProfileId])
+  @@index([waiverTemplateId])
+  @@index([status])
+  @@map("athlete_waiver_signings")
+}
+
+model GuestSpeaker {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  campId        String    @map("camp_id") @db.Uuid
+  tenantId      String    @map("tenant_id") @db.Uuid
+  name          String
+  title         String?
+  organization  String?
+  topic         String?
+  speakerDate   DateTime? @map("speaker_date") @db.Date
+  isHighProfile Boolean   @default(true) @map("is_high_profile")
+  notes         String?
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  camp          Camp      @relation(fields: [campId], references: [id], onDelete: Cascade)
+  tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([campId])
+  @@index([tenantId])
+  @@index([speakerDate])
+  @@map("guest_speakers")
+}
+
+enum JobApplicationStatus {
+  submitted
+  under_review
+  phone_screen
+  interview_scheduled
+  interview_completed
+  offer_extended
+  hired
+  rejected
+  withdrawn
+}
+
+enum LicenseStatus {
+  active
+  suspended
+  terminated
+}
+
+enum CampStatus {
+  draft
+  published
+  registration_open
+  registration_closed
+  in_progress
+  completed
+  cancelled
+}
+
+enum GroupingStatus {
+  pending
+  auto_grouped
+  reviewed
+  finalized
+}
+
+enum UserRole {
+  parent
+  coach
+  director
+  licensee_owner
+  hq_admin
+  cit_volunteer
+}
+
+enum Gender {
+  male
+  female
+  other
+  prefer_not_to_say
+}
+
+enum AthleteRiskFlag {
+  none
+  monitor
+  restricted
+}
+
+enum PaymentStatus {
+  pending
+  partial
+  paid
+  refunded
+  failed
+}
+
+enum RegistrationStatus {
+  pending
+  confirmed
+  waitlisted
+  cancelled
+  refunded
+}
+
+enum DiscountType {
+  percentage
+  fixed
+}
+
+enum AssignmentType {
+  auto
+  manual
+  override
+}
+
+enum ViolationType {
+  size_exceeded
+  grade_spread_exceeded
+  friend_group_split
+  friend_group_too_large
+  impossible_placement
+  grade_discrepancy
+}
+
+enum ViolationSeverity {
+  warning
+  hard
+}
+
+enum ResolutionType {
+  auto_fixed
+  manual_override
+  accepted
+  dismissed
+}
+
+enum GroupingRunType {
+  initial
+  rerun
+  incremental
+}
+
+enum ReportType {
+  draft
+  final
+  amended
+}
+
+enum SportType {
+  multi_sport
+  basketball
+  soccer
+  volleyball
+  softball
+  flag_football
+  lacrosse
+  field_hockey
+  track_field
+  speed_agility
+}
+
+enum DifficultyLevel {
+  intro
+  beginner
+  intermediate
+  advanced
+}
+
+enum BlockCategory {
+  warmup
+  drill
+  skill_station
+  scrimmage
+  game
+  mindset
+  leadership
+  team_building
+  cooldown
+  water_break
+  transition
+  other
+}
+
+enum IntensityLevel {
+  low
+  moderate
+  high
+  variable
+}
+
+enum SessionDayStatus {
+  planned
+  in_progress
+  completed
+  cancelled
+}
+
+enum ScheduleBlockType {
+  activity
+  transition
+  break
+  meal
+  arrival
+  departure
+  special
+  curriculum
+}
+
+enum IndoorOutdoor {
+  indoor
+  outdoor
+  both
+}
+
+enum CertificationStatus {
+  pending_review
+  approved
+  rejected
+  expired
+}
+
+enum ShopCategory {
+  apparel
+  gear
+  digital
+  addons
+}
+
+enum OrderStatus {
+  pending
+  paid
+  processing
+  shipped
+  delivered
+  failed
+  cancelled
+  refunded
+}
+
+enum TerritoryStatus {
+  open
+  reserved
+  assigned
+  closed
+}
+
+enum CitApplicationStatus {
+  applied
+  under_review
+  interview_scheduled
+  interview_completed
+  training_pending
+  training_complete
+  approved
+  assigned_first_camp
+  rejected
+  on_hold
+  withdrawn
+}
+
+enum CitProgressEventType {
+  status_change
+  note_added
+  interview_scheduled
+  interview_completed
+  training_started
+  training_completed
+  camp_assigned
+  document_uploaded
+  application_submitted
+}
+
+enum TeamColor {
+  pink
+  purple
+}
+
+enum PortalType {
+  OPERATIONAL
+  BUSINESS
+  SKILL_STATION
+}
+
+enum VideoProvider {
+  YOUTUBE
+  VIMEO
+  EMBED
+}
+
+enum EmpowerUProgressStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum QuestionType {
+  MULTIPLE_CHOICE
+  TRUE_FALSE
+  SHORT_ANSWER
+}
+
+enum ContributionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  REVISION_REQUESTED
+}
+
+enum CompensationPlanCode {
+  HIGH
+  MID
+  ENTRY
+  FIXED
+}
+
+enum ContactSubmissionStatus {
+  new
+  read
+  replied
+  archived
+}
+
+enum TestimonyStatus {
+  pending_review
+  approved
+  rejected
+  archived
+}
+
+enum TestimonyRole {
+  parent
+  athlete
+  coach
+  licensee
+  cit
+  volunteer
+  other
+}
+
+enum TestimonySourceType {
+  submitted
+  imported
+  internal
+}
+
+enum LicenseeApplicationStatus {
+  submitted
+  under_review
+  contacted
+  interview_scheduled
+  interview_completed
+  approved
+  rejected
+  withdrawn
+}
+
+enum JobStatus {
+  draft
+  open
+  closed
+  archived
+}
+
+enum EmploymentType {
+  seasonal
+  part_time
+  full_time
+  internship
+  contract
+}
+
+enum CampDayStatus {
+  not_started
+  in_progress
+  finished
+}
+
+enum AttendanceStatus {
+  not_arrived
+  checked_in
+  checked_out
+  absent
+}
+
+enum CheckMethod {
+  qr
+  manual
+}
+
+enum IncidentSeverity {
+  low
+  medium
+  high
+  critical
+}
+
+enum RoyaltyInvoiceStatus {
+  pending
+  invoiced
+  paid
+  overdue
+  disputed
+  waived
+}
+
+enum RoyaltyPeriodType {
+  camp_session
+  weekly
+  monthly
+  quarterly
+}
+
+enum PdfReportType {
+  session_report
+  camp_day_report
+  curriculum_export
+  roster_export
+  financial_summary
+}
+
+enum StaffRequestStatus {
+  pending
+  accepted
+  declined
+}
+
+enum NotificationType {
+  licensee_application_created
+  licensee_application_status_changed
+  cit_application_created
+  cit_application_status_changed
+  camp_registration_completed
+  payment_confirmed
+  camp_reminder
+  schedule_changed
+  camp_day_status_changed
+  camp_day_recap_submitted
+  camp_day_incident_logged
+  grouping_alert
+  incentive_earned
+  compensation_finalized
+  lms_module_assigned
+  lms_module_completed
+  lms_quiz_passed
+  lms_portal_unlocked
+  message_received
+  royalty_invoice_created
+  royalty_invoice_status_changed
+  royalty_invoice_overdue
+  job_posted
+  job_application_status_changed
+  certification_approved
+  certification_rejected
+  certification_expiring
+  system_alert
+  welcome
+  testimony_submitted
+  testimony_approved
+  testimony_rejected
+  squad_invite_received
+  squad_invite_accepted
+  squad_invite_declined
+  camp_shared
+  staff_assignment_request_received
+  staff_assignment_request_accepted
+  staff_assignment_request_declined
+}
+
+enum NotificationCategory {
+  licensee
+  camp
+  lms
+  message
+  royalty
+  incentive
+  job
+  certification
+  system
+  marketing
+}
+
+enum NotificationSeverity {
+  info
+  success
+  warning
+  error
+}
+
+enum MessageThreadType {
+  licensee_director
+  director_parent
+  director_staff
+  admin_licensee
+  support
+  general
+}
+
+enum CurriculumSubmissionStatus {
+  draft
+  submitted
+  under_review
+  approved
+  rejected
+  revision_requested
+}
+
+enum ComplaintSeverity {
+  low
+  medium
+  high
+  critical
+}
+
+enum ComplaintStatus {
+  open
+  investigating
+  resolved
+  dismissed
+}
+
+enum SquadMemberStatus {
+  requested
+  accepted
+  declined
+  removed
+}
+
+enum EmailType {
+  registration_confirmation
+  camp_two_weeks_out
+  camp_two_days_before
+  camp_daily_recap
+  camp_session_recap
+  season_followup_jan
+  season_followup_feb
+  season_followup_mar
+  season_followup_apr
+  season_followup_may
+  camp_confirmation
+  camp_reminder
+  daily_recap
+  post_camp
+  staff_message
+  password_reset
+  welcome
+  payment_receipt
+  payment_failed
+  licensee_application
+  licensee_status_update
+  cit_application
+  cit_status_update
+  royalty_invoice
+  royalty_status_update
+  system_alert
+  broadcast
+}
+
+enum EmailStatus {
+  sent
+  failed
+  bounced
+  delivered
+}
+
+enum InviteStatus {
+  pending
+  accepted
+  expired
+  revoked
+}
+
+enum FacilityType {
+  school
+  park
+  sports_complex
+  private_gym
+  community_center
+  recreation_center
+  other
+}
+
+enum VenueContractStatus {
+  draft
+  sent
+  signed
+  expired
+}
+
+enum SettingScope {
+  GLOBAL
+  TENANT
+}
+
+enum SettingValueType {
+  STRING
+  NUMBER
+  BOOLEAN
+  JSON
+}
+
+enum SettingAuditSource {
+  ADMIN_UI
+  LICENSEE_UI
+  API
+  SYSTEM
+}
+
+enum WaiverSigningStatus {
+  pending
+  signed
+  expired
+  declined
+}

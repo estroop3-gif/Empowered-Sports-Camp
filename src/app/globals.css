@@ -1,0 +1,311 @@
+@import "tailwindcss";
+
+/*
+ * EMPOWERED ATHLETES BRAND SYSTEM
+ * Based on official brand book
+ *
+ * Identity: Fierce, hype, esports-level energy for girls sports
+ * Not corporate - bold, powerful, aspirational
+ */
+
+@theme inline {
+  /* ===== BRAND FONTS ===== */
+  --font-display: "Helvetica Now Display", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-sans: "Poppins", ui-sans-serif, system-ui, sans-serif;
+
+  /* ===== CORE BRAND COLORS ===== */
+
+  /* Neon Green - ELECTRIC FLUORESCENT (Jumping off the page!) */
+  --color-neon: #CCFF00;
+  --color-neon-50: #FDFFE6;
+  --color-neon-100: #F5FFBF;
+  --color-neon-200: #EEFF8C;
+  --color-neon-300: #E0FF4D;
+  --color-neon-400: #D6FF1A;
+  --color-neon-500: #CCFF00;
+  --color-neon-600: #A3CC00;
+  --color-neon-700: #7A9900;
+  --color-neon-800: #526600;
+  --color-neon-900: #293300;
+
+  /* Black - Main Grounding Color */
+  --color-black: #000000;
+  --color-dark: #0A0A0A;
+  --color-dark-100: #1A1A1A;
+  --color-dark-200: #2A2A2A;
+  --color-dark-300: #3A3A3A;
+  --color-dark-400: #4A4A4A;
+
+  /* Hot Magenta - Bold Accent */
+  --color-magenta: #FF2DCE;
+  --color-magenta-50: #FFF0FB;
+  --color-magenta-100: #FFE0F7;
+  --color-magenta-200: #FFC2EF;
+  --color-magenta-300: #FF94E3;
+  --color-magenta-400: #FF5CD6;
+  --color-magenta-500: #FF2DCE;
+  --color-magenta-600: #E600B3;
+  --color-magenta-700: #B3008C;
+  --color-magenta-800: #800064;
+  --color-magenta-900: #4D003C;
+
+  /* Electric Purple - Bold Accent */
+  --color-purple: #6F00D8;
+  --color-purple-50: #F3E8FF;
+  --color-purple-100: #E9D5FF;
+  --color-purple-200: #D8B4FE;
+  --color-purple-300: #C084FC;
+  --color-purple-400: #A855F7;
+  --color-purple-500: #6F00D8;
+  --color-purple-600: #5800AD;
+  --color-purple-700: #420082;
+  --color-purple-800: #2C0057;
+  --color-purple-900: #16002B;
+
+  /* White & Grays */
+  --color-white: #FFFFFF;
+  --color-gray-50: #FAFAFA;
+  --color-gray-100: #F4F4F5;
+  --color-gray-200: #E4E4E7;
+  --color-gray-300: #D4D4D8;
+  --color-gray-400: #A1A1AA;
+  --color-gray-500: #71717A;
+  --color-gray-600: #52525B;
+  --color-gray-700: #3F3F46;
+  --color-gray-800: #27272A;
+  --color-gray-900: #18181B;
+
+  /* Semantic Colors */
+  --color-success: #22C55E;
+  --color-warning: #F59E0B;
+  --color-error: #EF4444;
+}
+
+/* ===== BASE STYLES ===== */
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: var(--color-black);
+  color: var(--color-white);
+}
+
+/* ===== TYPOGRAPHY UTILITIES ===== */
+
+/* Headlines - Helvetica Now, ALL CAPS, Bold */
+.headline-display {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  line-height: 0.95;
+}
+
+.headline-xl {
+  font-size: clamp(2.25rem, 7vw, 6rem);
+}
+
+.headline-lg {
+  font-size: clamp(1.875rem, 5vw, 4.5rem);
+}
+
+.headline-md {
+  font-size: clamp(1.5rem, 4vw, 3rem);
+}
+
+.headline-sm {
+  font-size: clamp(1.25rem, 3vw, 2rem);
+}
+
+/* ===== BRAND GRADIENTS ===== */
+.bg-brand-gradient {
+  background: linear-gradient(135deg, var(--color-neon) 0%, var(--color-magenta) 100%);
+}
+
+.bg-brand-gradient-purple {
+  background: linear-gradient(135deg, var(--color-purple) 0%, var(--color-magenta) 100%);
+}
+
+.bg-brand-gradient-dark {
+  background: linear-gradient(180deg, var(--color-dark) 0%, var(--color-black) 100%);
+}
+
+/* Rainbow gradient - full spectrum */
+.bg-rainbow-gradient {
+  background: linear-gradient(135deg, var(--color-neon) 0%, var(--color-magenta) 50%, var(--color-purple) 100%);
+}
+
+.bg-rainbow-gradient-horizontal {
+  background: linear-gradient(90deg, var(--color-neon) 0%, var(--color-magenta) 50%, var(--color-purple) 100%);
+}
+
+/* Faded rainbow overlay - subtle wash effect */
+.bg-rainbow-fade {
+  background: linear-gradient(135deg,
+    rgba(204, 255, 0, 0.15) 0%,
+    rgba(255, 45, 206, 0.1) 50%,
+    rgba(111, 0, 216, 0.15) 100%
+  );
+}
+
+.bg-rainbow-fade-strong {
+  background: linear-gradient(135deg,
+    rgba(204, 255, 0, 0.25) 0%,
+    rgba(255, 45, 206, 0.15) 50%,
+    rgba(111, 0, 216, 0.25) 100%
+  );
+}
+
+/* Vertical rainbow fade */
+.bg-rainbow-fade-vertical {
+  background: linear-gradient(180deg,
+    rgba(204, 255, 0, 0.2) 0%,
+    rgba(255, 45, 206, 0.1) 50%,
+    rgba(111, 0, 216, 0.2) 100%
+  );
+}
+
+.text-neon-gradient {
+  background: linear-gradient(135deg, var(--color-neon) 0%, #E5FF66 50%, var(--color-neon) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.text-magenta-gradient {
+  background: linear-gradient(135deg, var(--color-magenta) 0%, var(--color-purple) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ===== NEON GLOW EFFECTS ===== */
+.glow-neon {
+  box-shadow: 0 0 20px rgba(204, 255, 0, 0.6), 0 0 40px rgba(204, 255, 0, 0.4), 0 0 60px rgba(204, 255, 0, 0.2);
+}
+
+.glow-magenta {
+  box-shadow: 0 0 20px rgba(255, 45, 206, 0.6), 0 0 40px rgba(255, 45, 206, 0.4), 0 0 60px rgba(255, 45, 206, 0.2);
+}
+
+.glow-purple {
+  box-shadow: 0 0 20px rgba(111, 0, 216, 0.6), 0 0 40px rgba(111, 0, 216, 0.4), 0 0 60px rgba(111, 0, 216, 0.2);
+}
+
+.text-glow-neon {
+  text-shadow: 0 0 10px rgba(204, 255, 0, 1), 0 0 20px rgba(204, 255, 0, 0.8), 0 0 40px rgba(204, 255, 0, 0.5), 0 0 80px rgba(204, 255, 0, 0.3);
+}
+
+.text-glow-magenta {
+  text-shadow: 0 0 10px rgba(255, 45, 206, 1), 0 0 20px rgba(255, 45, 206, 0.8), 0 0 40px rgba(255, 45, 206, 0.5);
+}
+
+/* ===== DIAGONAL CLIP PATHS ===== */
+.clip-diagonal-top {
+  clip-path: polygon(0 5%, 100% 0, 100% 100%, 0 100%);
+}
+
+.clip-diagonal-bottom {
+  clip-path: polygon(0 0, 100% 0, 100% 95%, 0 100%);
+}
+
+.clip-diagonal-both {
+  clip-path: polygon(0 5%, 100% 0, 100% 95%, 0 100%);
+}
+
+/* ===== FOCUS & SELECTION ===== */
+*:focus-visible {
+  outline: 3px solid var(--color-neon);
+  outline-offset: 2px;
+}
+
+::selection {
+  background-color: var(--color-neon);
+  color: var(--color-black);
+}
+
+/* ===== SCROLLBAR STYLING ===== */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-dark);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-dark-300);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-neon);
+}
+
+/* ===== BRAND PATTERN - Crown/Lightning Motif ===== */
+.pattern-crown {
+  background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M30 10 L35 25 L45 15 L40 30 L50 35 L35 35 L30 50 L25 35 L10 35 L20 30 L15 15 L25 25 Z' fill='%23CCFF00' fill-opacity='0.05'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+}
+
+.pattern-lightning {
+  background-image: url("data:image/svg+xml,%3Csvg width='40' height='60' viewBox='0 0 40 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M25 0 L10 25 L20 25 L15 60 L30 35 L20 35 Z' fill='%23FF2DCE' fill-opacity='0.03'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+}
+
+/* ===== ANIMATIONS ===== */
+@keyframes pulse-neon {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(204, 255, 0, 0.6), 0 0 40px rgba(204, 255, 0, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 40px rgba(204, 255, 0, 1), 0 0 80px rgba(204, 255, 0, 0.6), 0 0 120px rgba(204, 255, 0, 0.3);
+  }
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-pulse-neon {
+  animation: pulse-neon 2s ease-in-out infinite;
+}
+
+.animate-slide-up {
+  animation: slide-up 0.6s ease-out forwards;
+}
+
+/* ===== DATE/TIME INPUT STYLING ===== */
+/* Make calendar/clock icons visible on dark backgrounds */
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator:hover,
+input[type="time"]::-webkit-calendar-picker-indicator:hover,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
+
+/* Firefox date/time inputs */
+input[type="date"],
+input[type="time"],
+input[type="datetime-local"] {
+  color-scheme: dark;
+}
