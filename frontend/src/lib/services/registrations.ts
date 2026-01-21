@@ -302,6 +302,28 @@ export async function createRegistration(params: {
 
     const totalPriceCents = basePriceCents - discountCents - promoDiscountCents + addonsTotalCents + taxCents
 
+    // Check if athlete is already registered for this camp
+    const existingRegistration = await prisma.registration.findFirst({
+      where: {
+        campId,
+        athleteId,
+        status: { not: 'cancelled' },
+      },
+      include: {
+        athlete: { select: { firstName: true, lastName: true } },
+      },
+    })
+
+    if (existingRegistration) {
+      const athleteName = existingRegistration.athlete
+        ? `${existingRegistration.athlete.firstName} ${existingRegistration.athlete.lastName}`
+        : 'This athlete'
+      return {
+        data: null,
+        error: new Error(`${athleteName} is already registered for this camp.`),
+      }
+    }
+
     const registration = await prisma.registration.create({
       data: {
         tenantId,

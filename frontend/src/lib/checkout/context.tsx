@@ -6,6 +6,7 @@ import {
   useReducer,
   useCallback,
   useMemo,
+  useEffect,
   ReactNode,
 } from 'react'
 import type {
@@ -432,8 +433,88 @@ const CheckoutContext = createContext<CheckoutContextValue | undefined>(undefine
 
 const STEP_ORDER: CheckoutStep[] = ['camp', 'campers', 'squad', 'addons', 'waivers', 'account', 'payment', 'confirmation']
 
-export function CheckoutProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(checkoutReducer, initialState)
+// Storage key for checkout state
+const CHECKOUT_STORAGE_KEY = 'empowered-checkout-state'
+
+// Load state from localStorage
+function loadPersistedState(): CheckoutState | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const saved = localStorage.getItem(CHECKOUT_STORAGE_KEY)
+    if (!saved) return null
+
+    const parsed = JSON.parse(saved)
+
+    // Check if the saved state is expired (older than 24 hours)
+    if (parsed._savedAt) {
+      const savedAt = new Date(parsed._savedAt).getTime()
+      const now = Date.now()
+      const hoursSinceSave = (now - savedAt) / (1000 * 60 * 60)
+      if (hoursSinceSave > 24) {
+        localStorage.removeItem(CHECKOUT_STORAGE_KEY)
+        return null
+      }
+    }
+
+    // Remove metadata before returning
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { _savedAt, ...state } = parsed
+    return state as CheckoutState
+  } catch (e) {
+    console.error('[Checkout] Failed to load persisted state:', e)
+    return null
+  }
+}
+
+// Save state to localStorage
+function persistState(state: CheckoutState) {
+  if (typeof window === 'undefined') return
+  try {
+    // Don't persist if we're on the confirmation step (checkout complete)
+    if (state.step === 'confirmation') {
+      localStorage.removeItem(CHECKOUT_STORAGE_KEY)
+      return
+    }
+
+    const toSave = {
+      ...state,
+      _savedAt: new Date().toISOString(),
+    }
+    localStorage.setItem(CHECKOUT_STORAGE_KEY, JSON.stringify(toSave))
+  } catch (e) {
+    console.error('[Checkout] Failed to persist state:', e)
+  }
+}
+
+interface CheckoutProviderProps {
+  children: ReactNode
+  campSlug?: string // Pass the current camp slug to validate persisted state
+}
+
+export function CheckoutProvider({ children, campSlug }: CheckoutProviderProps) {
+  // Initialize with persisted state if available and matches current camp
+  const [state, dispatch] = useReducer(
+    checkoutReducer,
+    initialState,
+    (initial) => {
+      const persisted = loadPersistedState()
+      if (!persisted) return initial
+
+      // If we have a campSlug and the persisted state is for a different camp, start fresh
+      if (campSlug && persisted.campSession?.slug && persisted.campSession.slug !== campSlug) {
+        console.log('[Checkout] Persisted state is for different camp, starting fresh')
+        localStorage.removeItem(CHECKOUT_STORAGE_KEY)
+        return initial
+      }
+
+      return persisted
+    }
+  )
+
+  // Persist state changes to localStorage
+  useEffect(() => {
+    persistState(state)
+  }, [state])
 
   // Calculate totals
   const totals = useMemo((): CheckoutTotals => {
@@ -486,10 +567,16 @@ export function CheckoutProvider({ children }: { children: ReactNode }) {
     }
   }, [state.campSession, state.campers, state.selectedAddOns, state.promoCode])
 
-  // Scroll to top helper
+  // Scroll to top helper - scroll after DOM updates for step transitions
   const scrollToTop = useCallback(() => {
     if (typeof window !== 'undefined') {
-      window.scrollTo({ top: 0, behavior: 'smooth' })
+      // Use requestAnimationFrame to ensure scroll happens after React renders new content
+      requestAnimationFrame(() => {
+        window.scrollTo(0, 0)
+        // Also scroll document element as fallback for different browsers
+        document.documentElement.scrollTop = 0
+        document.body.scrollTop = 0
+      })
     }
   }, [])
 
@@ -644,6 +731,10 @@ export function CheckoutProvider({ children }: { children: ReactNode }) {
   // Reset
   const reset = useCallback(() => {
     dispatch({ type: 'RESET' })
+    // Clear persisted state
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(CHECKOUT_STORAGE_KEY)
+    }
   }, [])
 
   const value: CheckoutContextValue = {

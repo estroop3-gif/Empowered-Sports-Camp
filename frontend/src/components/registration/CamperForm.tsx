@@ -23,6 +23,7 @@ import type { CamperFormData, CampSession } from '@/types/registration'
 interface CamperFormProps {
   campSession: CampSession | null
   onContinue: () => void
+  onBack?: () => void
 }
 
 const GRADES = [
@@ -447,7 +448,7 @@ function CamperCard({
   )
 }
 
-export function CamperForm({ campSession, onContinue }: CamperFormProps) {
+export function CamperForm({ campSession, onContinue, onBack }: CamperFormProps) {
   const { user } = useAuth()
   const {
     state,
@@ -901,19 +902,31 @@ export function CamperForm({ campSession, onContinue }: CamperFormProps) {
         )}
       </div>
 
-      {/* Continue Button */}
-      <div className="pt-6">
-        <Button
-          variant="neon"
-          size="lg"
-          className="w-full"
-          onClick={onContinue}
-          disabled={!canProceed()}
-        >
-          Continue to Her Squad
-        </Button>
+      {/* Navigation Buttons */}
+      <div className="pt-6 space-y-4">
+        <div className="flex gap-4">
+          {onBack && (
+            <Button
+              variant="outline-neon"
+              size="lg"
+              className="flex-1"
+              onClick={onBack}
+            >
+              Back
+            </Button>
+          )}
+          <Button
+            variant="neon"
+            size="lg"
+            className={onBack ? "flex-1" : "w-full"}
+            onClick={onContinue}
+            disabled={!canProceed()}
+          >
+            Continue to Her Squad
+          </Button>
+        </div>
         {!canProceed() && (
-          <p className="text-xs text-white/40 text-center mt-2">
+          <p className="text-xs text-white/40 text-center">
             Please complete all required fields marked with *
           </p>
         )}

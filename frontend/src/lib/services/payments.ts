@@ -66,7 +66,11 @@ const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || ''
  * Check if Stripe is properly configured
  */
 export function isStripeConfigured(): boolean {
-  return !!STRIPE_SECRET_KEY && STRIPE_SECRET_KEY.startsWith('sk_')
+  // Accept standard Stripe keys (sk_), organization keys (sk_org_), and restricted keys (rk_)
+  return !!STRIPE_SECRET_KEY && (
+    STRIPE_SECRET_KEY.startsWith('sk_') ||
+    STRIPE_SECRET_KEY.startsWith('rk_')
+  )
 }
 
 // Initialize Stripe SDK (lazy initialization)
@@ -81,7 +85,7 @@ function getStripe(): Stripe {
       )
     }
     stripeInstance = new Stripe(STRIPE_SECRET_KEY, {
-      apiVersion: '2025-11-17.clover',
+      apiVersion: '2025-12-15.clover',
     })
   }
   return stripeInstance
