@@ -7,7 +7,7 @@
 -- 3. Volunteer certifications table
 -- 4. LMS modules and progress tables (minimal)
 --
--- RUN THIS IN: Supabase SQL Editor
+-- NOTE: This is a reference schema file. Use Prisma migrations for actual DB changes.
 -- ============================================================================
 
 -- ============================================================================
@@ -48,7 +48,7 @@ CREATE TABLE IF NOT EXISTS volunteer_certifications (
   profile_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
 
   -- Document details
-  document_url TEXT NOT NULL,  -- Supabase Storage URL
+  document_url TEXT NOT NULL,  -- S3 Storage URL
   document_type TEXT NOT NULL, -- 'background_check', 'concussion_training', 'cpr_first_aid', 'other'
   document_name TEXT,          -- Original filename for display
 

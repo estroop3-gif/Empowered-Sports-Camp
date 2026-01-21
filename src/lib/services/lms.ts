@@ -2,7 +2,6 @@
  * LMS Service
  *
  * Prisma-based service for LMS modules and progress tracking.
- * Replaces Supabase queries for LMS functionality.
  */
 
 import prisma from '@/lib/db/client'

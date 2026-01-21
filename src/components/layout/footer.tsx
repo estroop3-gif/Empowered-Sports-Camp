@@ -69,6 +69,7 @@ export function Footer() {
                   src="/images/logo.png"
                   alt="Empowered Athletes"
                   fill
+                  sizes="48px"
                   className="object-contain"
                 />
               </div>

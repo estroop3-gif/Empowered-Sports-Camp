@@ -214,7 +214,7 @@ body {
 }
 
 .clip-diagonal-both {
-  clip-path: polygon(0 5%, 100% 0, 100% 95%, 0 100%);
+  clip-path: polygon(0 2%, 100% 0, 100% 98%, 0 100%);
 }
 
 /* ===== FOCUS & SELECTION ===== */

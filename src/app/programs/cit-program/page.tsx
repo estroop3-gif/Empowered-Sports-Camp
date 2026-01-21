@@ -41,6 +41,8 @@ export default function CITProgramPage() {
         titleAccent="Welcome"
         accentColor="magenta"
         imagePosition="left"
+        imageSrc="https://empowered-sports-camp-new.s3.us-east-2.amazonaws.com/cit/cit-future-leaders.jpg"
+        imageAlt="CIT Program - Future Leaders"
         content={
           <>
             <p>

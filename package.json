@@ -21,8 +21,6 @@
     "@prisma/adapter-pg": "^6.0.0",
     "@prisma/client": "^6.0.0",
     "@stripe/stripe-js": "^8.5.3",
-    "@supabase/ssr": "^0.8.0",
-    "@supabase/supabase-js": "^2.87.1",
     "amazon-cognito-identity-js": "^6.3.16",
     "aws-jwt-verify": "^5.1.1",
     "class-variance-authority": "^0.7.1",
@@ -43,6 +41,7 @@
     "tailwind-merge": "^3.4.0"
   },
   "devDependencies": {
+    "@aws-sdk/client-amplify": "^3.971.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/pg": "^8.16.0",

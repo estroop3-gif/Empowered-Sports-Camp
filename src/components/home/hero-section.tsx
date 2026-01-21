@@ -1,6 +1,7 @@
 import Link from 'next/link'
+import Image from 'next/image'
 import { Button } from '@/components/ui/button'
-import { ArrowRight, Play, Zap, Crown } from 'lucide-react'
+import { ArrowRight, Play, Zap } from 'lucide-react'
 
 /**
  * Hero Section - Empowered Athletes Brand
@@ -109,30 +110,32 @@ export function HeroSection() {
             {/* Main container with diagonal clip */}
             <div className="relative clip-diagonal-both">
               <div className="aspect-[4/5] overflow-hidden bg-gradient-to-br from-dark-100 to-black border border-white/10">
-                {/* Image placeholder */}
-                <div className="flex h-full flex-col items-center justify-center p-8 text-center">
-                  <div className="h-24 w-24 flex items-center justify-center mb-6">
-                    <Crown className="h-20 w-20 text-neon/30" />
-                  </div>
-                  <p className="text-white/30 text-sm uppercase tracking-wider">Action photo of athletes</p>
-                </div>
+                {/* Hero Image */}
+                <Image
+                  src="https://empowered-sports-camp-new.s3.us-east-2.amazonaws.com/hero/hero-volleyball.jpg"
+                  alt="Empowered Athletes - She Breaks Limits With Fearless Grace"
+                  fill
+                  className="object-cover object-center"
+                  priority
+                  sizes="(max-width: 1024px) 100vw, 50vw"
+                />
               </div>
             </div>
 
-            {/* Floating card - dark style */}
-            <div className="absolute -left-8 bottom-24 max-w-xs bg-black/90 border border-neon/30 p-6 backdrop-blur-sm shadow-[0_0_30px_rgba(147,205,1,0.2)]">
-              <div className="flex items-start gap-4">
+            {/* Floating card - positioned at middle right */}
+            <div className="absolute -right-6 top-1/2 -translate-y-1/2 max-w-[200px] bg-black/90 border border-neon/30 p-4 backdrop-blur-sm shadow-[0_0_30px_rgba(147,205,1,0.2)]">
+              <div className="flex items-start gap-3">
                 <div className="flex-shrink-0">
-                  <div className="h-12 w-12 bg-neon flex items-center justify-center">
-                    <span className="text-lg font-black text-black">S</span>
+                  <div className="h-9 w-9 bg-neon flex items-center justify-center">
+                    <span className="text-sm font-black text-black">S</span>
                   </div>
                 </div>
                 <div>
-                  <p className="text-white/80 text-sm leading-relaxed">
-                    "My daughter found her confidence here. She went from shy to team captain!"
+                  <p className="text-white/80 text-xs leading-relaxed">
+                    &ldquo;My daughter found her confidence here. She went from shy to team captain!&rdquo;
                   </p>
-                  <p className="mt-3 text-xs font-bold uppercase tracking-wider text-neon">Sarah M.</p>
-                  <p className="text-xs text-white/40 uppercase tracking-wider">Camp Parent</p>
+                  <p className="mt-2 text-[10px] font-bold uppercase tracking-wider text-neon">Sarah M.</p>
+                  <p className="text-[10px] text-white/40 uppercase tracking-wider">Camp Parent</p>
                 </div>
               </div>
             </div>

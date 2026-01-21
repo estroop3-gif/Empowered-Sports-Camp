@@ -16,10 +16,10 @@ import { Loader2 } from 'lucide-react'
  * SECURITY NOTE:
  * This only affects navigation/UI. The actual route protection is handled by:
  * - Middleware (checks real role from user_roles table)
- * - Supabase RLS policies (use real user identity)
+ * - Application-level authorization (use real user identity)
  *
  * Even if an admin is "viewing as parent", they still have admin-level
- * data access because their real Supabase session is unchanged.
+ * data access because their real session is unchanged.
  */
 
 interface RoleDashboardRouterProps {

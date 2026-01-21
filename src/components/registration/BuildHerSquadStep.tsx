@@ -463,10 +463,10 @@ export function BuildHerSquadStep({
                 displayName = formatPrivacyName(camper.athleteFirstName, camper.athleteLastName)
                 initial = camper.athleteLastName.charAt(0)
               } else if (camper.athleteName.includes(' ')) {
-                // Parse "First Last" format
+                // Parse "First [Middle] Last" format - use only first and last parts
                 const parts = camper.athleteName.split(' ')
                 const firstName = parts[0]
-                const lastName = parts.slice(1).join(' ')
+                const lastName = parts[parts.length - 1] // Only the actual last name
                 displayName = formatPrivacyName(firstName, lastName)
                 initial = lastName.charAt(0)
               }

@@ -1,10 +1,11 @@
 /**
  * About Mission Section
  *
- * Two-column layout with mission statement and image placeholder.
+ * Two-column layout with mission statement and image.
  */
 
-import { Target, Crown } from 'lucide-react'
+import Image from 'next/image'
+import { Target } from 'lucide-react'
 
 export default function AboutMission() {
   return (
@@ -41,21 +42,16 @@ export default function AboutMission() {
             </div>
           </div>
 
-          {/* Image placeholder */}
+          {/* Image */}
           <div className="relative">
-            <div className="aspect-[4/3] bg-dark-100 border border-white/10 flex items-center justify-center relative overflow-hidden">
-              {/* Decorative elements */}
-              <div className="absolute inset-0 bg-gradient-to-br from-neon/5 via-transparent to-magenta/5" />
-              <div className="absolute -bottom-4 -right-4 w-32 h-32 bg-neon/10 rounded-full blur-[60px]" />
-              <div className="absolute -top-4 -left-4 w-24 h-24 bg-purple/10 rounded-full blur-[40px]" />
-
-              {/* Placeholder content */}
-              <div className="relative flex flex-col items-center gap-4 text-white/30">
-                <Crown className="h-16 w-16" />
-                <span className="text-xs font-bold uppercase tracking-widest">
-                  Photo Coming Soon
-                </span>
-              </div>
+            <div className="aspect-[4/3] bg-dark-100 border border-white/10 relative overflow-hidden">
+              <Image
+                src="https://empowered-sports-camp-new.s3.us-east-2.amazonaws.com/about/female-leaders.png"
+                alt="Building The Next Generation Of Female Leaders"
+                fill
+                className="object-cover"
+                sizes="(max-width: 1024px) 100vw, 50vw"
+              />
 
               {/* Corner accent */}
               <div className="absolute top-0 left-0 w-16 h-1 bg-neon" />

@@ -16,6 +16,7 @@ const poppins = Poppins({
 })
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_BASE_URL || 'https://www.empoweredsportscamp.com'),
   title: {
     default: "Empowered Sports Camp | Building Confidence Through Sports",
     template: "%s | Empowered Sports Camp",

@@ -2,7 +2,6 @@
  * Licensees Service (Prisma)
  *
  * Handles all database operations for licensee management.
- * Migrated from Supabase to Prisma.
  */
 
 import prisma from '@/lib/db/client'

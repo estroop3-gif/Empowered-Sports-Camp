@@ -342,13 +342,12 @@ export function PaymentStep({ onComplete, onBack }: PaymentStepProps) {
   const [error, setError] = useState<string | null>(null)
   const [isDevMode, setIsDevMode] = useState(false)
 
-  // Check if we're in developer mode (no Stripe key or NODE_ENV is development)
+  // Check if we're in developer mode - only if explicitly set
+  // Always use Stripe checkout redirect by default
   useEffect(() => {
-    // In production, we'd check for proper Stripe key
-    // For now, enable dev mode if NEXT_PUBLIC_STRIPE_KEY is not set or starts with pk_test
-    const stripeKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || ''
-    const isDev = !stripeKey || stripeKey.startsWith('pk_test') || process.env.NODE_ENV === 'development'
-    setIsDevMode(isDev)
+    // Only use dev mode if NEXT_PUBLIC_USE_MOCK is explicitly true
+    const useMock = process.env.NEXT_PUBLIC_USE_MOCK === 'true'
+    setIsDevMode(useMock)
   }, [])
 
   const handleDevModePayment = async () => {

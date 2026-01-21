@@ -49,6 +49,8 @@ export default function BasketballIntensivePage() {
         title="Competitive"
         titleAccent="Hoopers"
         accentColor="neon"
+        imageSrc="https://empowered-sports-camp-new.s3.us-east-2.amazonaws.com/programs/basketball-hoopers.png"
+        imageAlt="Basketball Intensive - Competitive Hoopers"
         content={
           <>
             <p>

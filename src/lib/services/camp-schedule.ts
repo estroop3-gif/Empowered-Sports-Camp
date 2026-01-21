@@ -2,7 +2,6 @@
  * Camp Schedule Service (Prisma)
  *
  * Handles camp day-by-day scheduling and curriculum assignment.
- * Migrated from Supabase to Prisma.
  */
 
 import prisma from '@/lib/db/client'

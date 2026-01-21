@@ -465,6 +465,8 @@ export function CamperForm({ campSession, onContinue }: CamperFormProps) {
   const [isLoadingProfile, setIsLoadingProfile] = useState(true)
   const [profileLoaded, setProfileLoaded] = useState(false)
   const [isEditingParent, setIsEditingParent] = useState(false)
+  // Track if emergency contact has been explicitly saved (not just filled)
+  const [emergencyContactSaved, setEmergencyContactSaved] = useState(false)
 
   // Fetch user profile and athletes on mount
   useEffect(() => {
@@ -502,6 +504,10 @@ export function CamperForm({ campSession, onContinue }: CamperFormProps) {
               }
               setParentFromProfile(profile)
               setProfileLoaded(true)
+              // If emergency contact is already filled from profile, mark as saved
+              if (data.emergency_contact_name && data.emergency_contact_phone && data.emergency_contact_relationship) {
+                setEmergencyContactSaved(true)
+              }
             }
           }
         }
@@ -637,10 +643,19 @@ export function CamperForm({ campSession, onContinue }: CamperFormProps) {
                   </div>
                 )}
               </div>
-              {/* Show emergency contact if already filled */}
-              {state.parentInfo.emergencyContactName && state.parentInfo.emergencyContactPhone && (
+              {/* Show emergency contact if saved */}
+              {emergencyContactSaved && state.parentInfo.emergencyContactName && state.parentInfo.emergencyContactPhone && (
                 <div className="pt-4 border-t border-white/10">
-                  <p className="text-xs text-white/50 uppercase tracking-wider mb-2">Emergency Contact</p>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs text-white/50 uppercase tracking-wider">Emergency Contact</p>
+                    <button
+                      onClick={() => setEmergencyContactSaved(false)}
+                      className="flex items-center gap-1 text-xs text-white/60 hover:text-neon transition-colors"
+                    >
+                      <Pencil className="h-3 w-3" />
+                      <span>Edit</span>
+                    </button>
+                  </div>
                   <p className="text-white font-medium">
                     {state.parentInfo.emergencyContactName} ({state.parentInfo.emergencyContactRelationship})
                     <br />
@@ -650,8 +665,8 @@ export function CamperForm({ campSession, onContinue }: CamperFormProps) {
               )}
             </div>
 
-            {/* Emergency Contact - show form if not filled */}
-            {(!state.parentInfo.emergencyContactName || !state.parentInfo.emergencyContactPhone) && (
+            {/* Emergency Contact - show form if not saved yet */}
+            {!emergencyContactSaved && (
               <div className="pt-4 border-t border-white/10">
                 <div className="flex items-center gap-2 mb-4">
                   <Phone className="h-4 w-4 text-magenta" />
@@ -684,6 +699,19 @@ export function CamperForm({ campSession, onContinue }: CamperFormProps) {
                     placeholder="e.g., Grandmother"
                   />
                 </div>
+                {/* Save button - only show if all fields are filled */}
+                {state.parentInfo.emergencyContactName && state.parentInfo.emergencyContactPhone && state.parentInfo.emergencyContactRelationship && (
+                  <div className="mt-4">
+                    <Button
+                      variant="outline-white"
+                      size="sm"
+                      onClick={() => setEmergencyContactSaved(true)}
+                    >
+                      <CheckCircle2 className="h-4 w-4 mr-2" />
+                      Save Emergency Contact
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
 
