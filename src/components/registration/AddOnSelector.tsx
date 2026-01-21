@@ -48,8 +48,11 @@ function AddOnCard({ addon, campers }: AddOnCardProps) {
   const [selectedVariant, setSelectedVariant] = useState<AddOnVariant | null>(
     addon.variants.length === 1 ? addon.variants[0] : null
   )
-  const [selectedCamper, setSelectedCamper] = useState<string | null>(
-    addon.scope === 'per_order' || campers.length === 1 ? (campers[0]?.id ?? null) : null
+  // Support multiple camper selection
+  const [selectedCampers, setSelectedCampers] = useState<string[]>(
+    addon.scope === 'per_order' || campers.length === 1
+      ? (campers[0]?.id ? [campers[0].id] : [])
+      : []
   )
 
   const hasVariants = addon.variants.length > 0
@@ -57,33 +60,74 @@ function AddOnCard({ addon, campers }: AddOnCardProps) {
   const needsCamperSelection = addon.scope === 'per_camper' && campers.length > 1
 
   const currentPrice = selectedVariant?.priceOverride ?? addon.price
-  const currentQuantity = getAddOnQuantity(
-    addon.id,
-    selectedVariant?.id ?? null,
-    addon.scope === 'per_order' ? null : selectedCamper
-  )
 
-  const handleAdd = () => {
-    if (needsVariant && !selectedVariant) return
-    if (needsCamperSelection && !selectedCamper) return
+  // Get total quantity across all selected campers
+  const getTotalQuantity = () => {
+    if (addon.scope === 'per_order') {
+      return getAddOnQuantity(addon.id, selectedVariant?.id ?? null, null)
+    }
+    return selectedCampers.reduce((total, camperId) => {
+      return total + getAddOnQuantity(addon.id, selectedVariant?.id ?? null, camperId)
+    }, 0)
+  }
 
-    addAddOn({
-      addonId: addon.id,
-      variantId: selectedVariant?.id ?? null,
-      camperId: addon.scope === 'per_order' ? null : selectedCamper,
-      quantity: 1,
-      unitPrice: currentPrice,
+  const currentQuantity = getTotalQuantity()
+
+  // Toggle camper selection
+  const toggleCamperSelection = (camperId: string) => {
+    setSelectedCampers(prev => {
+      if (prev.includes(camperId)) {
+        return prev.filter(id => id !== camperId)
+      } else {
+        return [...prev, camperId]
+      }
     })
   }
 
+  // Select all campers
+  const selectAllCampers = () => {
+    setSelectedCampers(campers.map(c => c.id))
+  }
+
+  const handleAdd = () => {
+    if (needsVariant && !selectedVariant) return
+    if (needsCamperSelection && selectedCampers.length === 0) return
+
+    // For per_order items, add once with null camperId
+    if (addon.scope === 'per_order') {
+      addAddOn({
+        addonId: addon.id,
+        variantId: selectedVariant?.id ?? null,
+        camperId: null,
+        quantity: 1,
+        unitPrice: currentPrice,
+      })
+    } else {
+      // For per_camper items, add for each selected camper
+      selectedCampers.forEach(camperId => {
+        addAddOn({
+          addonId: addon.id,
+          variantId: selectedVariant?.id ?? null,
+          camperId: camperId,
+          quantity: 1,
+          unitPrice: currentPrice,
+        })
+      })
+    }
+  }
+
   const handleQuantityChange = (delta: number) => {
-    const newQuantity = currentQuantity + delta
-    updateAddOnQuantity(
-      addon.id,
-      selectedVariant?.id ?? null,
-      addon.scope === 'per_order' ? null : selectedCamper,
-      newQuantity
-    )
+    if (addon.scope === 'per_order') {
+      const newQuantity = getAddOnQuantity(addon.id, selectedVariant?.id ?? null, null) + delta
+      updateAddOnQuantity(addon.id, selectedVariant?.id ?? null, null, newQuantity)
+    } else {
+      // Update quantity for each selected camper
+      selectedCampers.forEach(camperId => {
+        const camperQuantity = getAddOnQuantity(addon.id, selectedVariant?.id ?? null, camperId)
+        const newQuantity = camperQuantity + delta
+        updateAddOnQuantity(addon.id, selectedVariant?.id ?? null, camperId, newQuantity)
+      })
+    }
   }
 
   const isLowStock = selectedVariant?.isLowStock && !selectedVariant.isSoldOut
@@ -179,28 +223,42 @@ function AddOnCard({ addon, campers }: AddOnCardProps) {
           </div>
         )}
 
-        {/* Camper Selection (for per-camper items) */}
+        {/* Camper Selection (for per-camper items) - Multi-select */}
         {needsCamperSelection && (
           <div className="mt-4">
-            <label className="text-xs font-semibold uppercase tracking-wider text-white/40 block mb-2">
-              Select Camper
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-semibold uppercase tracking-wider text-white/40">
+                Select Campers
+              </label>
+              <button
+                onClick={selectAllCampers}
+                className="text-xs text-neon hover:text-neon/80 transition-colors"
+              >
+                Select All
+              </button>
+            </div>
             <div className="flex flex-wrap gap-2">
               {campers.map((camper) => (
                 <button
                   key={camper.id}
-                  onClick={() => setSelectedCamper(camper.id)}
+                  onClick={() => toggleCamperSelection(camper.id)}
                   className={cn(
-                    'px-3 py-1.5 text-xs font-semibold uppercase tracking-wider transition-all',
-                    selectedCamper === camper.id
+                    'px-3 py-1.5 text-xs font-semibold uppercase tracking-wider transition-all flex items-center gap-2',
+                    selectedCampers.includes(camper.id)
                       ? 'bg-neon text-black'
                       : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white'
                   )}
                 >
+                  {selectedCampers.includes(camper.id) && <Check className="h-3 w-3" />}
                   {camper.firstName || 'Camper'}
                 </button>
               ))}
             </div>
+            {selectedCampers.length > 0 && (
+              <p className="mt-2 text-xs text-white/40">
+                {selectedCampers.length} camper{selectedCampers.length > 1 ? 's' : ''} selected
+              </p>
+            )}
           </div>
         )}
 
@@ -223,7 +281,7 @@ function AddOnCard({ addon, campers }: AddOnCardProps) {
               disabled={
                 isSoldOut ||
                 (needsVariant && !selectedVariant) ||
-                (needsCamperSelection && !selectedCamper)
+                (needsCamperSelection && selectedCampers.length === 0)
               }
             >
               {isSoldOut ? 'Sold Out' : 'Add to Order'}
