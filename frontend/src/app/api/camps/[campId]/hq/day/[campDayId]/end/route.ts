@@ -5,25 +5,32 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { endCampDay } from '@/lib/services/campHq'
+import { getAuthenticatedUserFromRequest } from '@/lib/auth/cognito-server'
+import { endCampDayWithOptions } from '@/lib/services/camp-days'
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ campId: string; campDayId: string }> }
 ) {
   try {
-    const { campDayId } = await params
-    const body = await request.json()
-    const { userId, notes } = body
-
-    if (!userId) {
+    const user = await getAuthenticatedUserFromRequest(request)
+    if (!user) {
       return NextResponse.json(
-        { error: 'userId is required' },
-        { status: 400 }
+        { error: 'Not authenticated' },
+        { status: 401 }
       )
     }
 
-    const { data, error } = await endCampDay(campDayId, userId, notes)
+    const { campDayId } = await params
+    const body = await request.json().catch(() => ({}))
+
+    const { data, error } = await endCampDayWithOptions(campDayId, user.id, {
+      recap: body.recap,
+      auto_checkout_all: body.auto_checkout_all ?? true,
+      generate_report: body.generate_report ?? false,
+      send_emails: body.send_emails ?? false,
+      force: body.force ?? false,
+    })
 
     if (error) {
       return NextResponse.json(

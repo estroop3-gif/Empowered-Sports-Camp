@@ -1,18 +1,11 @@
 /**
  * Role Invite Email Templates
  *
- * Sends branded invite emails for all role types.
+ * Sends branded invite emails for all role types using AWS SES.
  */
 
-import { Resend } from 'resend'
+import { sendEmail } from './ses-client'
 import { UserRole } from '@/generated/prisma'
-
-// Initialize Resend client
-const resend = process.env.RESEND_API_KEY
-  ? new Resend(process.env.RESEND_API_KEY)
-  : null
-
-const DEFAULT_FROM = process.env.RESEND_FROM_EMAIL || 'Empowered Sports Camp <noreply@empoweredsportscamp.com>'
 
 // Role display names and descriptions
 const ROLE_INFO: Record<string, { name: string; description: string; color: string }> = {
@@ -195,44 +188,16 @@ export async function sendRoleInviteEmail(
 ): Promise<EmailResult> {
   const roleInfo = ROLE_INFO[options.targetRole] || { name: options.targetRole }
 
-  // If Resend is not configured, log to console and return success
-  if (!resend) {
-    console.log('=== DEV MODE: Role Invite Email ===')
-    console.log('To:', options.to)
-    console.log('Subject:', `You're Invited to Join as ${roleInfo.name}`)
-    console.log('First Name:', options.firstName)
-    console.log('Target Role:', options.targetRole)
-    console.log('Inviter:', options.inviterName)
-    console.log('Invite URL:', options.inviteUrl)
-    console.log('Expires:', options.expiresAt)
-    console.log('===================================')
-    console.log('')
-    console.log('NOTE: Set RESEND_API_KEY in .env.local to send real emails')
-    console.log('')
+  const result = await sendEmail({
+    to: options.to,
+    subject: `You're Invited to Join Empowered Sports Camp as ${roleInfo.name}`,
+    html: generateRoleInviteHtml(options),
+    text: generateRoleInviteText(options),
+  })
 
-    return {
-      success: true,
-      messageId: `dev-${Date.now()}`,
-    }
+  if (!result.success) {
+    console.error('SES error:', result.error)
   }
 
-  try {
-    const { data, error } = await resend.emails.send({
-      from: DEFAULT_FROM,
-      to: [options.to],
-      subject: `You're Invited to Join Empowered Sports Camp as ${roleInfo.name}`,
-      html: generateRoleInviteHtml(options),
-      text: generateRoleInviteText(options),
-    })
-
-    if (error) {
-      console.error('Resend error:', error)
-      return { success: false, error: error.message }
-    }
-
-    return { success: true, messageId: data?.id }
-  } catch (err) {
-    console.error('Email send error:', err)
-    return { success: false, error: (err as Error).message }
-  }
+  return result
 }

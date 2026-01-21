@@ -23,7 +23,7 @@ This checklist covers testing for the parent signup workflow, athlete management
   - [ ] Shows error if passwords don't match
   - [ ] Shows error if password is less than 8 characters
   - [ ] Shows error if required fields are empty
-  - [ ] Shows Supabase auth errors (duplicate email, etc.)
+  - [ ] Shows auth errors (duplicate email, etc.)
 - [ ] Submit button shows loading state during submission
 - [ ] "Already have an account?" link goes to `/login`
 - [ ] Terms and Privacy Policy links work
@@ -32,7 +32,7 @@ This checklist covers testing for the parent signup workflow, athlete management
 - [ ] Page displays when email confirmation is required
 - [ ] Shows the user's email address
 - [ ] "Back to Login" button works
-- [ ] User receives confirmation email (if Supabase email confirmation is enabled)
+- [ ] User receives confirmation email (if email confirmation is enabled)
 
 ### 1.3 Auth Callback
 - [ ] Email confirmation link redirects to `/onboarding`
@@ -246,7 +246,7 @@ This checklist covers testing for the parent signup workflow, athlete management
 1. Payment processing not yet implemented (Pay Now button is placeholder)
 2. Athlete detail page (`/dashboard/athletes/[id]`) needs to be created
 3. Email notifications not yet configured
-4. Password reset flow uses Supabase defaults
+4. Password reset flow uses AWS Cognito defaults
 
 ---
 
@@ -274,5 +274,5 @@ DELETE FROM user_roles WHERE user_id IN (
 -- Delete test profiles
 DELETE FROM profiles WHERE email LIKE '%test%';
 
--- Delete test auth users (run in Supabase dashboard)
+-- Delete test auth users (run in AWS Cognito console)
 ```

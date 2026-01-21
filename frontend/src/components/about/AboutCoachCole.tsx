@@ -1,9 +1,10 @@
 /**
  * About Coach Cole Section
  *
- * Founder bio with image placeholder and accomplishments.
+ * Founder bio with image and accomplishments.
  */
 
+import Image from 'next/image'
 import { Star, Trophy, GraduationCap, Briefcase } from 'lucide-react'
 
 const accomplishments = [
@@ -37,21 +38,16 @@ export default function AboutCoachCole() {
 
       <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="grid gap-12 lg:grid-cols-2 lg:gap-16 items-center">
-          {/* Image placeholder */}
+          {/* Image */}
           <div className="relative order-2 lg:order-1">
-            <div className="aspect-[3/4] bg-dark-100 border border-white/10 flex items-center justify-center relative overflow-hidden max-w-md mx-auto">
-              {/* Decorative elements */}
-              <div className="absolute inset-0 bg-gradient-to-br from-magenta/5 via-transparent to-neon/5" />
-              <div className="absolute -bottom-4 -left-4 w-32 h-32 bg-magenta/10 rounded-full blur-[60px]" />
-              <div className="absolute -top-4 -right-4 w-24 h-24 bg-neon/10 rounded-full blur-[40px]" />
-
-              {/* Placeholder content */}
-              <div className="relative flex flex-col items-center gap-4 text-white/30">
-                <Star className="h-16 w-16" />
-                <span className="text-xs font-bold uppercase tracking-widest">
-                  Photo Coming Soon
-                </span>
-              </div>
+            <div className="aspect-[3/4] bg-dark-100 border border-white/10 relative overflow-hidden max-w-md mx-auto">
+              <Image
+                src="https://empowered-sports-camp-new.s3.us-east-2.amazonaws.com/about/coach-cole.jpg"
+                alt="Coach Cole - Founder of Empowered Athletes"
+                fill
+                className="object-cover"
+                sizes="(max-width: 768px) 100vw, 400px"
+              />
 
               {/* Corner accents */}
               <div className="absolute top-0 left-0 w-16 h-1 bg-magenta" />

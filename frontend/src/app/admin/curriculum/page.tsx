@@ -5,9 +5,6 @@ import Link from 'next/link'
 import { AdminLayout, PageHeader, ContentCard } from '@/components/admin/admin-layout'
 import { useAuth } from '@/lib/auth/context'
 import {
-  getTemplates,
-  getBlocks,
-  getCampsForAssignment,
   CurriculumTemplate,
   CurriculumBlock,
   TemplateFilters,
@@ -40,6 +37,7 @@ import {
   Edit,
   Trash2,
   MapPin,
+  FileText,
 } from 'lucide-react'
 
 /**
@@ -121,27 +119,56 @@ export default function CurriculumPage() {
 
   const fetchTemplates = async () => {
     setTemplatesLoading(true)
-    const { data, error } = await getTemplates(templateFilters)
-    if (data) {
-      setTemplates(data)
+    try {
+      const params = new URLSearchParams({ action: 'templates' })
+      if (templateFilters.sport) params.set('sport', templateFilters.sport)
+      if (templateFilters.scope) params.set('scope', templateFilters.scope)
+      if (templateFilters.difficulty) params.set('difficulty', templateFilters.difficulty)
+      if (templateFilters.search) params.set('search', templateFilters.search)
+      if (templateFilters.ageMin) params.set('ageMin', templateFilters.ageMin.toString())
+      if (templateFilters.ageMax) params.set('ageMax', templateFilters.ageMax.toString())
+
+      const response = await fetch(`/api/curriculum?${params}`, { credentials: 'include' })
+      const result = await response.json()
+      if (result.data) {
+        setTemplates(result.data)
+      }
+    } catch (error) {
+      console.error('Error fetching templates:', error)
     }
     setTemplatesLoading(false)
   }
 
   const fetchBlocks = async () => {
     setBlocksLoading(true)
-    const { data, error } = await getBlocks(blockFilters)
-    if (data) {
-      setBlocks(data)
+    try {
+      const params = new URLSearchParams({ action: 'blocks' })
+      if (blockFilters.sport) params.set('sport', blockFilters.sport)
+      if (blockFilters.category) params.set('category', blockFilters.category)
+      if (blockFilters.scope) params.set('scope', blockFilters.scope)
+      if (blockFilters.search) params.set('search', blockFilters.search)
+
+      const response = await fetch(`/api/curriculum?${params}`, { credentials: 'include' })
+      const result = await response.json()
+      if (result.data) {
+        setBlocks(result.data)
+      }
+    } catch (error) {
+      console.error('Error fetching blocks:', error)
     }
     setBlocksLoading(false)
   }
 
   const fetchAssignments = async () => {
     setAssignmentsLoading(true)
-    const { data, error } = await getCampsForAssignment()
-    if (data) {
-      setCamps(data)
+    try {
+      const response = await fetch('/api/curriculum?action=campsForAssignment', { credentials: 'include' })
+      const result = await response.json()
+      if (result.data) {
+        setCamps(result.data)
+      }
+    } catch (error) {
+      console.error('Error fetching assignments:', error)
     }
     setAssignmentsLoading(false)
   }
@@ -434,14 +461,28 @@ function TemplateCard({ template, canEdit }: { template: CurriculumTemplate; can
       {/* Header */}
       <div className="p-6 border-b border-white/10">
         <div className="flex items-start justify-between mb-3">
-          <div className={cn(
-            'inline-flex items-center gap-1 px-2 py-1 text-xs font-bold uppercase tracking-wider',
-            template.is_global
-              ? 'bg-neon/10 text-neon border border-neon/30'
-              : 'bg-magenta/10 text-magenta border border-magenta/30'
-          )}>
-            {template.is_global ? <Globe className="h-3 w-3" /> : <Building2 className="h-3 w-3" />}
-            {template.is_global ? 'Global' : 'Licensee'}
+          <div className="flex items-center gap-2">
+            <div className={cn(
+              'inline-flex items-center gap-1 px-2 py-1 text-xs font-bold uppercase tracking-wider',
+              template.is_global
+                ? 'bg-neon/10 text-neon border border-neon/30'
+                : 'bg-magenta/10 text-magenta border border-magenta/30'
+            )}>
+              {template.is_global ? <Globe className="h-3 w-3" /> : <Building2 className="h-3 w-3" />}
+              {template.is_global ? 'Global' : 'Licensee'}
+            </div>
+            {/* PDF indicator badges */}
+            {template.is_pdf_only ? (
+              <div className="inline-flex items-center gap-1 px-2 py-1 text-xs font-bold uppercase tracking-wider bg-purple/10 text-purple border border-purple/30">
+                <FileText className="h-3 w-3" />
+                PDF Only
+              </div>
+            ) : template.pdf_url && (
+              <div className="inline-flex items-center gap-1 px-2 py-1 text-xs font-bold uppercase tracking-wider bg-purple/10 text-purple border border-purple/30">
+                <FileText className="h-3 w-3" />
+                Has PDF
+              </div>
+            )}
           </div>
           <span className="text-xs text-white/40 uppercase">{sportLabel}</span>
         </div>
@@ -483,7 +524,17 @@ function TemplateCard({ template, canEdit }: { template: CurriculumTemplate; can
           <Eye className="h-4 w-4" />
           View / Edit
         </Link>
-        {canEdit && (
+        {template.is_pdf_only ? (
+          // PDF-only templates show View PDF button
+          <Link
+            href={`/admin/curriculum/templates/${template.id}?tab=pdf`}
+            className="flex items-center gap-2 flex-1 justify-center py-2 text-sm font-bold uppercase tracking-wider text-purple hover:text-purple/80 transition-colors border-l border-white/10"
+          >
+            <FileText className="h-4 w-4" />
+            View PDF
+          </Link>
+        ) : canEdit && (
+          // Structured templates show Plan Days button
           <Link
             href={`/admin/curriculum/templates/${template.id}?tab=planner`}
             className="flex items-center gap-2 flex-1 justify-center py-2 text-sm font-bold uppercase tracking-wider text-neon hover:text-neon/80 transition-colors border-l border-white/10"

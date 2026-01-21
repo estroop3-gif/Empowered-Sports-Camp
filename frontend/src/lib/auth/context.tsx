@@ -38,6 +38,11 @@ interface LmsStatus {
   hasCompletedCore: boolean
   hasCompletedDirector: boolean
   hasCompletedVolunteer: boolean
+  // New certification fields
+  isCertified: boolean
+  certifiedAt?: string | null
+  certificateUrl?: string | null
+  certificateNumber?: string | null
 }
 
 interface User {
@@ -103,6 +108,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     hasCompletedCore: false,
     hasCompletedDirector: false,
     hasCompletedVolunteer: false,
+    isCertified: false,
+    certifiedAt: null,
+    certificateUrl: null,
+    certificateNumber: null,
   })
 
   // Load viewing as role and LMS bypass from sessionStorage on mount
@@ -279,10 +288,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     // Initial check after a short delay
-    const initialCheck = setTimeout(checkSession, 10000) // 10 seconds after mount
+    const initialCheck = setTimeout(checkSession, 5000) // 5 seconds after mount
 
-    // Then check every 5 minutes
-    const interval = setInterval(checkSession, 5 * 60 * 1000)
+    // Then check every 2 minutes to ensure tokens stay fresh
+    // This aggressive refresh prevents mid-operation expirations
+    const interval = setInterval(checkSession, 2 * 60 * 1000)
 
     return () => {
       clearTimeout(initialCheck)
@@ -336,25 +346,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // LMS completion check based on current role
   // If LMS bypass is enabled (admin preview mode), always return true
+  // Uses the new certification system for role-based requirements
   const hasCompletedRequiredLms = (() => {
     // Admin bypass takes priority
     if (actualRole === 'hq_admin' && lmsBypassEnabled) {
       return true
     }
 
-    switch (effectiveRole) {
-      case 'director':
-        return lmsStatus.hasCompletedDirector
-      case 'cit_volunteer':
-        return lmsStatus.hasCompletedVolunteer
-      case 'licensee_owner':
-      case 'coach':
-        return lmsStatus.hasCompletedCore
-      case 'hq_admin':
-      case 'parent':
-      default:
-        return true // No LMS requirement for these roles
+    // HQ Admin and Parent are always exempt
+    if (effectiveRole === 'hq_admin' || effectiveRole === 'parent') {
+      return true
     }
+
+    // Use the new certification system for all other roles
+    // This replaces the old hasCompletedCore/Director/Volunteer checks
+    return lmsStatus.isCertified
   })()
 
   // Legacy compatibility

@@ -1,12 +1,15 @@
 'use client'
 
 /**
- * Admin Grouping Report Page (Print View)
+ * Admin Grouping Report Page
  *
- * Same as director report - reuses the same component logic.
+ * Generates and downloads a PDF of the group assignments, then redirects back.
  */
 
 import { useState, useEffect, use } from 'react'
+import { useRouter } from 'next/navigation'
+import jsPDF from 'jspdf'
+import autoTable from 'jspdf-autotable'
 
 interface GroupingCamper {
   id: string
@@ -41,183 +44,220 @@ interface GroupingState {
   max_grade_spread: number
 }
 
-export default function AdminGroupingReportPage({
-  params,
-}: {
-  params: Promise<{ campId: string }>
-}) {
-  const { campId } = use(params)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [state, setState] = useState<GroupingState | null>(null)
+function generateGroupReportPDF(state: GroupingState) {
+  const doc = new jsPDF()
+  const pageWidth = doc.internal.pageSize.getWidth()
+  let yPosition = 20
 
-  useEffect(() => {
-    const fetchState = async () => {
-      try {
-        const res = await fetch(`/api/grouping/${campId}`)
-        const json = await res.json()
+  // Title
+  doc.setFontSize(20)
+  doc.setFont('helvetica', 'bold')
+  doc.text(state.camp_name, pageWidth / 2, yPosition, { align: 'center' })
+  yPosition += 8
 
-        if (!res.ok) {
-          throw new Error(json.error || 'Failed to load')
-        }
+  doc.setFontSize(14)
+  doc.setFont('helvetica', 'normal')
+  doc.text('Group Assignment Report', pageWidth / 2, yPosition, { align: 'center' })
+  yPosition += 8
 
-        setState(json.data)
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Error loading')
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchState()
-  }, [campId])
-
-  useEffect(() => {
-    if (!loading && !error && state) {
-      setTimeout(() => window.print(), 500)
-    }
-  }, [loading, error, state])
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p>Loading report...</p>
-      </div>
-    )
-  }
-
-  if (error || !state) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p className="text-red-600">{error || 'Failed to load report'}</p>
-      </div>
-    )
-  }
-
+  // Generated date and stats
+  doc.setFontSize(10)
+  doc.setTextColor(100)
   const printDate = new Date().toLocaleDateString('en-US', {
     weekday: 'long',
     year: 'numeric',
     month: 'long',
     day: 'numeric',
   })
+  doc.text(`Generated: ${printDate}`, pageWidth / 2, yPosition, { align: 'center' })
+  yPosition += 5
+  doc.text(
+    `Total Campers: ${state.total_campers} | Max Group Size: ${state.max_group_size} | Max Grade Spread: ${state.max_grade_spread}`,
+    pageWidth / 2,
+    yPosition,
+    { align: 'center' }
+  )
+  yPosition += 15
+
+  doc.setTextColor(0)
+
+  // Generate tables for each group
+  state.groups.forEach((group, groupIndex) => {
+    // Check if we need a new page (leave room for header + at least a few rows)
+    if (yPosition > 240) {
+      doc.addPage()
+      yPosition = 20
+    }
+
+    // Group header
+    doc.setFontSize(12)
+    doc.setFont('helvetica', 'bold')
+    const gradeRange =
+      group.stats.min_grade !== null && group.stats.max_grade !== null
+        ? group.stats.min_grade === group.stats.max_grade
+          ? `Grade ${group.stats.min_grade}`
+          : `Grades ${group.stats.min_grade}-${group.stats.max_grade}`
+        : 'N/A'
+    doc.text(`${group.group_name} (${group.stats.count} campers, ${gradeRange})`, 14, yPosition)
+    yPosition += 6
+
+    // Generate table for this group
+    const tableData = group.campers.map((camper, idx) => [
+      (idx + 1).toString(),
+      `${camper.last_name}, ${camper.first_name}`,
+      camper.grade_level?.toString() ?? '?',
+      camper.friend_group_number?.toString() ?? '-',
+      camper.has_medical_notes ? '!' : '-',
+      camper.has_allergies ? '!' : '-',
+      camper.special_considerations || '-',
+    ])
+
+    if (tableData.length === 0) {
+      tableData.push(['', 'No campers assigned', '', '', '', '', ''])
+    }
+
+    autoTable(doc, {
+      startY: yPosition,
+      head: [['#', 'Name', 'Grade', 'Friend', 'Med', 'Allergy', 'Notes']],
+      body: tableData,
+      theme: 'striped',
+      headStyles: {
+        fillColor: [60, 60, 60],
+        textColor: 255,
+        fontStyle: 'bold',
+        fontSize: 8,
+      },
+      bodyStyles: {
+        fontSize: 8,
+      },
+      columnStyles: {
+        0: { cellWidth: 10 },
+        1: { cellWidth: 45 },
+        2: { cellWidth: 15, halign: 'center' },
+        3: { cellWidth: 15, halign: 'center' },
+        4: { cellWidth: 12, halign: 'center' },
+        5: { cellWidth: 15, halign: 'center' },
+        6: { cellWidth: 'auto' },
+      },
+      styles: {
+        cellPadding: 2,
+        overflow: 'ellipsize',
+      },
+      margin: { left: 14, right: 14 },
+    })
+
+    yPosition = (doc as any).lastAutoTable.finalY + 12
+  })
+
+  // Footer on all pages
+  const pageCount = doc.internal.pages.length - 1
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i)
+    doc.setFontSize(8)
+    doc.setTextColor(150)
+    doc.text(
+      `Empowered Sports Camp - Group Report - Page ${i} of ${pageCount}`,
+      pageWidth / 2,
+      doc.internal.pageSize.getHeight() - 10,
+      { align: 'center' }
+    )
+  }
+
+  // Download the PDF
+  const filename = `${state.camp_name.replace(/[^a-z0-9]/gi, '-').toLowerCase()}-group-report-${new Date().toISOString().split('T')[0]}.pdf`
+  doc.save(filename)
+}
+
+export default function AdminGroupingReportPage({
+  params,
+}: {
+  params: Promise<{ campId: string }>
+}) {
+  const { campId } = use(params)
+  const router = useRouter()
+  const [status, setStatus] = useState<'loading' | 'generating' | 'done' | 'error'>('loading')
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const fetchAndGenerate = async () => {
+      try {
+        setStatus('loading')
+        const res = await fetch(`/api/grouping/${campId}`)
+        const json = await res.json()
+
+        if (!res.ok) {
+          throw new Error(json.error || 'Failed to load grouping data')
+        }
+
+        if (!json.data || !json.data.groups) {
+          throw new Error('No grouping data available')
+        }
+
+        setStatus('generating')
+
+        // Small delay to show status
+        await new Promise(resolve => setTimeout(resolve, 100))
+
+        generateGroupReportPDF(json.data)
+
+        setStatus('done')
+
+        // Redirect back after download starts
+        setTimeout(() => {
+          router.back()
+        }, 1000)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Error generating report')
+        setStatus('error')
+      }
+    }
+
+    fetchAndGenerate()
+  }, [campId, router])
 
   return (
-    <div className="min-h-screen bg-white p-8 print:p-4">
-      <style jsx global>{`
-        @media print {
-          @page { margin: 0.5in; }
-          body {
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
-          }
-          .page-break { page-break-before: always; }
-          .no-print { display: none !important; }
-        }
-      `}</style>
-
-      <div className="mb-8 border-b-2 border-black pb-4">
-        <div className="flex items-start justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-black uppercase tracking-wide">
-              {state.camp_name}
-            </h1>
-            <p className="text-lg text-gray-600 mt-1">Group Assignment Report</p>
-          </div>
-          <div className="text-right text-sm text-gray-500">
-            <p>Generated: {printDate}</p>
-            <p>Total Campers: {state.total_campers}</p>
-          </div>
-        </div>
-      </div>
-
-      <div className="no-print mb-6 flex gap-4">
-        <button
-          onClick={() => window.print()}
-          className="px-4 py-2 bg-black text-white font-medium rounded hover:bg-gray-800"
-        >
-          Print Report
-        </button>
-        <button
-          onClick={() => window.close()}
-          className="px-4 py-2 border border-gray-300 text-gray-700 font-medium rounded hover:bg-gray-50"
-        >
-          Close
-        </button>
-      </div>
-
-      <div className="space-y-8">
-        {state.groups.map((group, idx) => (
-          <div key={group.id} className={idx > 0 && idx % 2 === 0 ? 'page-break' : ''}>
-            <div className="bg-gray-100 rounded-t px-4 py-2 border border-gray-300 border-b-0">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-bold text-black">{group.group_name}</h2>
-                <div className="text-sm text-gray-600">
-                  {group.stats.count} campers |{' '}
-                  Grades:{' '}
-                  {group.stats.min_grade !== null && group.stats.max_grade !== null
-                    ? group.stats.min_grade === group.stats.max_grade
-                      ? group.stats.min_grade
-                      : `${group.stats.min_grade}-${group.stats.max_grade}`
-                    : 'N/A'}
-                </div>
-              </div>
+    <div className="min-h-screen bg-black flex items-center justify-center">
+      <div className="text-center p-8">
+        {status === 'loading' && (
+          <>
+            <div className="h-12 w-12 border-4 border-neon border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+            <p className="text-white text-lg">Loading group data...</p>
+          </>
+        )}
+        {status === 'generating' && (
+          <>
+            <div className="h-12 w-12 border-4 border-purple border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+            <p className="text-white text-lg">Generating PDF...</p>
+          </>
+        )}
+        {status === 'done' && (
+          <>
+            <div className="h-12 w-12 bg-neon rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="h-6 w-6 text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+              </svg>
             </div>
-
-            <table className="w-full border border-gray-300">
-              <thead>
-                <tr className="bg-gray-50">
-                  <th className="text-left px-4 py-2 border-b border-gray-300 text-sm font-semibold">#</th>
-                  <th className="text-left px-4 py-2 border-b border-gray-300 text-sm font-semibold">Name</th>
-                  <th className="text-center px-4 py-2 border-b border-gray-300 text-sm font-semibold">Grade</th>
-                  <th className="text-center px-4 py-2 border-b border-gray-300 text-sm font-semibold">Friend Group</th>
-                  <th className="text-center px-4 py-2 border-b border-gray-300 text-sm font-semibold">Medical</th>
-                  <th className="text-center px-4 py-2 border-b border-gray-300 text-sm font-semibold">Allergies</th>
-                  <th className="text-left px-4 py-2 border-b border-gray-300 text-sm font-semibold">Notes</th>
-                </tr>
-              </thead>
-              <tbody>
-                {group.campers.length > 0 ? (
-                  group.campers.map((camper, camperIdx) => (
-                    <tr key={camper.id} className={camperIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                      <td className="px-4 py-2 text-sm text-gray-500">{camperIdx + 1}</td>
-                      <td className="px-4 py-2 font-medium">{camper.last_name}, {camper.first_name}</td>
-                      <td className="px-4 py-2 text-center">{camper.grade_level ?? '?'}</td>
-                      <td className="px-4 py-2 text-center">
-                        {camper.friend_group_number ? (
-                          <span className="inline-block w-6 h-6 bg-pink-500 text-white text-xs rounded-full leading-6">
-                            {camper.friend_group_number}
-                          </span>
-                        ) : '-'}
-                      </td>
-                      <td className="px-4 py-2 text-center">
-                        {camper.has_medical_notes ? <span className="text-red-600 font-bold">!</span> : '-'}
-                      </td>
-                      <td className="px-4 py-2 text-center">
-                        {camper.has_allergies ? <span className="text-yellow-600 font-bold">!</span> : '-'}
-                      </td>
-                      <td className="px-4 py-2 text-sm text-gray-600 max-w-xs truncate">
-                        {camper.special_considerations || '-'}
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-gray-400">
-                      No campers assigned
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        ))}
-      </div>
-
-      <div className="mt-8 pt-4 border-t border-gray-300 text-sm text-gray-500">
-        <div className="flex justify-between">
-          <p>Empowered Athletes - Camp Grouping Report</p>
-          <p>Max group size: {state.max_group_size} | Max grade spread: {state.max_grade_spread}</p>
-        </div>
+            <p className="text-neon text-lg font-bold">PDF Downloaded!</p>
+            <p className="text-white/50 text-sm mt-2">Redirecting back...</p>
+          </>
+        )}
+        {status === 'error' && (
+          <>
+            <div className="h-12 w-12 bg-magenta rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </div>
+            <p className="text-magenta text-lg font-bold">Error</p>
+            <p className="text-white/50 text-sm mt-2">{error}</p>
+            <button
+              onClick={() => router.back()}
+              className="mt-4 px-4 py-2 bg-white/10 text-white hover:bg-white/20 transition-colors"
+            >
+              Go Back
+            </button>
+          </>
+        )}
       </div>
     </div>
   )

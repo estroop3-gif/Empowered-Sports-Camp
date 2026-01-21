@@ -31,6 +31,20 @@ interface ShopProduct {
   image_url: string | null
 }
 
+interface ShopStats {
+  localRevenue: number
+  ordersThisMonth: number
+  totalOrders: number
+  topProducts: Array<{
+    productId: string
+    productName: string
+    category: string
+    unitsSold: number
+    revenue: number
+    imageUrl: string | null
+  }>
+}
+
 interface ShopSummary {
   total_products: number
   local_revenue: number
@@ -50,31 +64,49 @@ export default function LicenseeShopPage() {
   async function loadShop() {
     try {
       setLoading(true)
-      const res = await fetch('/api/shop/products')
-      const json = await res.json()
+      setError(null)
 
-      if (!res.ok) {
-        throw new Error(json.error || 'Failed to load shop')
+      // Fetch both products and stats in parallel
+      const [productsRes, statsRes] = await Promise.all([
+        fetch('/api/shop/products'),
+        fetch('/api/licensee/shop', { credentials: 'include' }),
+      ])
+
+      const productsJson = await productsRes.json()
+      const statsJson = await statsRes.json()
+
+      if (!productsRes.ok) {
+        throw new Error(productsJson.error || 'Failed to load products')
+      }
+
+      // Stats may fail if user doesn't have permission, but products should still show
+      const stats: ShopStats | null = statsRes.ok ? statsJson.data : null
+
+      // Build a map of product sales from stats
+      const salesMap = new Map<string, number>()
+      if (stats?.topProducts) {
+        for (const p of stats.topProducts) {
+          salesMap.set(p.productId, p.unitsSold)
+        }
       }
 
       // Transform response
-      const products = (json.data || []).map((p: any) => ({
+      const products = (productsJson.data || []).map((p: any) => ({
         id: p.id,
         name: p.name,
-        price: p.price || 0,
+        price: p.price_cents || p.priceCents || 0,
         category: p.category || 'General',
-        status: p.isActive ? 'active' : 'inactive',
-        local_sales: 0, // Would come from orders aggregation
-        image_url: p.imageUrl,
+        status: p.is_active || p.isActive ? 'active' : 'inactive',
+        local_sales: salesMap.get(p.id) || 0,
+        image_url: p.image_url || p.imageUrl,
       }))
 
       setData({
         total_products: products.length,
-        local_revenue: 0, // Would aggregate from orders
-        orders_this_month: 0,
+        local_revenue: stats?.localRevenue || 0,
+        orders_this_month: stats?.ordersThisMonth || 0,
         products,
       })
-      setError(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong')
     } finally {
@@ -82,8 +114,8 @@ export default function LicenseeShopPage() {
     }
   }
 
-  const formatCurrency = (val: number) =>
-    new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val)
+  const formatCurrency = (cents: number) =>
+    new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100)
 
   return (
     <LmsGate featureName="shop management">
@@ -203,8 +235,8 @@ export default function LicenseeShopPage() {
 }
 
 function ProductCard({ product }: { product: ShopProduct }) {
-  const formatCurrency = (val: number) =>
-    new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val)
+  const formatCurrency = (cents: number) =>
+    new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100)
 
   const statusConfig: Record<string, { label: string; color: string }> = {
     active: { label: 'Active', color: 'bg-neon/20 text-neon' },

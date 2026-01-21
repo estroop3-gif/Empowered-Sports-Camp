@@ -41,6 +41,7 @@ import {
   Zap,
 } from 'lucide-react'
 import type { DirectorDashboardData } from '@/lib/services/director-dashboard'
+import { AssignmentRequestsCard } from '@/components/staff-requests'
 
 interface DirectorDashboardOverviewProps {
   initialData?: DirectorDashboardData | null
@@ -108,6 +109,9 @@ export function DirectorDashboardOverview({ initialData }: DirectorDashboardOver
     <div className="space-y-8">
       {/* Welcome Card */}
       <WelcomeCard firstName={firstName} />
+
+      {/* Assignment Requests */}
+      <AssignmentRequestsCard />
 
       {/* Quick Actions Bar */}
       {quick_actions.has_active_camp && (

@@ -16,6 +16,8 @@ import {
   SharedLibrary,
   ContributionCenter,
   AdminReview,
+  RoleRequirementsAdmin,
+  ManageModules,
   type EmpowerUTab,
 } from '@/components/empoweru'
 import type { EmpowerUModuleWithProgress } from '@/lib/services/empoweru'
@@ -117,6 +119,10 @@ export default function AdminEmpowerUPage() {
       {activeTab === 'admin-review' && (
         <AdminReview userRole={role || 'hq_admin'} />
       )}
+
+      {activeTab === 'requirements' && <RoleRequirementsAdmin />}
+
+      {activeTab === 'manage-modules' && <ManageModules baseRoute="/admin/empoweru" />}
     </EmpowerUShell>
   )
 }

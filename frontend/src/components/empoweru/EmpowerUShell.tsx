@@ -7,7 +7,6 @@
  * Provides tabbed navigation between portals, shared library, and contribution center.
  */
 
-import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import {
   GraduationCap,
@@ -17,6 +16,8 @@ import {
   Upload,
   ChevronRight,
   ClipboardCheck,
+  Settings,
+  Cog,
 } from 'lucide-react'
 import { PortalType } from '@/lib/services/empoweru'
 
@@ -27,6 +28,8 @@ export type EmpowerUTab =
   | 'library'
   | 'contributions'
   | 'admin-review'
+  | 'requirements'
+  | 'manage-modules'
 
 interface TabConfig {
   id: EmpowerUTab
@@ -89,6 +92,22 @@ const TABS: TabConfig[] = [
     icon: ClipboardCheck,
     description: 'Review and approve user-submitted content',
     allowedRoles: ['hq_admin', 'licensee_owner'],
+  },
+  {
+    id: 'requirements',
+    label: 'Training Requirements',
+    shortLabel: 'Requirements',
+    icon: Settings,
+    description: 'Configure which modules are required for each role',
+    allowedRoles: ['hq_admin'],
+  },
+  {
+    id: 'manage-modules',
+    label: 'Manage Modules',
+    shortLabel: 'Manage',
+    icon: Cog,
+    description: 'Create, edit, and manage training modules and quizzes',
+    allowedRoles: ['hq_admin'],
   },
 ]
 
@@ -155,6 +174,7 @@ export function EmpowerUShell({
               </button>
             )
           })}
+
         </div>
       </div>
 

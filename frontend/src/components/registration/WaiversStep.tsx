@@ -39,6 +39,8 @@ interface WaiverSigningState {
   signerName: string
   signerEmail: string
   agreedToTerms: boolean
+  signatureTyped: string
+  signatureDateEntered: string
 }
 
 interface WaiversStepProps {
@@ -65,6 +67,7 @@ export function WaiversStep({ campSession, onContinue, onBack }: WaiversStepProp
   // Pre-fill signer info from parent info
   useEffect(() => {
     if (requirements.length > 0 && signingStates.length === 0) {
+      const todayDate = new Date().toISOString().split('T')[0]
       const initialStates = requirements.map((req, index) => ({
         waiverTemplateId: req.waiverTemplateId,
         signed: false,
@@ -72,6 +75,8 @@ export function WaiversStep({ campSession, onContinue, onBack }: WaiversStepProp
         signerName: `${state.parentInfo.firstName} ${state.parentInfo.lastName}`.trim(),
         signerEmail: state.parentInfo.email,
         agreedToTerms: false,
+        signatureTyped: '',
+        signatureDateEntered: todayDate,
       }))
       setSigningStates(initialStates)
     }
@@ -119,9 +124,44 @@ export function WaiversStep({ campSession, onContinue, onBack }: WaiversStepProp
     )
   }
 
+  function handleSignatureTyped(waiverTemplateId: string, signature: string) {
+    setSigningStates((prev) =>
+      prev.map((s) =>
+        s.waiverTemplateId === waiverTemplateId
+          ? { ...s, signatureTyped: signature }
+          : s
+      )
+    )
+  }
+
+  function handleDateEntered(waiverTemplateId: string, date: string) {
+    setSigningStates((prev) =>
+      prev.map((s) =>
+        s.waiverTemplateId === waiverTemplateId
+          ? { ...s, signatureDateEntered: date }
+          : s
+      )
+    )
+  }
+
+  function canSign(signingState: WaiverSigningState | undefined): boolean {
+    if (!signingState) return false
+    if (!signingState.agreedToTerms) return false
+    if (!signingState.signatureTyped || signingState.signatureTyped.trim().length < 2) return false
+    if (!signingState.signatureDateEntered) return false
+
+    // Date cannot be in the future
+    const enteredDate = new Date(signingState.signatureDateEntered)
+    const today = new Date()
+    today.setHours(23, 59, 59, 999)
+    if (enteredDate > today) return false
+
+    return true
+  }
+
   function handleSignWaiver(waiverTemplateId: string) {
     const signingState = signingStates.find((s) => s.waiverTemplateId === waiverTemplateId)
-    if (!signingState?.agreedToTerms) return
+    if (!canSign(signingState)) return
 
     setSigningStates((prev) =>
       prev.map((s, index) =>
@@ -168,6 +208,8 @@ export function WaiversStep({ campSession, onContinue, onBack }: WaiversStepProp
         signerName: s.signerName,
         signerEmail: s.signerEmail,
         signedAt: new Date().toISOString(),
+        signatureTyped: s.signatureTyped,
+        signatureDateEntered: s.signatureDateEntered,
       }))
 
     localStorage.setItem('pendingWaiverSignatures', JSON.stringify(waiverAcknowledgments))
@@ -350,12 +392,58 @@ export function WaiversStep({ campSession, onContinue, onBack }: WaiversStepProp
                     </span>
                   </label>
 
+                  {/* Signature Fields */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                    {/* Typed Signature */}
+                    <div>
+                      <label className="block text-sm font-bold text-white/80 mb-2">
+                        Signature <span className="text-magenta">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Type your full legal name"
+                        value={signingState?.signatureTyped || ''}
+                        onChange={(e) => handleSignatureTyped(req.waiverTemplateId, e.target.value)}
+                        className={`w-full px-4 py-3 bg-black border text-white placeholder:text-white/40 focus:outline-none transition-colors ${
+                          signingState?.signatureTyped && signingState.signatureTyped.trim().length >= 2
+                            ? 'border-neon/50 focus:border-neon'
+                            : 'border-white/20 focus:border-purple'
+                        }`}
+                        style={{ fontFamily: 'cursive, serif', fontStyle: 'italic' }}
+                      />
+                      <p className="mt-1 text-xs text-white/50">
+                        Type your full legal name as your signature
+                      </p>
+                    </div>
+
+                    {/* Date Field */}
+                    <div>
+                      <label className="block text-sm font-bold text-white/80 mb-2">
+                        Date <span className="text-magenta">*</span>
+                      </label>
+                      <input
+                        type="date"
+                        value={signingState?.signatureDateEntered || ''}
+                        onChange={(e) => handleDateEntered(req.waiverTemplateId, e.target.value)}
+                        max={new Date().toISOString().split('T')[0]}
+                        className={`w-full px-4 py-3 bg-black border text-white focus:outline-none transition-colors ${
+                          signingState?.signatureDateEntered
+                            ? 'border-neon/50 focus:border-neon'
+                            : 'border-white/20 focus:border-purple'
+                        }`}
+                      />
+                      <p className="mt-1 text-xs text-white/50">
+                        Date of signature (cannot be future)
+                      </p>
+                    </div>
+                  </div>
+
                   {/* Sign Button */}
                   <button
                     onClick={() => handleSignWaiver(req.waiverTemplateId)}
-                    disabled={!signingState?.agreedToTerms}
+                    disabled={!canSign(signingState)}
                     className={`w-full flex items-center justify-center gap-2 py-3 font-bold uppercase tracking-wider transition-all ${
-                      signingState?.agreedToTerms
+                      canSign(signingState)
                         ? 'bg-neon text-black hover:bg-neon/90'
                         : 'bg-white/10 text-white/30 cursor-not-allowed'
                     }`}
@@ -363,14 +451,38 @@ export function WaiversStep({ campSession, onContinue, onBack }: WaiversStepProp
                     <Check className="h-5 w-5" />
                     Sign Waiver
                   </button>
+
+                  {/* Validation hints */}
+                  {!canSign(signingState) && signingState?.agreedToTerms && (
+                    <p className="mt-2 text-xs text-magenta text-center">
+                      {!signingState?.signatureTyped || signingState.signatureTyped.trim().length < 2
+                        ? 'Please type your full name as signature'
+                        : !signingState?.signatureDateEntered
+                          ? 'Please enter the date'
+                          : 'Please complete all required fields'}
+                    </p>
+                  )}
                 </div>
               )}
 
               {/* Signed Indicator */}
               {isSigned && (
-                <div className="border-t border-neon/30 px-4 py-2 flex items-center gap-2 text-neon text-sm">
-                  <Check className="h-4 w-4" />
-                  Signed by {signingState?.signerName} on {new Date().toLocaleDateString()}
+                <div className="border-t border-neon/30 px-4 py-3">
+                  <div className="flex items-center gap-2 text-neon text-sm mb-1">
+                    <Check className="h-4 w-4" />
+                    Waiver Signed
+                  </div>
+                  <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-white/60">
+                    <span>
+                      Signature: <span className="text-white italic" style={{ fontFamily: 'cursive, serif' }}>{signingState?.signatureTyped}</span>
+                    </span>
+                    <span>
+                      Date: <span className="text-white">{signingState?.signatureDateEntered ? new Date(signingState.signatureDateEntered + 'T00:00:00').toLocaleDateString() : ''}</span>
+                    </span>
+                    <span>
+                      By: <span className="text-white">{signingState?.signerName}</span>
+                    </span>
+                  </div>
                 </div>
               )}
             </div>
@@ -424,7 +536,7 @@ export function WaiversStep({ campSession, onContinue, onBack }: WaiversStepProp
             </>
           ) : (
             <>
-              Continue to Payment
+              Continue to Create Account
               <ArrowRight className="h-5 w-5" />
             </>
           )}

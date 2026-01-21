@@ -233,7 +233,7 @@ Take attendance → Add session notes → Done
 ### Entity Relationship Overview
 
 ```
-User (Supabase Auth)
+User (AWS Cognito Auth)
   ├── ParentProfile (1:1)
   │     └── AthleteProfile (1:many)
   │           └── Registration (1:many)
@@ -274,7 +274,7 @@ CREATE TYPE registration_status AS ENUM ('pending', 'confirmed', 'cancelled', 'r
 CREATE TYPE payment_status AS ENUM ('pending', 'completed', 'failed', 'refunded');
 CREATE TYPE session_status AS ENUM ('draft', 'published', 'cancelled', 'completed');
 
--- USERS (extends Supabase auth.users)
+-- USERS (linked to AWS Cognito users)
 CREATE TABLE profiles (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   email TEXT NOT NULL,
@@ -549,7 +549,7 @@ CREATE INDEX idx_staff_assignments_session ON staff_assignments(session_id);
 
 ### Backend Architecture
 
-#### Supabase Auth & Row-Level Security (RLS)
+#### AWS Cognito Auth & Application-Level Authorization
 
 ```sql
 -- Enable RLS on all tables
@@ -656,19 +656,18 @@ app/
 // app/actions/registrations.ts
 'use server'
 
-import { createServerClient } from '@/lib/supabase/server'
+import prisma from '@/lib/db/client'
+import { getCurrentUser } from '@/lib/auth/cognito'
 import { revalidatePath } from 'next/cache'
 
 export async function createRegistration(data: RegistrationInput) {
-  const supabase = createServerClient()
-
-  // Verify user is authenticated
-  const { data: { user } } = await supabase.auth.getUser()
+  // Verify user is authenticated via AWS Cognito
+  const user = await getCurrentUser()
   if (!user) throw new Error('Unauthorized')
 
   // Start transaction-like operations
   // 1. Validate session has capacity
-  // 2. Create registration record
+  // 2. Create registration record via Prisma
   // 3. Create Stripe checkout session
   // 4. Return checkout URL
 
@@ -683,7 +682,7 @@ export async function createRegistration(data: RegistrationInput) {
 // app/api/stripe/webhook/route.ts
 import { headers } from 'next/headers'
 import Stripe from 'stripe'
-import { createAdminClient } from '@/lib/supabase/admin'
+import prisma from '@/lib/db/client'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!)
 
@@ -696,8 +695,6 @@ export async function POST(req: Request) {
     signature,
     process.env.STRIPE_WEBHOOK_SECRET!
   )
-
-  const supabase = createAdminClient()
 
   switch (event.type) {
     case 'checkout.session.completed':
@@ -1267,11 +1264,12 @@ empowered-sports-camp/
 │       ├── waiver-form.tsx
 │       └── contact-form.tsx
 ├── lib/
-│   ├── supabase/
-│   │   ├── client.ts
-│   │   ├── server.ts
-│   │   ├── admin.ts
+│   ├── auth/
+│   │   ├── cognito.ts
+│   │   ├── context.tsx
 │   │   └── middleware.ts
+│   ├── db/
+│   │   └── client.ts
 │   ├── stripe/
 │   │   └── index.ts
 │   ├── email/
@@ -1285,7 +1283,7 @@ empowered-sports-camp/
 │   ├── athletes.ts
 │   └── admin.ts
 ├── types/
-│   ├── database.ts                       # Generated from Supabase
+│   ├── database.ts                       # Generated from Prisma
 │   └── index.ts
 ├── hooks/
 │   ├── use-user.ts
@@ -1309,13 +1307,13 @@ See the `/frontend` directory for implementation code.
 
 **Deliverables**:
 
-1. **Supabase Setup**
-   - Create Supabase project and apply database schema
-   - Configure Row-Level Security policies
-   - Set up database triggers for `enrolled_count` updates
+1. **Database Setup**
+   - Set up PostgreSQL database via AWS RDS
+   - Apply Prisma migrations
+   - Configure application-level authorization
 
 2. **Authentication Flow**
-   - Implement Supabase Auth with email/password
+   - Implement AWS Cognito Auth with email/password
    - Create sign-up flow with parent profile creation
    - Add password reset and email verification
    - Protected route middleware
@@ -1454,7 +1452,7 @@ See the `/frontend` directory for implementation code.
 
 This document provides a comprehensive blueprint for building Empowered Sports Camp's web platform. The architecture is designed to be:
 
-- **Scalable**: Supabase + Next.js can grow with the organization
+- **Scalable**: AWS + Next.js + PostgreSQL can grow with the organization
 - **Maintainable**: Clean separation of concerns, typed with TypeScript
 - **User-Focused**: Every feature solves a real problem for parents, athletes, coaches, or admins
 - **Brand-Aligned**: UI/UX reflects Empowered Sports Camp's mission of confidence and empowerment

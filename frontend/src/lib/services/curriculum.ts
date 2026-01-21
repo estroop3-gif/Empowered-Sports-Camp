@@ -2,7 +2,6 @@
  * Curriculum Service (Prisma)
  *
  * Handles all database operations for curriculum management.
- * Migrated from Supabase to Prisma.
  */
 
 import prisma from '@/lib/db/client'
@@ -54,6 +53,10 @@ export interface CurriculumTemplate {
   total_days: number
   is_active: boolean
   is_published: boolean
+  // PDF Support
+  pdf_url: string | null
+  pdf_name: string | null
+  is_pdf_only: boolean
   created_by: string | null
   created_at: string
   updated_at: string
@@ -75,6 +78,9 @@ export interface CurriculumBlock {
   coaching_points: string | null
   is_global: boolean
   is_active: boolean
+  // PDF Support
+  pdf_url: string | null
+  pdf_name: string | null
   created_by: string | null
   created_at: string
   updated_at: string
@@ -242,6 +248,9 @@ export async function getTemplates(filters?: TemplateFilters): Promise<{
       total_days: t.totalDays,
       is_active: t.isActive,
       is_published: t.isPublished,
+      pdf_url: t.pdfUrl,
+      pdf_name: t.pdfName,
+      is_pdf_only: t.isPdfOnly,
       created_by: t.createdBy,
       created_at: t.createdAt.toISOString(),
       updated_at: t.updatedAt.toISOString(),
@@ -303,6 +312,9 @@ export async function getTemplateById(id: string): Promise<{
       total_days: template.totalDays,
       is_active: template.isActive,
       is_published: template.isPublished,
+      pdf_url: template.pdfUrl,
+      pdf_name: template.pdfName,
+      is_pdf_only: template.isPdfOnly,
       created_by: template.createdBy,
       created_at: template.createdAt.toISOString(),
       updated_at: template.updatedAt.toISOString(),
@@ -342,6 +354,8 @@ export async function getTemplateById(id: string): Promise<{
             coaching_points: db.block.coachingPoints,
             is_global: db.block.isGlobal,
             is_active: db.block.isActive,
+            pdf_url: db.block.pdfUrl,
+            pdf_name: db.block.pdfName,
             created_by: db.block.createdBy,
             created_at: db.block.createdAt.toISOString(),
             updated_at: db.block.updatedAt.toISOString(),
@@ -366,6 +380,10 @@ export interface CreateTemplateInput {
   difficulty?: DifficultyLevel
   is_global?: boolean
   total_days?: number
+  // PDF Support
+  pdf_url?: string | null
+  pdf_name?: string | null
+  is_pdf_only?: boolean
 }
 
 export async function createTemplate(input: CreateTemplateInput, userId?: string): Promise<{
@@ -384,6 +402,9 @@ export async function createTemplate(input: CreateTemplateInput, userId?: string
         difficulty: input.difficulty || 'intro',
         isGlobal: input.is_global || false,
         totalDays: input.total_days || 1,
+        pdfUrl: input.pdf_url || null,
+        pdfName: input.pdf_name || null,
+        isPdfOnly: input.is_pdf_only || false,
         createdBy: userId || null,
       },
     })
@@ -402,6 +423,9 @@ export async function createTemplate(input: CreateTemplateInput, userId?: string
         total_days: template.totalDays,
         is_active: template.isActive,
         is_published: template.isPublished,
+        pdf_url: template.pdfUrl,
+        pdf_name: template.pdfName,
+        is_pdf_only: template.isPdfOnly,
         created_by: template.createdBy,
         created_at: template.createdAt.toISOString(),
         updated_at: template.updatedAt.toISOString(),
@@ -430,6 +454,9 @@ export async function updateTemplate(
     if (input.difficulty !== undefined) updates.difficulty = input.difficulty
     if (input.is_global !== undefined) updates.isGlobal = input.is_global
     if (input.total_days !== undefined) updates.totalDays = input.total_days
+    if (input.pdf_url !== undefined) updates.pdfUrl = input.pdf_url
+    if (input.pdf_name !== undefined) updates.pdfName = input.pdf_name
+    if (input.is_pdf_only !== undefined) updates.isPdfOnly = input.is_pdf_only
 
     const template = await prisma.curriculumTemplate.update({
       where: { id },
@@ -450,6 +477,9 @@ export async function updateTemplate(
         total_days: template.totalDays,
         is_active: template.isActive,
         is_published: template.isPublished,
+        pdf_url: template.pdfUrl,
+        pdf_name: template.pdfName,
+        is_pdf_only: template.isPdfOnly,
         created_by: template.createdBy,
         created_at: template.createdAt.toISOString(),
         updated_at: template.updatedAt.toISOString(),
@@ -519,6 +549,9 @@ export async function duplicateTemplate(
         isGlobal: false, // Duplicates are always non-global
         isPublished: false, // Duplicates start unpublished
         isActive: true,
+        pdfUrl: sourceTemplate.pdfUrl,
+        pdfName: sourceTemplate.pdfName,
+        isPdfOnly: sourceTemplate.isPdfOnly,
         createdBy: sourceTemplate.createdBy,
       }
     })
@@ -589,6 +622,9 @@ export async function duplicateTemplate(
       is_global: completeTemplate.isGlobal,
       is_active: completeTemplate.isActive,
       is_published: completeTemplate.isPublished,
+      pdf_url: completeTemplate.pdfUrl,
+      pdf_name: completeTemplate.pdfName,
+      is_pdf_only: completeTemplate.isPdfOnly,
       created_by: completeTemplate.createdBy,
       created_at: completeTemplate.createdAt.toISOString(),
       updated_at: completeTemplate.updatedAt.toISOString(),
@@ -628,6 +664,8 @@ export async function duplicateTemplate(
             coaching_points: db.block.coachingPoints,
             is_global: db.block.isGlobal,
             is_active: db.block.isActive,
+            pdf_url: db.block.pdfUrl,
+            pdf_name: db.block.pdfName,
             created_by: db.block.createdBy,
             created_at: db.block.createdAt.toISOString(),
             updated_at: db.block.updatedAt.toISOString(),
@@ -688,6 +726,8 @@ export async function getBlocks(filters?: BlockFilters): Promise<{
       coaching_points: b.coachingPoints,
       is_global: b.isGlobal,
       is_active: b.isActive,
+      pdf_url: b.pdfUrl,
+      pdf_name: b.pdfName,
       created_by: b.createdBy,
       created_at: b.createdAt.toISOString(),
       updated_at: b.updatedAt.toISOString(),
@@ -740,6 +780,8 @@ export async function getBlockById(id: string): Promise<{
         coaching_points: block.coachingPoints,
         is_global: block.isGlobal,
         is_active: block.isActive,
+        pdf_url: block.pdfUrl,
+        pdf_name: block.pdfName,
         created_by: block.createdBy,
         created_at: block.createdAt.toISOString(),
         updated_at: block.updatedAt.toISOString(),
@@ -764,6 +806,9 @@ export interface CreateBlockInput {
   setup_notes?: string
   coaching_points?: string
   is_global?: boolean
+  // PDF Support
+  pdf_url?: string | null
+  pdf_name?: string | null
 }
 
 export async function createBlock(input: CreateBlockInput, userId?: string): Promise<{
@@ -784,6 +829,8 @@ export async function createBlock(input: CreateBlockInput, userId?: string): Pro
         setupNotes: input.setup_notes || null,
         coachingPoints: input.coaching_points || null,
         isGlobal: input.is_global || false,
+        pdfUrl: input.pdf_url || null,
+        pdfName: input.pdf_name || null,
         createdBy: userId || null,
       },
     })
@@ -803,6 +850,8 @@ export async function createBlock(input: CreateBlockInput, userId?: string): Pro
         coaching_points: block.coachingPoints,
         is_global: block.isGlobal,
         is_active: block.isActive,
+        pdf_url: block.pdfUrl,
+        pdf_name: block.pdfName,
         created_by: block.createdBy,
         created_at: block.createdAt.toISOString(),
         updated_at: block.updatedAt.toISOString(),
@@ -833,6 +882,8 @@ export async function updateBlock(
     if (input.setup_notes !== undefined) updates.setupNotes = input.setup_notes
     if (input.coaching_points !== undefined) updates.coachingPoints = input.coaching_points
     if (input.is_global !== undefined) updates.isGlobal = input.is_global
+    if (input.pdf_url !== undefined) updates.pdfUrl = input.pdf_url
+    if (input.pdf_name !== undefined) updates.pdfName = input.pdf_name
 
     const block = await prisma.curriculumBlock.update({
       where: { id },
@@ -854,6 +905,8 @@ export async function updateBlock(
         coaching_points: block.coachingPoints,
         is_global: block.isGlobal,
         is_active: block.isActive,
+        pdf_url: block.pdfUrl,
+        pdf_name: block.pdfName,
         created_by: block.createdBy,
         created_at: block.createdAt.toISOString(),
         updated_at: block.updatedAt.toISOString(),
@@ -1026,6 +1079,8 @@ export async function addBlockToDay(input: {
           coaching_points: dayBlock.block.coachingPoints,
           is_global: dayBlock.block.isGlobal,
           is_active: dayBlock.block.isActive,
+          pdf_url: dayBlock.block.pdfUrl,
+          pdf_name: dayBlock.block.pdfName,
           created_by: dayBlock.block.createdBy,
           created_at: dayBlock.block.createdAt.toISOString(),
           updated_at: dayBlock.block.updatedAt.toISOString(),
@@ -1167,6 +1222,9 @@ export async function getCurriculumAssignments(): Promise<{
           total_days: 0,
           is_active: true,
           is_published: true,
+          pdf_url: null,
+          pdf_name: null,
+          is_pdf_only: false,
           created_by: null,
           created_at: '',
           updated_at: '',

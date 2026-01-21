@@ -2,7 +2,6 @@
  * Camp Services
  *
  * Prisma-based queries for the Find Camps feature.
- * Replaces the Supabase public_camp_cards view.
  */
 
 import prisma from '@/lib/db/client'
@@ -177,23 +176,40 @@ function transformCampToCard(camp: Prisma.CampGetPayload<{
 
 /**
  * Fetch all published camps with optional filters
+ * Automatically excludes:
+ * - Camps where end_date has passed
+ * - Camps where registration_close date has passed (if set)
+ * - Camps that have been concluded (concludedAt is set)
  */
 export async function fetchPublicCamps(
   filters: CampFilters = {},
   options: { page?: number; pageSize?: number; orderBy?: string; ascending?: boolean } = {}
 ): Promise<CampSearchResult> {
   const { page = 1, pageSize = 12, orderBy = 'startDate', ascending = true } = options
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
 
   // Build the where clause
   const where: Prisma.CampWhereInput = {
     status: { in: ['published', 'registration_open'] },
+    // Exclude camps that have started (registration closes when camp begins)
+    startDate: { gt: today },
+    // Exclude camps that have been concluded
+    concludedAt: null,
+    // Exclude camps where registration has closed (if registrationClose is set and in the past)
+    // Uses AND to combine with other filters
+    AND: [
+      {
+        OR: [
+          { registrationClose: null },
+          { registrationClose: { gte: today } },
+        ],
+      },
+    ],
   }
 
   // Location/venue filters (support both legacy location and venue)
   if (filters.city || filters.state || filters.zip_code) {
-    // Use OR to search both location and venue
-    where.OR = where.OR || []
-
     const locationFilter: Prisma.LocationWhereInput = {}
     const venueFilter: Prisma.VenueWhereInput = {}
 
@@ -210,10 +226,13 @@ export async function fetchPublicCamps(
       venueFilter.postalCode = filters.zip_code
     }
 
-    where.OR.push(
-      { location: locationFilter },
-      { venue: venueFilter }
-    )
+    // Add location/venue filter as an AND condition
+    ;(where.AND as Prisma.CampWhereInput[]).push({
+      OR: [
+        { location: locationFilter },
+        { venue: venueFilter },
+      ],
+    })
   }
 
   // Age filters
@@ -265,14 +284,8 @@ export async function fetchPublicCamps(
       { venue: { name: { contains: filters.search, mode: 'insensitive' } } },
     ] as Prisma.CampWhereInput[]
 
-    // Merge with existing OR conditions if any
-    if (where.OR && where.OR.length > 0) {
-      // Wrap existing OR in AND with new search terms
-      where.AND = [{ OR: where.OR }, { OR: searchTerms }]
-      delete where.OR
-    } else {
-      where.OR = searchTerms
-    }
+    // Add search filter as an AND condition with OR for each search term
+    ;(where.AND as Prisma.CampWhereInput[]).push({ OR: searchTerms })
   }
 
   // Get total count
@@ -353,12 +366,23 @@ export async function fetchCampById(id: string): Promise<PublicCampCard | null> 
 
 /**
  * Fetch featured camps for homepage or promotions
+ * Excludes started, concluded, and registration-closed camps
  */
 export async function fetchFeaturedCamps(limit: number = 3): Promise<PublicCampCard[]> {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
   const camps = await prisma.camp.findMany({
     where: {
       featured: true,
       status: { in: ['published', 'registration_open'] },
+      // Registration closes when camp starts
+      startDate: { gt: today },
+      concludedAt: null,
+      OR: [
+        { registrationClose: null },
+        { registrationClose: { gte: today } },
+      ],
     },
     include: {
       location: true,
@@ -377,13 +401,29 @@ export async function fetchFeaturedCamps(limit: number = 3): Promise<PublicCampC
 /**
  * Fetch camps by location (city/state/zip)
  * Searches both legacy location and venue data
+ * Excludes started, concluded, and registration-closed camps
  */
 export async function fetchCampsByLocation(
   location: { city?: string; state?: string; zipCode?: string },
   limit: number = 20
 ): Promise<PublicCampCard[]> {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
   const where: Prisma.CampWhereInput = {
     status: { in: ['published', 'registration_open'] },
+    // Registration closes when camp starts
+    startDate: { gt: today },
+    concludedAt: null,
+    // Registration close filter: allow if not set or if not yet closed
+    AND: [
+      {
+        OR: [
+          { registrationClose: null },
+          { registrationClose: { gte: today } },
+        ],
+      },
+    ],
   }
 
   if (location.city || location.state || location.zipCode) {
@@ -403,10 +443,13 @@ export async function fetchCampsByLocation(
       venueFilter.postalCode = location.zipCode
     }
 
-    where.OR = [
-      { location: locationFilter },
-      { venue: venueFilter },
-    ]
+    // Add location/venue filter as an AND condition
+    ;(where.AND as Prisma.CampWhereInput[]).push({
+      OR: [
+        { location: locationFilter },
+        { venue: venueFilter },
+      ],
+    })
   }
 
   const camps = await prisma.camp.findMany({
@@ -426,17 +469,42 @@ export async function fetchCampsByLocation(
 }
 
 /**
+ * Helper to get active camp filter criteria
+ * Used for filtering cities, states, and program types
+ * Excludes camps that:
+ * - Have already started (registration closes when camp begins)
+ * - Have ended
+ * - Have been concluded
+ * - Have passed registration close date
+ */
+function getActiveCampFilter(): Prisma.CampWhereInput {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return {
+    status: { in: ['published', 'registration_open'] },
+    // Camp hasn't started yet (registration closes when camp starts)
+    startDate: { gt: today },
+    concludedAt: null,
+    OR: [
+      { registrationClose: null },
+      { registrationClose: { gte: today } },
+    ],
+  }
+}
+
+/**
  * Get unique cities with camps for location filter dropdown
  * Includes cities from both locations and venues
+ * Only includes cities with active camps (not past/concluded)
  */
 export async function fetchCampCities(): Promise<string[]> {
+  const activeCampFilter = getActiveCampFilter()
+
   // Get cities from locations
   const locations = await prisma.location.findMany({
     where: {
       camps: {
-        some: {
-          status: { in: ['published', 'registration_open'] },
-        },
+        some: activeCampFilter,
       },
     },
     select: { city: true },
@@ -448,9 +516,7 @@ export async function fetchCampCities(): Promise<string[]> {
   const venues = await prisma.venue.findMany({
     where: {
       camps: {
-        some: {
-          status: { in: ['published', 'registration_open'] },
-        },
+        some: activeCampFilter,
       },
     },
     select: { city: true },
@@ -469,15 +535,16 @@ export async function fetchCampCities(): Promise<string[]> {
 /**
  * Get unique states with camps for location filter dropdown
  * Includes states from both locations and venues
+ * Only includes states with active camps (not past/concluded)
  */
 export async function fetchCampStates(): Promise<string[]> {
+  const activeCampFilter = getActiveCampFilter()
+
   // Get states from locations
   const locations = await prisma.location.findMany({
     where: {
       camps: {
-        some: {
-          status: { in: ['published', 'registration_open'] },
-        },
+        some: activeCampFilter,
       },
     },
     select: { state: true },
@@ -489,9 +556,7 @@ export async function fetchCampStates(): Promise<string[]> {
   const venues = await prisma.venue.findMany({
     where: {
       camps: {
-        some: {
-          status: { in: ['published', 'registration_open'] },
-        },
+        some: activeCampFilter,
       },
     },
     select: { state: true },
@@ -508,13 +573,14 @@ export async function fetchCampStates(): Promise<string[]> {
 }
 
 /**
- * Get available program types from published camps
+ * Get available program types from active camps
+ * Only includes program types with active camps (not past/concluded)
  */
 export async function fetchProgramTypes(): Promise<string[]> {
+  const activeCampFilter = getActiveCampFilter()
+
   const camps = await prisma.camp.findMany({
-    where: {
-      status: { in: ['published', 'registration_open'] },
-    },
+    where: activeCampFilter,
     select: { programType: true },
     distinct: ['programType'],
     orderBy: { programType: 'asc' },

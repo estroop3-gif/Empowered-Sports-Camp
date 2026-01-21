@@ -153,12 +153,13 @@ export function WaiverTemplateModal({ waiver, onClose, onSave }: WaiverTemplateM
             </p>
           </div>
 
-          <div className="space-y-4">
-            <div className="flex items-center gap-3">
+          {/* Mandatory Site-Wide Section - Highlighted */}
+          <div className={`p-4 border ${isMandatorySiteWide ? 'border-magenta/50 bg-magenta/5' : 'border-white/10 bg-black/20'}`}>
+            <div className="flex items-start gap-4">
               <button
                 type="button"
                 onClick={() => setIsMandatorySiteWide(!isMandatorySiteWide)}
-                className={`w-12 h-6 rounded-full transition-colors ${
+                className={`flex-shrink-0 w-12 h-6 rounded-full transition-colors ${
                   isMandatorySiteWide ? 'bg-magenta' : 'bg-white/20'
                 }`}
               >
@@ -168,14 +169,28 @@ export function WaiverTemplateModal({ waiver, onClose, onSave }: WaiverTemplateM
                   }`}
                 />
               </button>
-              <div className="flex items-center gap-2">
-                <Globe className="h-4 w-4 text-magenta" />
-                <span className="text-white font-medium">Mandatory Site-Wide</span>
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-2">
+                  <Globe className="h-5 w-5 text-magenta" />
+                  <span className="text-white font-bold uppercase tracking-wider">Required for All Camps</span>
+                  {isMandatorySiteWide && (
+                    <span className="px-2 py-0.5 text-xs bg-magenta/20 text-magenta border border-magenta/30">
+                      ENABLED
+                    </span>
+                  )}
+                </div>
+                <p className="text-sm text-white/60">
+                  When enabled, this waiver will be <strong className="text-white">automatically required</strong> for
+                  every camp registration across all territories. Parents must sign this waiver before completing
+                  any camp registration, regardless of which camp they're signing up for.
+                </p>
+                {isMandatorySiteWide && (
+                  <p className="mt-2 text-xs text-magenta">
+                    This waiver will appear as "MANDATORY" in the registration flow and cannot be skipped.
+                  </p>
+                )}
               </div>
             </div>
-            <p className="text-sm text-white/40 ml-[60px]">
-              When enabled, this waiver will be required for ALL camp registrations across ALL territories.
-            </p>
           </div>
 
           <div className="flex items-center gap-3">

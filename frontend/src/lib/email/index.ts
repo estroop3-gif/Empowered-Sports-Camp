@@ -1,25 +1,17 @@
 /**
- * Email Service - Resend Integration
+ * Email Service - AWS SES Integration
  *
- * Uses Resend for transactional email delivery.
+ * Uses Amazon SES for transactional email delivery.
  *
  * SETUP:
- * 1. Add RESEND_API_KEY to .env.local
- * 2. Verify your sending domain in Resend dashboard
+ * 1. Configure AWS credentials (via environment variables or IAM role)
+ * 2. Verify your sending domain in AWS SES console
+ * 3. Request production access to send to non-verified emails
  *
- * @see https://resend.com/docs
+ * @see https://docs.aws.amazon.com/ses/latest/dg/Welcome.html
  */
 
-import { Resend } from 'resend'
-
-// Initialize Resend client
-// In development without API key, emails will be logged to console
-const resend = process.env.RESEND_API_KEY
-  ? new Resend(process.env.RESEND_API_KEY)
-  : null
-
-// Default from address - update with your verified domain
-const DEFAULT_FROM = process.env.RESEND_FROM_EMAIL || 'Empowered Sports Camp <noreply@empoweredsportscamp.com>'
+import { sendEmail, isEmailConfigured, DEFAULT_FROM } from './ses-client'
 
 // Placeholder type for email result
 export interface EmailResult {
@@ -196,45 +188,18 @@ export async function sendLicenseeApplicationEmail(
 ): Promise<EmailResult> {
   const { to, firstName, lastName, territoryName, applicationUrl } = options
 
-  // If Resend is not configured, log to console and return success
-  if (!resend) {
-    console.log('=== DEV MODE: Licensee Application Email ===')
-    console.log('To:', to)
-    console.log('Subject:', `Complete Your Licensee Application - ${territoryName}`)
-    console.log('First Name:', firstName)
-    console.log('Last Name:', lastName)
-    console.log('Territory:', territoryName)
-    console.log('Application URL:', applicationUrl)
-    console.log('============================================')
-    console.log('')
-    console.log('NOTE: Set RESEND_API_KEY in .env.local to send real emails')
-    console.log('')
+  const result = await sendEmail({
+    to,
+    subject: options.subject || `Complete Your Licensee Application - ${territoryName}`,
+    html: generateLicenseeApplicationHtml(options),
+    text: generateLicenseeApplicationText(options),
+  })
 
-    return {
-      success: true,
-      messageId: `dev-${Date.now()}`,
-    }
+  if (!result.success) {
+    console.error('SES error:', result.error)
   }
 
-  try {
-    const { data, error } = await resend.emails.send({
-      from: DEFAULT_FROM,
-      to: [to],
-      subject: options.subject || `Complete Your Licensee Application - ${territoryName}`,
-      html: generateLicenseeApplicationHtml(options),
-      text: generateLicenseeApplicationText(options),
-    })
-
-    if (error) {
-      console.error('Resend error:', error)
-      return { success: false, error: error.message }
-    }
-
-    return { success: true, messageId: data?.id }
-  } catch (err) {
-    console.error('Email send error:', err)
-    return { success: false, error: (err as Error).message }
-  }
+  return result
 }
 
 /**
@@ -318,45 +283,23 @@ export async function sendLicenseeWelcomeEmail(
 ): Promise<EmailResult> {
   const { to, firstName, territoryName, loginUrl } = options
 
-  if (!resend) {
-    console.log('=== DEV MODE: Licensee Welcome Email ===')
-    console.log('To:', to)
-    console.log('Subject:', `Welcome to Empowered Sports Camp - ${territoryName}`)
-    console.log('First Name:', firstName)
-    console.log('Territory:', territoryName)
-    console.log('Login URL:', loginUrl)
-    console.log('=========================================')
+  const result = await sendEmail({
+    to,
+    subject: options.subject || `Welcome to Empowered Sports Camp - ${territoryName}`,
+    html: generateLicenseeWelcomeHtml(options),
+  })
 
-    return {
-      success: true,
-      messageId: `dev-${Date.now()}`,
-    }
+  if (!result.success) {
+    console.error('SES error:', result.error)
   }
 
-  try {
-    const { data, error } = await resend.emails.send({
-      from: DEFAULT_FROM,
-      to: [to],
-      subject: options.subject || `Welcome to Empowered Sports Camp - ${territoryName}`,
-      html: generateLicenseeWelcomeHtml(options),
-    })
-
-    if (error) {
-      return { success: false, error: error.message }
-    }
-
-    return { success: true, messageId: data?.id }
-  } catch (err) {
-    return { success: false, error: (err as Error).message }
-  }
+  return result
 }
 
 /**
- * Check if Resend is configured
+ * Check if email service is configured
  */
-export function isEmailConfigured(): boolean {
-  return !!process.env.RESEND_API_KEY
-}
+export { isEmailConfigured }
 
 // ============================================
 // CIT Program Email Functions
@@ -483,42 +426,18 @@ export async function sendCitApplicantConfirmationEmail(
 ): Promise<EmailResult> {
   const { to, applicantName } = options
 
-  // If Resend is not configured, log to console and return success
-  if (!resend) {
-    console.log('=== DEV MODE: CIT Applicant Confirmation Email ===')
-    console.log('To:', to)
-    console.log('Subject: Your CIT Application Has Been Received')
-    console.log('Applicant Name:', applicantName)
-    console.log('=================================================')
-    console.log('')
-    console.log('NOTE: Set RESEND_API_KEY in .env.local to send real emails')
-    console.log('')
+  const result = await sendEmail({
+    to,
+    subject: 'Your CIT Application Has Been Received',
+    html: generateCitApplicantConfirmationHtml(applicantName),
+    text: generateCitApplicantConfirmationText(applicantName),
+  })
 
-    return {
-      success: true,
-      messageId: `dev-${Date.now()}`,
-    }
+  if (!result.success) {
+    console.error('SES error (CIT applicant):', result.error)
   }
 
-  try {
-    const { data, error } = await resend.emails.send({
-      from: DEFAULT_FROM,
-      to: [to],
-      subject: 'Your CIT Application Has Been Received',
-      html: generateCitApplicantConfirmationHtml(applicantName),
-      text: generateCitApplicantConfirmationText(applicantName),
-    })
-
-    if (error) {
-      console.error('Resend error (CIT applicant):', error)
-      return { success: false, error: error.message }
-    }
-
-    return { success: true, messageId: data?.id }
-  } catch (err) {
-    console.error('Email send error (CIT applicant):', err)
-    return { success: false, error: (err as Error).message }
-  }
+  return result
 }
 
 /**
@@ -695,49 +614,25 @@ export async function sendCitAdminNotificationEmail(
     }
   }
 
-  // If Resend is not configured, log to console and return success
-  if (!resend) {
-    console.log('=== DEV MODE: CIT Admin Notification Email ===')
-    console.log('To:', CIT_NOTIFICATIONS_EMAIL)
-    console.log('Subject: New CIT Application - ' + application.firstName + ' ' + application.lastName)
-    console.log('Application Data:', JSON.stringify(application, null, 2))
-    console.log('==============================================')
-    console.log('')
-    console.log('NOTE: Set RESEND_API_KEY in .env.local to send real emails')
-    console.log('')
+  const result = await sendEmail({
+    to: CIT_NOTIFICATIONS_EMAIL,
+    subject: `New CIT Application - ${application.firstName} ${application.lastName}`,
+    html: generateCitAdminNotificationHtml(application),
+    text: generateCitAdminNotificationText(application),
+  })
 
-    return {
-      success: true,
-      messageId: `dev-${Date.now()}`,
-    }
+  if (!result.success) {
+    console.error('SES error (CIT admin notification):', result.error)
   }
 
-  try {
-    const { data, error } = await resend.emails.send({
-      from: DEFAULT_FROM,
-      to: [CIT_NOTIFICATIONS_EMAIL],
-      subject: `New CIT Application - ${application.firstName} ${application.lastName}`,
-      html: generateCitAdminNotificationHtml(application),
-      text: generateCitAdminNotificationText(application),
-    })
-
-    if (error) {
-      console.error('Resend error (CIT admin notification):', error)
-      return { success: false, error: error.message }
-    }
-
-    return { success: true, messageId: data?.id }
-  } catch (err) {
-    console.error('Email send error (CIT admin notification):', err)
-    return { success: false, error: (err as Error).message }
-  }
+  return result
 }
 
 /**
  * Check if CIT notifications are fully configured
  */
 export function isCitNotificationsConfigured(): boolean {
-  return !!process.env.RESEND_API_KEY && !!process.env.CIT_NOTIFICATIONS_EMAIL
+  return isEmailConfigured() && !!process.env.CIT_NOTIFICATIONS_EMAIL
 }
 
 // ============================================
@@ -862,42 +757,16 @@ export async function sendSquadInviteEmail(
 ): Promise<EmailResult> {
   const { to, inviterName, campName, signupUrl } = options
 
-  // If Resend is not configured, log to console and return success
-  if (!resend) {
-    console.log('=== DEV MODE: Squad Invite Email ===')
-    console.log('To:', to)
-    console.log('Subject:', `${inviterName} invited you to join their squad!`)
-    console.log('Inviter:', inviterName)
-    console.log('Camp:', campName)
-    console.log('Signup URL:', signupUrl)
-    console.log('====================================')
-    console.log('')
-    console.log('NOTE: Set RESEND_API_KEY in .env.local to send real emails')
-    console.log('')
+  const result = await sendEmail({
+    to,
+    subject: `${inviterName} invited you to join their squad!`,
+    html: generateSquadInviteHtml(options),
+    text: generateSquadInviteText(options),
+  })
 
-    return {
-      success: true,
-      messageId: `dev-${Date.now()}`,
-    }
+  if (!result.success) {
+    console.error('SES error (squad invite):', result.error)
   }
 
-  try {
-    const { data, error } = await resend.emails.send({
-      from: DEFAULT_FROM,
-      to: [to],
-      subject: `${inviterName} invited you to join their squad!`,
-      html: generateSquadInviteHtml(options),
-      text: generateSquadInviteText(options),
-    })
-
-    if (error) {
-      console.error('Resend error (squad invite):', error)
-      return { success: false, error: error.message }
-    }
-
-    return { success: true, messageId: data?.id }
-  } catch (err) {
-    console.error('Email send error (squad invite):', err)
-    return { success: false, error: (err as Error).message }
-  }
+  return result
 }

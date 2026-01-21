@@ -41,10 +41,9 @@ export default function LicenseeDashboardPage() {
                 <GraduationCap className="h-6 w-6 text-magenta" />
               </div>
               <div>
-                <h2 className="text-lg font-bold text-white">Complete Your Business Training</h2>
+                <h2 className="text-lg font-bold text-white">Complete Your Training</h2>
                 <p className="text-white/60 text-sm mt-1">
-                  Finish the required EmpowerU Business & Strategy Portal modules to unlock
-                  all territory management tools.
+                  Finish your required EmpowerU training modules to unlock all territory management tools.
                 </p>
               </div>
             </div>

@@ -5,10 +5,6 @@ import Link from 'next/link'
 import { AdminLayout, PageHeader, ContentCard } from '@/components/admin/admin-layout'
 import { useAuth } from '@/lib/auth/context'
 import {
-  getCampsForAssignment,
-  getTemplates,
-  assignTemplateToCamp,
-  unassignTemplateFromCamp,
   CurriculumTemplate,
   SPORTS,
 } from '@/lib/services/curriculum'
@@ -67,19 +63,27 @@ export default function CurriculumAssignmentPage() {
 
   const fetchData = async () => {
     setLoading(true)
-    const [campsResult, templatesResult] = await Promise.all([
-      getCampsForAssignment(),
-      getTemplates(),
-    ])
+    try {
+      const [campsRes, templatesRes] = await Promise.all([
+        fetch('/api/curriculum?action=campsForAssignment', { credentials: 'include' }),
+        fetch('/api/curriculum?action=templates', { credentials: 'include' }),
+      ])
 
-    if (campsResult.data) {
-      setCamps(campsResult.data)
-    } else {
-      setError(campsResult.error?.message || 'Failed to load camps')
-    }
+      const campsResult = await campsRes.json()
+      const templatesResult = await templatesRes.json()
 
-    if (templatesResult.data) {
-      setTemplates(templatesResult.data)
+      if (campsResult.data) {
+        setCamps(campsResult.data)
+      } else {
+        setError(campsResult.error || 'Failed to load camps')
+      }
+
+      if (templatesResult.data) {
+        setTemplates(templatesResult.data)
+      }
+    } catch (err) {
+      console.error('Error fetching data:', err)
+      setError('Failed to load data')
     }
 
     setLoading(false)
@@ -89,23 +93,35 @@ export default function CurriculumAssignmentPage() {
     if (!assigningCamp || !selectedTemplateId) return
 
     setSaving(true)
-    const { error } = await assignTemplateToCamp({
-      camp_id: assigningCamp.id,
-      template_id: selectedTemplateId,
-    })
+    try {
+      const response = await fetch('/api/curriculum', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          action: 'assignTemplateToCamp',
+          camp_id: assigningCamp.id,
+          template_id: selectedTemplateId,
+        }),
+      })
+      const result = await response.json()
 
-    if (error) {
-      alert(error.message || 'Failed to assign template')
-    } else {
-      // Update local state
-      const template = templates.find(t => t.id === selectedTemplateId)
-      setCamps(prev => prev.map(c =>
-        c.id === assigningCamp.id
-          ? { ...c, assigned_template_id: selectedTemplateId, assigned_template_name: template?.name }
-          : c
-      ))
-      setSuccess(`Template assigned to ${assigningCamp.name}`)
-      setTimeout(() => setSuccess(null), 3000)
+      if (!response.ok || result.error) {
+        alert(result.error || 'Failed to assign template')
+      } else {
+        // Update local state
+        const template = templates.find(t => t.id === selectedTemplateId)
+        setCamps(prev => prev.map(c =>
+          c.id === assigningCamp.id
+            ? { ...c, assigned_template_id: selectedTemplateId, assigned_template_name: template?.name }
+            : c
+        ))
+        setSuccess(`Template assigned to ${assigningCamp.name}`)
+        setTimeout(() => setSuccess(null), 3000)
+      }
+    } catch (err) {
+      console.error('Error assigning template:', err)
+      alert('Failed to assign template')
     }
 
     setAssigningCamp(null)
@@ -117,18 +133,29 @@ export default function CurriculumAssignmentPage() {
     if (!confirm(`Remove curriculum from "${camp.name}"?`)) return
 
     setSaving(true)
-    const { error } = await unassignTemplateFromCamp(camp.id)
+    try {
+      const response = await fetch('/api/curriculum', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ action: 'unassignTemplateFromCamp', campId: camp.id }),
+      })
+      const result = await response.json()
 
-    if (error) {
-      alert(error.message || 'Failed to remove assignment')
-    } else {
-      setCamps(prev => prev.map(c =>
-        c.id === camp.id
-          ? { ...c, assigned_template_id: undefined, assigned_template_name: undefined }
-          : c
-      ))
-      setSuccess(`Curriculum removed from ${camp.name}`)
-      setTimeout(() => setSuccess(null), 3000)
+      if (!response.ok || result.error) {
+        alert(result.error || 'Failed to remove assignment')
+      } else {
+        setCamps(prev => prev.map(c =>
+          c.id === camp.id
+            ? { ...c, assigned_template_id: undefined, assigned_template_name: undefined }
+            : c
+        ))
+        setSuccess(`Curriculum removed from ${camp.name}`)
+        setTimeout(() => setSuccess(null), 3000)
+      }
+    } catch (err) {
+      console.error('Error removing assignment:', err)
+      alert('Failed to remove assignment')
     }
 
     setSaving(false)

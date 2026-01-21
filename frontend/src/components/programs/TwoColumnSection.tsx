@@ -4,6 +4,7 @@
  * Reusable two-column layout with text and placeholder/image.
  */
 
+import Image from 'next/image'
 import { Crown } from 'lucide-react'
 
 interface TwoColumnSectionProps {
@@ -12,6 +13,8 @@ interface TwoColumnSectionProps {
   titleAccent?: string
   content: React.ReactNode
   imagePlaceholder?: string
+  imageSrc?: string
+  imageAlt?: string
   imagePosition?: 'left' | 'right'
   accentColor?: 'neon' | 'magenta' | 'purple'
 }
@@ -43,6 +46,8 @@ export default function TwoColumnSection({
   titleAccent,
   content,
   imagePlaceholder = 'Photo Coming Soon',
+  imageSrc,
+  imageAlt = '',
   imagePosition = 'right',
   accentColor = 'neon',
 }: TwoColumnSectionProps) {
@@ -56,21 +61,34 @@ export default function TwoColumnSection({
 
       <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="grid gap-12 lg:grid-cols-2 lg:gap-16 items-center">
-          {/* Image placeholder */}
+          {/* Image or placeholder */}
           <div className={`relative ${isLeft ? 'order-1' : 'order-2 lg:order-2'}`}>
             <div className="aspect-[4/3] bg-dark-100 border border-white/10 flex items-center justify-center relative overflow-hidden">
-              {/* Decorative elements */}
-              <div className="absolute inset-0 bg-gradient-to-br from-neon/5 via-transparent to-magenta/5" />
-              <div className="absolute -bottom-4 -right-4 w-32 h-32 bg-neon/10 rounded-full blur-[60px]" />
-              <div className="absolute -top-4 -left-4 w-24 h-24 bg-purple/10 rounded-full blur-[40px]" />
+              {imageSrc ? (
+                /* Actual image */
+                <Image
+                  src={imageSrc}
+                  alt={imageAlt}
+                  fill
+                  className="object-cover"
+                  sizes="(max-width: 1024px) 100vw, 50vw"
+                />
+              ) : (
+                /* Placeholder content */
+                <>
+                  {/* Decorative elements */}
+                  <div className="absolute inset-0 bg-gradient-to-br from-neon/5 via-transparent to-magenta/5" />
+                  <div className="absolute -bottom-4 -right-4 w-32 h-32 bg-neon/10 rounded-full blur-[60px]" />
+                  <div className="absolute -top-4 -left-4 w-24 h-24 bg-purple/10 rounded-full blur-[40px]" />
 
-              {/* Placeholder content */}
-              <div className="relative flex flex-col items-center gap-4 text-white/30">
-                <Crown className="h-16 w-16" />
-                <span className="text-xs font-bold uppercase tracking-widest">
-                  {imagePlaceholder}
-                </span>
-              </div>
+                  <div className="relative flex flex-col items-center gap-4 text-white/30">
+                    <Crown className="h-16 w-16" />
+                    <span className="text-xs font-bold uppercase tracking-widest">
+                      {imagePlaceholder}
+                    </span>
+                  </div>
+                </>
+              )}
 
               {/* Corner accents */}
               <div className={`absolute top-0 left-0 w-16 h-1 ${colors.corner1}`} />

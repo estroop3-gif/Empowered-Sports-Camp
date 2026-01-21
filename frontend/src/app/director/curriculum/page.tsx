@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useAuth } from '@/lib/auth/context'
 import { PortalPageHeader, PortalCard, LmsGate } from '@/components/portal'
-import { getTemplates, getBlocks, type CurriculumTemplate, type CurriculumBlock, SPORTS } from '@/lib/services/curriculum'
+import { type CurriculumTemplate, type CurriculumBlock, SPORTS } from '@/lib/services/curriculum'
 import {
   BookOpen,
   Search,
@@ -49,12 +49,18 @@ export default function DirectorCurriculumPage() {
   async function loadData() {
     setLoading(true)
 
-    if (activeTab === 'templates') {
-      const { data } = await getTemplates()
-      if (data) setTemplates(data)
-    } else {
-      const { data } = await getBlocks()
-      if (data) setBlocks(data)
+    try {
+      if (activeTab === 'templates') {
+        const response = await fetch('/api/curriculum?action=templates', { credentials: 'include' })
+        const result = await response.json()
+        if (result.data) setTemplates(result.data)
+      } else {
+        const response = await fetch('/api/curriculum?action=blocks', { credentials: 'include' })
+        const result = await response.json()
+        if (result.data) setBlocks(result.data)
+      }
+    } catch (error) {
+      console.error('Error loading curriculum data:', error)
     }
 
     setLoading(false)

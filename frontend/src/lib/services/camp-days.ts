@@ -680,6 +680,210 @@ export async function updateCampDayNotes(
 }
 
 /**
+ * End camp day with extended options
+ * Enhanced version that supports:
+ * - Recap data (word of day, sports, guest speaker)
+ * - Auto-checkout remaining campers
+ * - Generate daily report
+ * - Send parent emails
+ */
+export interface EndDayOptions {
+  recap?: {
+    word_of_the_day?: string | null
+    primary_sport?: string | null
+    secondary_sport?: string | null
+    guest_speaker?: string | null
+    notes?: string | null
+  }
+  auto_checkout_all?: boolean
+  generate_report?: boolean
+  send_emails?: boolean
+  force?: boolean
+}
+
+export async function endCampDayWithOptions(
+  campDayId: string,
+  userId: string,
+  options: EndDayOptions = {}
+): Promise<{ data: { success: boolean; report_url?: string } | null; error: Error | null }> {
+  try {
+    const {
+      recap,
+      auto_checkout_all = true,
+      generate_report = false,
+      send_emails = false,
+      force = false,
+    } = options
+
+    // Fetch camp day with details
+    const existingCampDay = await prisma.campDay.findUnique({
+      where: { id: campDayId },
+      include: {
+        camp: {
+          select: {
+            id: true,
+            tenantId: true,
+            startDate: true,
+            endDate: true,
+            isLocked: true,
+          },
+        },
+        attendance: {
+          where: { status: 'checked_in' },
+          select: { id: true },
+        },
+        recap: true,
+      },
+    })
+
+    if (!existingCampDay) {
+      return { data: null, error: new Error('Camp day not found') }
+    }
+
+    // Check if camp is locked
+    if (existingCampDay.camp.isLocked) {
+      return { data: null, error: new Error('Camp is locked and cannot be modified') }
+    }
+
+    // Check if day is in correct state
+    if (existingCampDay.status === 'finished') {
+      return { data: null, error: new Error('Day has already been completed') }
+    }
+
+    if (existingCampDay.status === 'not_started') {
+      return { data: null, error: new Error('Day has not been started') }
+    }
+
+    const tenantId = existingCampDay.camp.tenantId
+
+    // Check for campers still on-site
+    const onSiteCount = existingCampDay.attendance.length
+    if (onSiteCount > 0 && !auto_checkout_all && !force) {
+      return {
+        data: null,
+        error: new Error(`${onSiteCount} camper${onSiteCount !== 1 ? 's are' : ' is'} still on-site. Enable auto-checkout or force end.`),
+      }
+    }
+
+    // Auto-checkout all remaining campers if requested
+    if (auto_checkout_all && onSiteCount > 0) {
+      await prisma.campAttendance.updateMany({
+        where: {
+          campDayId,
+          status: 'checked_in',
+        },
+        data: {
+          status: 'checked_out',
+          checkOutTime: new Date(),
+        },
+      })
+    }
+
+    // Mark remaining not_arrived as absent
+    await prisma.campAttendance.updateMany({
+      where: {
+        campDayId,
+        status: 'not_arrived',
+      },
+      data: {
+        status: 'absent',
+      },
+    })
+
+    // Update camp day
+    await prisma.campDay.update({
+      where: { id: campDayId },
+      data: {
+        status: 'finished',
+        completedAt: new Date(),
+        completedBy: userId,
+        notes: recap?.notes || undefined,
+      },
+    })
+
+    // Save or update recap data if provided
+    if (recap && tenantId) {
+      const recapData = {
+        wordOfTheDay: recap.word_of_the_day || undefined,
+        primarySport: recap.primary_sport || undefined,
+        secondarySport: recap.secondary_sport || undefined,
+        guestSpeakerName: recap.guest_speaker || undefined,
+      }
+
+      if (Object.values(recapData).some(v => v !== undefined)) {
+        await prisma.campDayRecap.upsert({
+          where: { campDayId },
+          create: {
+            campDayId,
+            tenantId,
+            submittedByUserId: userId,
+            ...recapData,
+          },
+          update: {
+            submittedByUserId: userId,
+            ...recapData,
+          },
+        })
+      }
+    }
+
+    // Calculate if this is the last day of camp
+    const campStart = new Date(existingCampDay.camp.startDate)
+    const campEnd = new Date(existingCampDay.camp.endDate)
+    campStart.setHours(0, 0, 0, 0)
+    campEnd.setHours(0, 0, 0, 0)
+    const totalDays = Math.floor((campEnd.getTime() - campStart.getTime()) / (1000 * 60 * 60 * 24)) + 1
+    const isLastDay = existingCampDay.dayNumber === totalDays
+
+    // Send daily recap emails to parents (async - don't block completion)
+    if (send_emails && tenantId) {
+      sendDailyRecapEmail({
+        campDayId,
+        tenantId,
+        recapData: {
+          wordOfTheDay: recap?.word_of_the_day || undefined,
+          primarySport: recap?.primary_sport || undefined,
+          secondarySport: recap?.secondary_sport || undefined,
+          guestSpeakerName: recap?.guest_speaker || undefined,
+        },
+      }).then(({ error }) => {
+        if (error) {
+          console.error('[endCampDayWithOptions] Failed to send daily recap emails:', error)
+        } else {
+          console.log('[endCampDayWithOptions] Daily recap emails sent for camp day:', campDayId)
+        }
+      })
+    }
+
+    // If this is the last day, also send session recap emails
+    if (isLastDay && send_emails && tenantId) {
+      sendSessionRecapEmail({
+        campId: existingCampDay.camp.id,
+        tenantId,
+      }).then(({ error }) => {
+        if (error) {
+          console.error('[endCampDayWithOptions] Failed to send session recap emails:', error)
+        } else {
+          console.log('[endCampDayWithOptions] Session recap emails sent for camp:', existingCampDay.camp.id)
+        }
+      })
+    }
+
+    // TODO: Generate daily report PDF if requested
+    let reportUrl: string | undefined
+    if (generate_report) {
+      // Report generation will be implemented in the reports service
+      console.log('[endCampDayWithOptions] Report generation requested for camp day:', campDayId)
+    }
+
+    return { data: { success: true, report_url: reportUrl }, error: null }
+  } catch (error) {
+    console.error('[endCampDayWithOptions] Error:', error)
+    return { data: null, error: error as Error }
+  }
+}
+
+/**
  * Initialize attendance records for a camp day
  * Creates attendance records for all registered athletes
  */

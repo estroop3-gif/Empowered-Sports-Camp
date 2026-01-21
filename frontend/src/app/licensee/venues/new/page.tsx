@@ -9,7 +9,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { PortalLayout, PortalPageHeader, PortalCard } from '@/components/portal'
+import { PortalPageHeader, PortalCard } from '@/components/portal'
 import {
   ArrowLeft,
   Save,
@@ -143,7 +143,7 @@ export default function LicenseeNewVenuePage() {
   }
 
   return (
-    <PortalLayout>
+    <div>
       <PortalPageHeader
         title="Add New Venue"
         description="Create a new venue for your camps"
@@ -498,6 +498,6 @@ export default function LicenseeNewVenuePage() {
           </button>
         </div>
       </form>
-    </PortalLayout>
+    </div>
   )
 }

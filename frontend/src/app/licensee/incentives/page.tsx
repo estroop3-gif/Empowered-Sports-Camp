@@ -58,8 +58,10 @@ export default function LicenseeIncentivesPage() {
   async function loadIncentives() {
     try {
       setLoading(true)
-      // Use the incentives API endpoint
-      const res = await fetch('/api/incentives/overview?scope=licensee')
+      setError(null)
+      const res = await fetch('/api/licensee/incentives', {
+        credentials: 'include',
+      })
       const json = await res.json()
 
       if (!res.ok) {
@@ -67,17 +69,8 @@ export default function LicenseeIncentivesPage() {
       }
 
       setData(json.data)
-      setError(null)
     } catch (err) {
-      // Mock data for now if API doesn't exist
-      setData({
-        total_paid: 12500,
-        total_pending: 3200,
-        staff_count: 5,
-        avg_per_session: 450,
-        staff: [],
-      })
-      setError(null)
+      setError(err instanceof Error ? err.message : 'Failed to load incentives')
     } finally {
       setLoading(false)
     }
@@ -91,6 +84,36 @@ export default function LicenseeIncentivesPage() {
       <LmsGate featureName="incentive scorecards">
         <div className="flex items-center justify-center min-h-[60vh]">
           <Loader2 className="h-12 w-12 text-neon animate-spin" />
+        </div>
+      </LmsGate>
+    )
+  }
+
+  if (error) {
+    return (
+      <LmsGate featureName="incentive scorecards">
+        <div>
+          <PortalPageHeader
+            title="Incentive Scorecards"
+            description="Track staff compensation and performance metrics"
+            actions={
+              <Link
+                href="/licensee/dashboard"
+                className="px-4 py-2 bg-white/10 text-white font-bold uppercase tracking-wider text-sm hover:bg-white/20 transition-colors"
+              >
+                Back to Dashboard
+              </Link>
+            }
+          />
+          <PortalCard accent="magenta">
+            <div className="flex items-center gap-4">
+              <AlertCircle className="h-8 w-8 text-magenta" />
+              <div>
+                <h3 className="font-bold text-white">Error Loading Incentives</h3>
+                <p className="text-white/50 text-sm">{error}</p>
+              </div>
+            </div>
+          </PortalCard>
         </div>
       </LmsGate>
     )

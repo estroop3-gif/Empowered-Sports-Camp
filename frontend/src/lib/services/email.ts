@@ -1,10 +1,10 @@
 /**
  * Email Service
  *
- * Production-ready email integration via Resend with email logging.
+ * Production-ready email integration via AWS SES with email logging.
  *
  * Handles:
- * - Transactional emails via Resend
+ * - Transactional emails via AWS SES
  * - Parent-facing camp communications (registration, reminders, recaps)
  * - Seasonal follow-up campaigns
  * - Application notifications
@@ -12,7 +12,7 @@
  * - Email logging for observability
  */
 
-import { Resend } from 'resend'
+import { sendEmail as sesSendEmail, isEmailConfigured } from '@/lib/email/ses-client'
 import { prisma } from '@/lib/db/client'
 import type { EmailType, EmailStatus, Prisma, EmailTemplate } from '@/generated/prisma'
 
@@ -121,12 +121,8 @@ export interface SendEmailParams {
 // Configuration
 // =============================================================================
 
-const RESEND_API_KEY = process.env.RESEND_API_KEY || ''
-const DEFAULT_FROM_EMAIL = process.env.FROM_EMAIL || 'Empowered Sports Camp <noreply@empoweredsportscamp.com>'
+const DEFAULT_FROM_EMAIL = process.env.SES_FROM_EMAIL || process.env.FROM_EMAIL || 'Empowered Sports Camp <noreply@empoweredsportscamp.com>'
 const IS_DEVELOPMENT = process.env.NODE_ENV !== 'production'
-
-// Initialize Resend client
-const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null
 
 // Template cache (in-memory, refreshes on server restart)
 let templateCache: Map<EmailType, EmailTemplate> | null = null
@@ -268,7 +264,7 @@ async function logEmail(params: {
 // =============================================================================
 
 /**
- * Send a transactional email using Resend with logging
+ * Send a transactional email using AWS SES with logging
  */
 export async function sendTransactionalEmail(params: SendEmailParams): Promise<{ data: EmailResult | null; error: Error | null }> {
   const { templateCode, to, context, tenantId, userId, from, replyTo } = params
@@ -279,8 +275,8 @@ export async function sendTransactionalEmail(params: SendEmailParams): Promise<{
     const emailType = templateToEmailType[templateCode]
     const fromEmail = from || DEFAULT_FROM_EMAIL
 
-    // In development or without API key, log and return success
-    if (!resend || (IS_DEVELOPMENT && !RESEND_API_KEY)) {
+    // In development without AWS credentials, log and return success
+    if (IS_DEVELOPMENT && !isEmailConfigured()) {
       console.log('[Email] Would send email:', {
         templateCode,
         to,
@@ -311,8 +307,8 @@ export async function sendTransactionalEmail(params: SendEmailParams): Promise<{
       }
     }
 
-    // Send via Resend API
-    const { data, error } = await resend.emails.send({
+    // Send via AWS SES
+    const result = await sesSendEmail({
       from: fromEmail,
       to,
       subject,
@@ -320,8 +316,8 @@ export async function sendTransactionalEmail(params: SendEmailParams): Promise<{
       replyTo,
     })
 
-    if (error) {
-      console.error('[Email] Resend error:', error)
+    if (!result.success) {
+      console.error('[Email] SES error:', result.error)
 
       await logEmail({
         tenantId,
@@ -332,10 +328,10 @@ export async function sendTransactionalEmail(params: SendEmailParams): Promise<{
         emailType,
         payload: context,
         status: 'failed',
-        errorMessage: error.message,
+        errorMessage: result.error,
       })
 
-      return { data: null, error: new Error(error.message) }
+      return { data: null, error: new Error(result.error) }
     }
 
     // Log successful send
@@ -347,14 +343,14 @@ export async function sendTransactionalEmail(params: SendEmailParams): Promise<{
       subject,
       emailType,
       payload: context,
-      providerMessageId: data?.id || null,
+      providerMessageId: result.messageId || null,
       status: 'sent',
     })
 
     return {
       data: {
         success: true,
-        messageId: data?.id || null,
+        messageId: result.messageId || null,
         sentAt: new Date().toISOString(),
         emailLogId: emailLogId || undefined,
       },

@@ -858,6 +858,200 @@ export async function getLicenseeIncentiveOverview(params: {
   }
 }
 
+// =============================================================================
+// Sales Report Types & Function
+// =============================================================================
+
+export interface LicenseeSalesReportTrend {
+  periodStart: string
+  periodLabel: string
+  revenue: number
+  campers: number
+}
+
+export interface LicenseeSalesReportCamp {
+  campId: string
+  campName: string
+  revenue: number
+  campers: number
+  dates: string
+  status: string
+}
+
+export interface LicenseeSalesReport {
+  grossRevenue: number
+  sessionsHeld: number
+  totalCampers: number
+  arpc: number
+  comparison: {
+    revenueChange: number | null
+    campersChange: number | null
+  }
+  trends: LicenseeSalesReportTrend[]
+  campBreakdown: LicenseeSalesReportCamp[]
+  periodStart: string
+  periodEnd: string
+}
+
+/**
+ * Get detailed sales report for a licensee
+ */
+export async function getLicenseeSalesReport(params: {
+  tenantId: string
+  period?: string
+}): Promise<{ data: LicenseeSalesReport | null; error: Error | null }> {
+  try {
+    const { start, end } = getPeriodDates(params.period || 'season')
+    const prevStart = new Date(start.getTime() - (end.getTime() - start.getTime()))
+
+    // Get camps in period with registrations
+    const camps = await prisma.camp.findMany({
+      where: {
+        tenantId: params.tenantId,
+        startDate: { gte: start, lte: end },
+      },
+      include: {
+        registrations: {
+          where: { status: 'confirmed' },
+        },
+        location: true,
+      },
+      orderBy: { startDate: 'asc' },
+    })
+
+    // Get previous period camps for delta calculation
+    const prevCamps = await prisma.camp.findMany({
+      where: {
+        tenantId: params.tenantId,
+        startDate: { gte: prevStart, lt: start },
+      },
+      include: {
+        registrations: {
+          where: { status: 'confirmed' },
+        },
+      },
+    })
+
+    // Calculate current period metrics
+    let totalRevenue = 0
+    let totalCampers = 0
+    const campBreakdown: LicenseeSalesReportCamp[] = []
+
+    for (const camp of camps) {
+      let campRevenue = 0
+      let campCampers = 0
+
+      for (const reg of camp.registrations) {
+        campRevenue += Number(reg.totalPriceCents || 0)
+        campCampers += 1
+      }
+
+      totalRevenue += campRevenue
+      totalCampers += campCampers
+
+      // Format date range
+      const startDate = new Date(camp.startDate)
+      const endDate = new Date(camp.endDate)
+      const dateStr = `${startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+
+      campBreakdown.push({
+        campId: camp.id,
+        campName: camp.name,
+        revenue: campRevenue,
+        campers: campCampers,
+        dates: dateStr,
+        status: camp.status,
+      })
+    }
+
+    const sessionsHeld = camps.filter(c => c.status === 'completed' || c.status === 'in_progress').length
+    const arpc = totalCampers > 0 ? Math.round(totalRevenue / totalCampers) : 0
+
+    // Calculate previous period for deltas
+    let prevRevenue = 0
+    let prevCampers = 0
+    for (const camp of prevCamps) {
+      for (const reg of camp.registrations) {
+        prevRevenue += Number(reg.totalPriceCents || 0)
+        prevCampers += 1
+      }
+    }
+
+    // Calculate deltas
+    const revenueChange = prevRevenue > 0 ? Math.round(((totalRevenue - prevRevenue) / prevRevenue) * 100) : null
+    const campersChange = prevCampers > 0 ? Math.round(((totalCampers - prevCampers) / prevCampers) * 100) : null
+
+    // Calculate trends (group by week or month depending on period length)
+    const trends: LicenseeSalesReportTrend[] = []
+    const periodLengthDays = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24))
+
+    // Use weekly granularity for periods under 90 days, monthly for longer
+    const granularity = periodLengthDays <= 90 ? 'week' : 'month'
+
+    // Group camps by period
+    const periodMap = new Map<string, { revenue: number; campers: number; label: string }>()
+
+    for (const camp of camps) {
+      const campDate = new Date(camp.startDate)
+      let periodKey: string
+      let periodLabel: string
+
+      if (granularity === 'week') {
+        // Get week start (Sunday)
+        const weekStart = new Date(campDate)
+        weekStart.setDate(campDate.getDate() - campDate.getDay())
+        periodKey = weekStart.toISOString().split('T')[0]
+        periodLabel = `Week of ${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+      } else {
+        // Group by month
+        periodKey = `${campDate.getFullYear()}-${String(campDate.getMonth() + 1).padStart(2, '0')}`
+        periodLabel = campDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+      }
+
+      const existing = periodMap.get(periodKey) || { revenue: 0, campers: 0, label: periodLabel }
+
+      for (const reg of camp.registrations) {
+        existing.revenue += Number(reg.totalPriceCents || 0)
+        existing.campers += 1
+      }
+
+      periodMap.set(periodKey, existing)
+    }
+
+    // Convert map to sorted array
+    const sortedPeriods = Array.from(periodMap.entries()).sort((a, b) => a[0].localeCompare(b[0]))
+    for (const [periodStart, data] of sortedPeriods) {
+      trends.push({
+        periodStart,
+        periodLabel: data.label,
+        revenue: data.revenue,
+        campers: data.campers,
+      })
+    }
+
+    return {
+      data: {
+        grossRevenue: totalRevenue,
+        sessionsHeld,
+        totalCampers,
+        arpc,
+        comparison: {
+          revenueChange,
+          campersChange,
+        },
+        trends,
+        campBreakdown,
+        periodStart: start.toISOString(),
+        periodEnd: end.toISOString(),
+      },
+      error: null,
+    }
+  } catch (error) {
+    console.error('[LicenseeDashboard] Failed to get sales report:', error)
+    return { data: null, error: error as Error }
+  }
+}
+
 /**
  * Get full dashboard data for a licensee
  */

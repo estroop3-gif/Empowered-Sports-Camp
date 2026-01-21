@@ -11,7 +11,7 @@
  * SECURITY NOTE:
  * This configuration is used for UI rendering only.
  * All actual permission checks happen via:
- * - Supabase RLS policies (server-side, using real user/role)
+ * - Application-level authorization (server-side, using real user/role)
  * - Middleware route protection (using real role from user_roles table)
  *
  * The "View As" feature changes viewingRole for UI purposes only.

@@ -49,6 +49,9 @@ export async function PATCH(
       pickupPersonName: body.pickupPersonName,
       pickupPersonRelationship: body.pickupPersonRelationship,
       pickupPersonId: body.pickupPersonId,
+      // Verification tracking for authorized pickup
+      verificationMethod: body.verificationMethod,
+      verificationTypedName: body.verificationTypedName,
     })
 
     if (error) {

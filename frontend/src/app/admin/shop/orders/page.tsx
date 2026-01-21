@@ -12,8 +12,6 @@ import { useState, useEffect } from 'react'
 import { AdminLayout, PageHeader, ContentCard } from '@/components/admin/admin-layout'
 import { useAuth } from '@/lib/auth/context'
 import {
-  getAdminOrders,
-  updateOrderStatus,
   formatPrice,
   type ShopOrder,
 } from '@/lib/services/shop'
@@ -71,15 +69,19 @@ export default function AdminOrdersPage() {
     setLoading(true)
     setError(null)
 
-    const licenseeId = role === 'hq_admin' ? undefined : tenant?.id
+    try {
+      const response = await fetch('/api/admin/shop/orders', { credentials: 'include' })
+      const result = await response.json()
 
-    const { data, error: fetchError } = await getAdminOrders({ licenseeId })
-
-    if (fetchError) {
-      console.error('Failed to load orders:', fetchError)
+      if (!response.ok || result.error) {
+        console.error('Failed to load orders:', result.error)
+        setError('Failed to load orders')
+      } else {
+        setOrders(result.data || [])
+      }
+    } catch (err) {
+      console.error('Failed to load orders:', err)
       setError('Failed to load orders')
-    } else {
-      setOrders(data || [])
     }
 
     setLoading(false)
@@ -88,18 +90,29 @@ export default function AdminOrdersPage() {
   async function handleStatusUpdate(orderId: string, newStatus: ShopOrder['status']) {
     setUpdating(true)
 
-    const { error: updateError } = await updateOrderStatus(orderId, newStatus)
+    try {
+      const response = await fetch('/api/admin/shop/orders', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ orderId, status: newStatus }),
+      })
+      const result = await response.json()
 
-    if (updateError) {
-      console.error('Failed to update order:', updateError)
-      setError('Failed to update order status')
-    } else {
-      setOrders((prev) =>
-        prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o))
-      )
-      if (selectedOrder?.id === orderId) {
-        setSelectedOrder({ ...selectedOrder, status: newStatus })
+      if (!response.ok || result.error) {
+        console.error('Failed to update order:', result.error)
+        setError('Failed to update order status')
+      } else {
+        setOrders((prev) =>
+          prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o))
+        )
+        if (selectedOrder?.id === orderId) {
+          setSelectedOrder({ ...selectedOrder, status: newStatus })
+        }
       }
+    } catch (err) {
+      console.error('Failed to update order:', err)
+      setError('Failed to update order status')
     }
 
     setUpdating(false)

@@ -46,7 +46,7 @@ function GroupsPageContent() {
 
   // Load camp data on mount
   useEffect(() => {
-    // In production, this would fetch from Supabase
+    // In production, this would fetch from the database
     // For now, use mock data
     const camp = mockCamps.find(c => c.id === campId || c.slug === campId)
 

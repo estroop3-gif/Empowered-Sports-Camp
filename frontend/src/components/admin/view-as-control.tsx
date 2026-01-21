@@ -29,8 +29,8 @@ import {
  * SECURITY NOTE:
  * This is a UI-only feature. When viewing as a different role:
  * - Navigation and dashboard layouts change
- * - The actual Supabase session remains unchanged
- * - RLS policies still use the real user identity
+ * - The actual session remains unchanged
+ * - Authorization policies still use the real user identity
  * - API calls still use real permissions
  *
  * This is designed for admins to preview the user experience,

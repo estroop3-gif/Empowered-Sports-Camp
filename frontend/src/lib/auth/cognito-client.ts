@@ -342,7 +342,8 @@ export async function refreshAndSyncSession(): Promise<boolean> {
 }
 
 /**
- * Check if the session needs refresh (within 5 minutes of expiry)
+ * Check if the session needs refresh (within 10 minutes of expiry)
+ * More aggressive refresh to prevent session expiration issues
  */
 export async function checkAndRefreshSession(): Promise<boolean> {
   const session = await getCurrentSession()
@@ -353,8 +354,10 @@ export async function checkAndRefreshSession(): Promise<boolean> {
   const now = Math.floor(Date.now() / 1000)
   const timeUntilExpiry = expiration - now
 
-  // If less than 5 minutes until expiry, refresh
-  if (timeUntilExpiry < 300) {
+  // If less than 10 minutes until expiry, refresh proactively
+  // This gives a larger buffer to prevent mid-operation expirations
+  if (timeUntilExpiry < 600) {
+    console.log('[Auth] Token expiring soon, refreshing...', { timeUntilExpiry })
     return refreshAndSyncSession()
   }
 

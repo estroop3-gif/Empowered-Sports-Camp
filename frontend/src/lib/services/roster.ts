@@ -823,6 +823,9 @@ export async function updateCamperStatus(params: {
   pickupPersonName?: string
   pickupPersonRelationship?: string
   pickupPersonId?: string
+  // Verification tracking for authorized pickup
+  verificationMethod?: 'parent' | 'id_verified'
+  verificationTypedName?: string
 }): Promise<{ data: { success: boolean } | null; error: Error | null }> {
   try {
     const {
@@ -836,6 +839,8 @@ export async function updateCamperStatus(params: {
       pickupPersonName,
       pickupPersonRelationship,
       pickupPersonId,
+      verificationMethod,
+      verificationTypedName,
     } = params
 
     // Get camp and verify access
@@ -942,6 +947,13 @@ export async function updateCamperStatus(params: {
       }
       if (pickupPersonId) {
         attendanceData.checkOutPickupPersonId = pickupPersonId
+      }
+      // Store verification info
+      if (verificationMethod) {
+        attendanceData.checkOutVerificationMethod = verificationMethod
+      }
+      if (verificationTypedName) {
+        attendanceData.checkOutVerificationTypedName = verificationTypedName
       }
     }
 

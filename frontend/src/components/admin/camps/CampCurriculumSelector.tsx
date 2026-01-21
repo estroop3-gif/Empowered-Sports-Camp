@@ -3,12 +3,8 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
-import {
-  assignCurriculumTemplate,
-  unassignCurriculumTemplate,
-  type CampCurriculumAssignment,
-} from '@/lib/services/camp-schedule'
-import { getTemplates, type CurriculumTemplate, SPORTS } from '@/lib/services/curriculum'
+import { type CampCurriculumAssignment } from '@/lib/services/camp-schedule'
+import { type CurriculumTemplate, SPORTS } from '@/lib/services/curriculum'
 import {
   BookOpen,
   Search,
@@ -53,22 +49,38 @@ export function CampCurriculumSelector({
 
   async function loadTemplates() {
     setLoading(true)
-    const { data } = await getTemplates()
-    if (data) {
-      setTemplates(data)
+    try {
+      const response = await fetch('/api/curriculum?action=templates', { credentials: 'include' })
+      const result = await response.json()
+      if (result.data) {
+        setTemplates(result.data)
+      }
+    } catch (error) {
+      console.error('Error loading templates:', error)
     }
     setLoading(false)
   }
 
   async function handleSelectTemplate(templateId: string) {
     setAssigning(true)
-    const { data, error } = await assignCurriculumTemplate(campId, templateId)
+    try {
+      const response = await fetch('/api/curriculum', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ action: 'assignTemplateToCamp', campId, templateId }),
+      })
+      const result = await response.json()
 
-    if (error) {
-      alert(error.message)
-    } else if (data) {
-      onAssigned(data)
-      setShowPicker(false)
+      if (!response.ok || result.error) {
+        alert(result.error || 'Failed to assign template')
+      } else if (result.data) {
+        onAssigned(result.data)
+        setShowPicker(false)
+      }
+    } catch (error) {
+      console.error('Error assigning template:', error)
+      alert('Failed to assign template')
     }
     setAssigning(false)
   }
@@ -77,12 +89,23 @@ export function CampCurriculumSelector({
     if (!confirm('Remove curriculum assignment from this camp?')) return
 
     setAssigning(true)
-    const { error } = await unassignCurriculumTemplate(campId)
+    try {
+      const response = await fetch('/api/curriculum', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ action: 'unassignTemplateFromCamp', campId }),
+      })
+      const result = await response.json()
 
-    if (error) {
-      alert(error.message)
-    } else {
-      onAssigned(null as any)
+      if (!response.ok || result.error) {
+        alert(result.error || 'Failed to remove assignment')
+      } else {
+        onAssigned(null as any)
+      }
+    } catch (error) {
+      console.error('Error removing assignment:', error)
+      alert('Failed to remove assignment')
     }
     setAssigning(false)
   }

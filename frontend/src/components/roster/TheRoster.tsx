@@ -7,12 +7,25 @@
  * Role-based permissions control what actions are available.
  */
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import Link from 'next/link'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import CamperDetailDrawer from './CamperDetailDrawer'
 import type { RosterCamper, RosterCamperDetail, RosterListResult } from '@/lib/services/roster'
+
+// Helper to deduplicate campers by ID (prevents duplicate key errors)
+function deduplicateCampers<T extends { id: string }>(campers: T[]): T[] {
+  const seen = new Set<string>()
+  return campers.filter(camper => {
+    if (seen.has(camper.id)) {
+      console.warn(`[TheRoster] Duplicate camper ID detected: ${camper.id}`)
+      return false
+    }
+    seen.add(camper.id)
+    return true
+  })
+}
 
 interface TheRosterProps {
   campId: string
@@ -55,12 +68,25 @@ export default function TheRoster({ campId, role, backUrl }: TheRosterProps) {
     name: string
     relationship: string
     phone: string | null
+    photoIdOnFile?: boolean
   }>>([])
   const [loadingPickups, setLoadingPickups] = useState(false)
   const [selectedPickupId, setSelectedPickupId] = useState<string>('')
-  const [customPickupName, setCustomPickupName] = useState('')
-  const [customPickupRelationship, setCustomPickupRelationship] = useState('')
   const [checkoutSubmitting, setCheckoutSubmitting] = useState(false)
+
+  // Verification modal state (for authorized pickups)
+  const [showVerificationModal, setShowVerificationModal] = useState(false)
+  const [selectedPickupForVerification, setSelectedPickupForVerification] = useState<{
+    id: string
+    name: string
+    relationship: string
+    phone: string | null
+    photoIdOnFile?: boolean
+  } | null>(null)
+  const [verificationStep, setVerificationStep] = useState<1 | 2 | 3>(1)
+  const [idConfirmed, setIdConfirmed] = useState(false)
+  const [typedName, setTypedName] = useState('')
+  const [nameMatchError, setNameMatchError] = useState<string | null>(null)
 
   // PDF export state
   const [exportingPdf, setExportingPdf] = useState(false)
@@ -234,6 +260,12 @@ export default function TheRoster({ campId, role, backUrl }: TheRosterProps) {
     return () => clearTimeout(timer)
   }, [searchInput])
 
+  // Deduplicated campers list (prevents duplicate key errors)
+  const deduplicatedCampers = useMemo(() => {
+    if (!result?.campers) return []
+    return deduplicateCampers(result.campers)
+  }, [result?.campers])
+
   // Fetch camper detail
   const openCamperDetail = async (camperId: string) => {
     setSelectedCamperId(camperId)
@@ -294,10 +326,15 @@ export default function TheRoster({ campId, role, backUrl }: TheRosterProps) {
     setCheckoutCamper(camper)
     setShowCheckoutModal(true)
     setSelectedPickupId('')
-    setCustomPickupName('')
-    setCustomPickupRelationship('')
     setLoadingPickups(true)
     setAuthorizedPickups([])
+    // Reset verification state
+    setShowVerificationModal(false)
+    setSelectedPickupForVerification(null)
+    setVerificationStep(1)
+    setIdConfirmed(false)
+    setTypedName('')
+    setNameMatchError(null)
 
     try {
       // Fetch authorized pickups for this athlete
@@ -318,39 +355,84 @@ export default function TheRoster({ campId, role, backUrl }: TheRosterProps) {
     setCheckoutCamper(null)
     setAuthorizedPickups([])
     setSelectedPickupId('')
-    setCustomPickupName('')
-    setCustomPickupRelationship('')
+    // Reset verification state
+    setShowVerificationModal(false)
+    setSelectedPickupForVerification(null)
+    setVerificationStep(1)
+    setIdConfirmed(false)
+    setTypedName('')
+    setNameMatchError(null)
   }
 
-  const handleCheckoutSubmit = async () => {
+  // Handle parent checkout (no verification needed)
+  const handleParentCheckout = async () => {
     if (!checkoutCamper) return
 
-    // Determine pickup person info
-    let pickupPersonName: string | undefined
-    let pickupPersonRelationship: string | undefined
-    let pickupPersonId: string | undefined
+    setCheckoutSubmitting(true)
+    try {
+      const res = await fetch(`/api/camps/${campId}/roster/${checkoutCamper.id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'checked_out',
+          pickupPersonName: 'Parent/Guardian',
+          pickupPersonRelationship: 'Parent',
+          verificationMethod: 'parent',
+        }),
+      })
 
-    if (selectedPickupId === 'custom') {
-      if (!customPickupName.trim()) {
-        showToast('Please enter pickup person name', 'error')
-        return
+      if (res.ok) {
+        showToast(`${checkoutCamper.firstName} checked out to Parent/Guardian`, 'success')
+        fetchCampers()
+        closeCheckoutModal()
+      } else {
+        const data = await res.json()
+        showToast(data.error || 'Failed to check out', 'error')
       }
-      pickupPersonName = customPickupName.trim()
-      pickupPersonRelationship = customPickupRelationship.trim() || 'Other'
-    } else if (selectedPickupId === 'parent') {
-      pickupPersonName = 'Parent/Guardian'
-      pickupPersonRelationship = 'Parent'
-    } else if (selectedPickupId) {
-      const selectedPickup = authorizedPickups.find(p => p.id === selectedPickupId)
-      if (selectedPickup) {
-        pickupPersonId = selectedPickup.id
-        pickupPersonName = selectedPickup.name
-        pickupPersonRelationship = selectedPickup.relationship
-      }
+    } catch {
+      showToast('Failed to check out', 'error')
+    } finally {
+      setCheckoutSubmitting(false)
     }
+  }
 
-    if (!pickupPersonName) {
-      showToast('Please select who is picking up this camper', 'error')
+  // Open verification modal for authorized pickup
+  const handleSelectAuthorizedPickup = (pickup: typeof authorizedPickups[0]) => {
+    setSelectedPickupForVerification(pickup)
+    setVerificationStep(1)
+    setIdConfirmed(false)
+    setTypedName('')
+    setNameMatchError(null)
+    setShowVerificationModal(true)
+  }
+
+  // Cancel verification and return to pickup list
+  const handleCancelVerification = () => {
+    setShowVerificationModal(false)
+    setSelectedPickupForVerification(null)
+    setVerificationStep(1)
+    setIdConfirmed(false)
+    setTypedName('')
+    setNameMatchError(null)
+  }
+
+  // Name normalization for comparison
+  const normalizeNameForComparison = (name: string): string => {
+    return name.toLowerCase().trim().replace(/\s+/g, ' ').replace(/[.,'-]/g, '')
+  }
+
+  // Validate name match
+  const validateNameMatch = (typed: string, authorized: string): boolean => {
+    return normalizeNameForComparison(typed) === normalizeNameForComparison(authorized)
+  }
+
+  // Complete verified checkout for authorized pickup
+  const handleVerifiedCheckout = async () => {
+    if (!checkoutCamper || !selectedPickupForVerification) return
+
+    // Validate name matches
+    if (!validateNameMatch(typedName, selectedPickupForVerification.name)) {
+      setNameMatchError('Name does not match. Please type the name exactly as shown on the ID.')
       return
     }
 
@@ -361,14 +443,16 @@ export default function TheRoster({ campId, role, backUrl }: TheRosterProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           status: 'checked_out',
-          pickupPersonName,
-          pickupPersonRelationship,
-          pickupPersonId,
+          pickupPersonId: selectedPickupForVerification.id,
+          pickupPersonName: selectedPickupForVerification.name,
+          pickupPersonRelationship: selectedPickupForVerification.relationship,
+          verificationMethod: 'id_verified',
+          verificationTypedName: typedName.trim(),
         }),
       })
 
       if (res.ok) {
-        showToast(`${checkoutCamper.firstName} checked out to ${pickupPersonName}`, 'success')
+        showToast(`${checkoutCamper.firstName} checked out to ${selectedPickupForVerification.name}`, 'success')
         fetchCampers()
         closeCheckoutModal()
       } else {
@@ -388,27 +472,27 @@ export default function TheRoster({ campId, role, backUrl }: TheRosterProps) {
     : `/director/camps/${campId}/grouping`
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-[calc(100vh-8rem)] bg-dark-100">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200">
+      <div className="bg-black/50 border-b border-white/10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="flex items-center justify-between">
             <div>
               <Link
                 href={backUrl}
-                className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1 mb-2"
+                className="text-sm text-white/50 hover:text-white flex items-center gap-1 mb-2"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                 </svg>
                 Back
               </Link>
-              <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
+              <h1 className="text-2xl font-bold text-white flex items-center gap-3">
                 <span className="text-3xl">📋</span>
                 The Roster
               </h1>
               {result && (
-                <p className="text-gray-500 mt-1">
+                <p className="text-white/50 mt-1">
                   {result.campName} • {result.campStartDate} to {result.campEndDate}
                 </p>
               )}
@@ -418,10 +502,10 @@ export default function TheRoster({ campId, role, backUrl }: TheRosterProps) {
               <button
                 onClick={handleExportPdf}
                 disabled={exportingPdf || !result}
-                className="px-4 py-2 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-4 py-2 border border-white/20 text-white font-medium hover:bg-white/10 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {exportingPdf ? (
-                  <div className="animate-spin w-4 h-4 border-2 border-gray-400 border-t-gray-700 rounded-full" />
+                  <div className="animate-spin w-4 h-4 border-2 border-white/30 border-t-white rounded-full" />
                 ) : (
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -432,7 +516,7 @@ export default function TheRoster({ campId, role, backUrl }: TheRosterProps) {
               {(role === 'hq_admin' || role === 'licensee_owner' || role === 'director') && (
                 <Link
                   href={groupingUrl}
-                  className="px-4 py-2 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 flex items-center gap-2"
+                  className="px-4 py-2 border border-white/20 text-white font-medium hover:bg-white/10 flex items-center gap-2 transition-colors"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
@@ -447,23 +531,23 @@ export default function TheRoster({ campId, role, backUrl }: TheRosterProps) {
 
       {/* Stats Bar */}
       {result && (
-        <div className="bg-white border-b border-gray-200">
+        <div className="bg-black/30 border-b border-white/10">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
             <div className="flex items-center gap-6">
               <div className="flex items-center gap-2">
-                <span className="text-2xl font-bold text-gray-900">{result.total}</span>
-                <span className="text-gray-500">Total Campers</span>
+                <span className="text-2xl font-bold text-white">{result.total}</span>
+                <span className="text-white/50">Total Campers</span>
               </div>
-              <div className="h-8 border-l border-gray-200" />
+              <div className="h-8 border-l border-white/20" />
               <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded-full bg-green-500" />
-                <span className="font-medium text-gray-900">{result.totalCheckedIn}</span>
-                <span className="text-gray-500">Checked In</span>
+                <span className="w-3 h-3 rounded-full bg-neon" />
+                <span className="font-medium text-white">{result.totalCheckedIn}</span>
+                <span className="text-white/50">Checked In</span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded-full bg-gray-300" />
-                <span className="font-medium text-gray-900">{result.totalNotArrived}</span>
-                <span className="text-gray-500">Not Arrived</span>
+                <span className="w-3 h-3 rounded-full bg-white/30" />
+                <span className="font-medium text-white">{result.totalNotArrived}</span>
+                <span className="text-white/50">Not Arrived</span>
               </div>
             </div>
           </div>
@@ -480,10 +564,10 @@ export default function TheRoster({ campId, role, backUrl }: TheRosterProps) {
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               placeholder="Search by name or parent email..."
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-black"
+              className="w-full pl-10 pr-4 py-2 bg-black border border-white/20 text-white placeholder:text-white/40 focus:border-neon focus:outline-none"
             />
             <svg
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"
+              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -496,7 +580,7 @@ export default function TheRoster({ campId, role, backUrl }: TheRosterProps) {
           <select
             value={groupFilter}
             onChange={(e) => { setGroupFilter(e.target.value); setPage(1) }}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-black"
+            className="px-4 py-2 bg-black border border-white/20 text-white focus:border-neon focus:outline-none"
           >
             <option value="all">All Groups</option>
             <option value="ungrouped">Ungrouped</option>
@@ -511,7 +595,7 @@ export default function TheRoster({ campId, role, backUrl }: TheRosterProps) {
           <select
             value={statusFilter}
             onChange={(e) => { setStatusFilter(e.target.value); setPage(1) }}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-black"
+            className="px-4 py-2 bg-black border border-white/20 text-white focus:border-neon focus:outline-none"
           >
             <option value="all">All Status</option>
             <option value="checked_in">Checked In</option>
@@ -530,7 +614,7 @@ export default function TheRoster({ campId, role, backUrl }: TheRosterProps) {
                 setStatusFilter('all')
                 setPage(1)
               }}
-              className="px-3 py-2 text-sm text-gray-600 hover:text-gray-900"
+              className="px-3 py-2 text-sm text-white/50 hover:text-white"
             >
               Clear filters
             </button>
@@ -542,71 +626,71 @@ export default function TheRoster({ campId, role, backUrl }: TheRosterProps) {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
         {loading && !result ? (
           <div className="flex items-center justify-center py-12">
-            <div className="animate-spin w-8 h-8 border-4 border-gray-300 border-t-black rounded-full" />
+            <div className="animate-spin w-8 h-8 border-4 border-white/20 border-t-neon rounded-full" />
           </div>
         ) : error ? (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
-            <p className="text-red-600">{error}</p>
+          <div className="bg-red-500/10 border border-red-500/30 p-6 text-center">
+            <p className="text-red-400">{error}</p>
             <button
               onClick={fetchCampers}
-              className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+              className="mt-4 px-4 py-2 bg-red-500 text-white hover:bg-red-600"
             >
               Try Again
             </button>
           </div>
         ) : result && result.campers.length === 0 ? (
-          <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
-            <p className="text-gray-500">No campers found matching your filters.</p>
+          <div className="bg-black border border-white/10 p-12 text-center">
+            <p className="text-white/50">No campers found matching your filters.</p>
           </div>
         ) : result ? (
           <>
             {/* Table */}
-            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+            <div className="bg-black border border-white/10 overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
-                    <tr className="bg-gray-50 border-b border-gray-200">
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    <tr className="bg-white/5 border-b border-white/10">
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-white/50 uppercase tracking-wider">
                         Camper
                       </th>
-                      <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                      <th className="text-center px-4 py-3 text-xs font-semibold text-white/50 uppercase tracking-wider">
                         Grade
                       </th>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-white/50 uppercase tracking-wider">
                         Group
                       </th>
-                      <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                      <th className="text-center px-4 py-3 text-xs font-semibold text-white/50 uppercase tracking-wider">
                         Status
                       </th>
-                      <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                      <th className="text-center px-4 py-3 text-xs font-semibold text-white/50 uppercase tracking-wider">
                         Flags
                       </th>
-                      <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                      <th className="text-right px-4 py-3 text-xs font-semibold text-white/50 uppercase tracking-wider">
                         Actions
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {result.campers.map((camper) => (
-                      <tr key={camper.id} className="hover:bg-gray-50">
+                  <tbody className="divide-y divide-white/5">
+                    {deduplicatedCampers.map((camper) => (
+                      <tr key={camper.id} className="hover:bg-white/5 transition-colors">
                         {/* Camper Name */}
                         <td className="px-4 py-3">
                           <button
                             onClick={() => openCamperDetail(camper.id)}
-                            className="flex items-center gap-3 text-left hover:text-blue-600"
+                            className="flex items-center gap-3 text-left hover:text-neon transition-colors"
                           >
-                            <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-sm font-medium text-gray-600">
+                            <div className="w-8 h-8 bg-white/10 flex items-center justify-center text-sm font-medium text-white">
                               {camper.firstName[0]}{camper.lastName[0]}
                             </div>
                             <div>
-                              <div className="font-medium text-gray-900">
+                              <div className="font-medium text-white">
                                 {camper.lastName}, {camper.firstName}
                               </div>
                               {camper.parentPhone && (
                                 <a
                                   href={`tel:${camper.parentPhone}`}
                                   onClick={(e) => e.stopPropagation()}
-                                  className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 mt-0.5"
+                                  className="flex items-center gap-1 text-xs text-purple hover:text-purple/80 mt-0.5"
                                 >
                                   <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
@@ -615,7 +699,7 @@ export default function TheRoster({ campId, role, backUrl }: TheRosterProps) {
                                 </a>
                               )}
                               {role !== 'coach' && camper.parentEmail && (
-                                <div className="text-xs text-gray-500">{camper.parentEmail}</div>
+                                <div className="text-xs text-white/40">{camper.parentEmail}</div>
                               )}
                             </div>
                           </button>
@@ -623,7 +707,7 @@ export default function TheRoster({ campId, role, backUrl }: TheRosterProps) {
 
                         {/* Grade */}
                         <td className="px-4 py-3 text-center">
-                          <span className="inline-flex px-2 py-1 text-xs font-medium bg-gray-100 text-gray-700 rounded">
+                          <span className="inline-flex px-2 py-1 text-xs font-medium bg-white/10 text-white">
                             {camper.gradeDisplay}
                           </span>
                         </td>
@@ -632,15 +716,15 @@ export default function TheRoster({ campId, role, backUrl }: TheRosterProps) {
                         <td className="px-4 py-3">
                           {camper.groupName ? (
                             <div className="flex items-center gap-2">
-                              <span className="font-medium text-sm">{camper.groupName}</span>
+                              <span className="font-medium text-sm text-white">{camper.groupName}</span>
                               {camper.friendGroupNumber && (
-                                <span className="inline-block w-5 h-5 bg-pink-500 text-white text-[10px] rounded-full text-center leading-5">
+                                <span className="inline-block w-5 h-5 bg-pink-500 text-white text-[10px] text-center leading-5">
                                   {camper.friendGroupNumber}
                                 </span>
                               )}
                             </div>
                           ) : (
-                            <span className="text-gray-400 text-sm">Ungrouped</span>
+                            <span className="text-white/30 text-sm">Ungrouped</span>
                           )}
                         </td>
 
@@ -759,7 +843,7 @@ export default function TheRoster({ campId, role, backUrl }: TheRosterProps) {
       )}
 
       {/* Checkout Modal */}
-      {showCheckoutModal && checkoutCamper && (
+      {showCheckoutModal && checkoutCamper && !showVerificationModal && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex min-h-full items-center justify-center p-4 text-center">
             <div className="fixed inset-0 bg-black/50" onClick={closeCheckoutModal} />
@@ -777,89 +861,74 @@ export default function TheRoster({ campId, role, backUrl }: TheRosterProps) {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {/* Parent Option */}
-                  <label className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="pickup"
-                      value="parent"
-                      checked={selectedPickupId === 'parent'}
-                      onChange={() => setSelectedPickupId('parent')}
-                      className="w-4 h-4 text-blue-600"
-                    />
-                    <div>
+                  {/* Parent Option - Direct checkout */}
+                  <button
+                    onClick={handleParentCheckout}
+                    disabled={checkoutSubmitting}
+                    className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 w-full text-left disabled:opacity-50"
+                  >
+                    <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+                      <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                    </div>
+                    <div className="flex-1">
                       <div className="font-medium text-gray-900">Parent/Guardian</div>
                       <div className="text-sm text-gray-500">Primary parent picking up</div>
                     </div>
-                  </label>
+                    <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
 
-                  {/* Authorized Pickups */}
-                  {authorizedPickups.map((pickup) => (
-                    <label
-                      key={pickup.id}
-                      className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer"
-                    >
-                      <input
-                        type="radio"
-                        name="pickup"
-                        value={pickup.id}
-                        checked={selectedPickupId === pickup.id}
-                        onChange={() => setSelectedPickupId(pickup.id)}
-                        className="w-4 h-4 text-blue-600"
-                      />
-                      <div className="flex-1">
-                        <div className="font-medium text-gray-900">{pickup.name}</div>
-                        <div className="text-sm text-gray-500">{pickup.relationship}</div>
-                      </div>
-                      {pickup.phone && (
-                        <a
-                          href={`tel:${pickup.phone}`}
-                          onClick={(e) => e.stopPropagation()}
-                          className="text-xs text-blue-600 hover:text-blue-800"
+                  {/* Authorized Pickups - Opens verification modal */}
+                  {authorizedPickups.length > 0 && (
+                    <div className="pt-2">
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                        Authorized Pickups (ID Verification Required)
+                      </p>
+                      {authorizedPickups.map((pickup) => (
+                        <button
+                          key={pickup.id}
+                          onClick={() => handleSelectAuthorizedPickup(pickup)}
+                          className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 w-full text-left mb-2"
                         >
-                          {pickup.phone}
-                        </a>
-                      )}
-                    </label>
-                  ))}
-
-                  {/* Custom Option */}
-                  <label className="flex items-start gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="pickup"
-                      value="custom"
-                      checked={selectedPickupId === 'custom'}
-                      onChange={() => setSelectedPickupId('custom')}
-                      className="w-4 h-4 text-blue-600 mt-1"
-                    />
-                    <div className="flex-1">
-                      <div className="font-medium text-gray-900 mb-2">Other Person</div>
-                      {selectedPickupId === 'custom' && (
-                        <div className="space-y-2">
-                          <input
-                            type="text"
-                            value={customPickupName}
-                            onChange={(e) => setCustomPickupName(e.target.value)}
-                            placeholder="Name"
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          />
-                          <input
-                            type="text"
-                            value={customPickupRelationship}
-                            onChange={(e) => setCustomPickupRelationship(e.target.value)}
-                            placeholder="Relationship (e.g., Aunt, Family Friend)"
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          />
-                        </div>
-                      )}
+                          <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                            <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
+                            </svg>
+                          </div>
+                          <div className="flex-1">
+                            <div className="font-medium text-gray-900 flex items-center gap-2">
+                              {pickup.name}
+                              {pickup.photoIdOnFile && (
+                                <span className="px-1.5 py-0.5 bg-green-100 text-green-700 text-xs rounded">
+                                  ID on File
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-sm text-gray-500">{pickup.relationship}</div>
+                          </div>
+                          <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </button>
+                      ))}
                     </div>
-                  </label>
+                  )}
+
+                  {authorizedPickups.length === 0 && (
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mt-2">
+                      <p className="text-sm text-yellow-800">
+                        No authorized pickup persons on file. Only Parent/Guardian can check out this camper.
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
 
-              {/* Actions */}
-              <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-200">
+              {/* Cancel button */}
+              <div className="flex justify-end mt-6 pt-4 border-t border-gray-200">
                 <button
                   onClick={closeCheckoutModal}
                   disabled={checkoutSubmitting}
@@ -867,17 +936,196 @@ export default function TheRoster({ campId, role, backUrl }: TheRosterProps) {
                 >
                   Cancel
                 </button>
-                <button
-                  onClick={handleCheckoutSubmit}
-                  disabled={checkoutSubmitting || !selectedPickupId}
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                >
-                  {checkoutSubmitting && (
-                    <div className="animate-spin w-4 h-4 border-2 border-white/30 border-t-white rounded-full" />
-                  )}
-                  Confirm Check Out
-                </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ID Verification Modal (3-step wizard) */}
+      {showVerificationModal && selectedPickupForVerification && checkoutCamper && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex min-h-full items-center justify-center p-4 text-center">
+            <div className="fixed inset-0 bg-black/50" onClick={handleCancelVerification} />
+            <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full p-6 text-left">
+              {/* Progress indicator */}
+              <div className="flex items-center justify-center gap-2 mb-6">
+                {[1, 2, 3].map((step) => (
+                  <div key={step} className="flex items-center">
+                    <div
+                      className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                        verificationStep >= step
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-200 text-gray-500'
+                      }`}
+                    >
+                      {verificationStep > step ? (
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      ) : (
+                        step
+                      )}
+                    </div>
+                    {step < 3 && (
+                      <div className={`w-12 h-1 ${verificationStep > step ? 'bg-blue-600' : 'bg-gray-200'}`} />
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Step 1: Review Details */}
+              {verificationStep === 1 && (
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                    Review Pickup Person
+                  </h3>
+                  <div className="bg-gray-50 rounded-lg p-4 mb-4">
+                    <div className="flex items-center gap-4">
+                      <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center">
+                        <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <div className="text-xl font-semibold text-gray-900">
+                          {selectedPickupForVerification.name}
+                        </div>
+                        <div className="text-gray-500">{selectedPickupForVerification.relationship}</div>
+                        {selectedPickupForVerification.phone && (
+                          <div className="text-sm text-blue-600">{selectedPickupForVerification.phone}</div>
+                        )}
+                      </div>
+                    </div>
+                    {selectedPickupForVerification.photoIdOnFile && (
+                      <div className="mt-3 flex items-center gap-2 text-green-700 bg-green-50 rounded px-3 py-2">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span className="text-sm font-medium">Photo ID on file</span>
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-sm text-gray-500 mb-4">
+                    This person is picking up <strong>{checkoutCamper.firstName} {checkoutCamper.lastName}</strong>.
+                    Proceed to verify their identity.
+                  </p>
+                  <div className="flex justify-between">
+                    <button
+                      onClick={handleCancelVerification}
+                      className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+                    >
+                      Back
+                    </button>
+                    <button
+                      onClick={() => setVerificationStep(2)}
+                      className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700"
+                    >
+                      Continue
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Step 2: Confirm ID Verified */}
+              {verificationStep === 2 && (
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                    Verify Photo ID
+                  </h3>
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+                    <div className="flex items-start gap-3">
+                      <svg className="w-6 h-6 text-yellow-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
+                      <div className="text-sm text-yellow-800">
+                        <strong>Request a valid government-issued photo ID</strong> from this person and verify it matches the authorized pickup information on file.
+                      </div>
+                    </div>
+                  </div>
+                  <label className="flex items-start gap-3 p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 cursor-pointer mb-4">
+                    <input
+                      type="checkbox"
+                      checked={idConfirmed}
+                      onChange={(e) => setIdConfirmed(e.target.checked)}
+                      className="w-5 h-5 text-blue-600 rounded mt-0.5"
+                    />
+                    <div className="text-sm text-gray-700">
+                      I confirm I have verified the photo ID matches{' '}
+                      <strong>{selectedPickupForVerification.name}</strong>
+                    </div>
+                  </label>
+                  <div className="flex justify-between">
+                    <button
+                      onClick={() => setVerificationStep(1)}
+                      className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+                    >
+                      Back
+                    </button>
+                    <button
+                      onClick={() => setVerificationStep(3)}
+                      disabled={!idConfirmed}
+                      className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Continue
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Step 3: Type Name */}
+              {verificationStep === 3 && (
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                    Confirm Identity
+                  </h3>
+                  <p className="text-sm text-gray-600 mb-4">
+                    Type the name <strong>exactly as it appears on the ID</strong> to complete checkout.
+                  </p>
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Name from ID
+                    </label>
+                    <input
+                      type="text"
+                      value={typedName}
+                      onChange={(e) => {
+                        setTypedName(e.target.value)
+                        setNameMatchError(null)
+                      }}
+                      placeholder={`Type "${selectedPickupForVerification.name}"`}
+                      className={`w-full px-4 py-3 border rounded-lg text-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                        nameMatchError ? 'border-red-500' : 'border-gray-300'
+                      }`}
+                      autoFocus
+                    />
+                    {nameMatchError && (
+                      <p className="mt-2 text-sm text-red-600">{nameMatchError}</p>
+                    )}
+                  </div>
+                  <div className="flex justify-between">
+                    <button
+                      onClick={() => {
+                        setVerificationStep(2)
+                        setNameMatchError(null)
+                      }}
+                      className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+                    >
+                      Back
+                    </button>
+                    <button
+                      onClick={handleVerifiedCheckout}
+                      disabled={checkoutSubmitting || !typedName.trim()}
+                      className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    >
+                      {checkoutSubmitting && (
+                        <div className="animate-spin w-4 h-4 border-2 border-white/30 border-t-white rounded-full" />
+                      )}
+                      Complete Checkout
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

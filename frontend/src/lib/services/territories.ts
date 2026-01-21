@@ -2,7 +2,6 @@
  * Territories Service (Prisma)
  *
  * Handles all database operations for territory management.
- * Migrated from Supabase to Prisma.
  */
 
 import prisma from '@/lib/db/client'

@@ -47,9 +47,9 @@ export default function CoachDashboard() {
                 <GraduationCap className="h-6 w-6 text-purple" />
               </div>
               <div>
-                <h2 className="text-lg font-bold text-white">Complete Your Training</h2>
+                <h2 className="text-lg font-bold text-white">Get Certified</h2>
                 <p className="text-white/60 text-sm mt-1">
-                  Finish the required EmpowerU training modules to unlock all coach features.
+                  Complete your EmpowerU training modules with 100% quiz scores to unlock all coach features and receive your certification.
                 </p>
               </div>
             </div>

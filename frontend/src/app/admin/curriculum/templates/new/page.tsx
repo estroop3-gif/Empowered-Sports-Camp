@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { AdminLayout, PageHeader, ContentCard } from '@/components/admin/admin-layout'
@@ -12,6 +12,7 @@ import {
   SportType,
   DifficultyLevel,
 } from '@/lib/services/curriculum'
+import { useUpload, STORAGE_FOLDERS } from '@/lib/storage/use-upload'
 import { cn } from '@/lib/utils'
 import {
   ArrowLeft,
@@ -24,6 +25,10 @@ import {
   Building2,
   Users,
   Trophy,
+  FileText,
+  Upload,
+  X,
+  FileUp,
 } from 'lucide-react'
 
 /**
@@ -42,6 +47,10 @@ interface FormData {
   difficulty: DifficultyLevel
   is_global: boolean
   total_days: string
+  // PDF fields
+  is_pdf_only: boolean
+  pdf_url: string | null
+  pdf_name: string | null
 }
 
 interface FormErrors {
@@ -54,11 +63,14 @@ interface FormErrors {
 export default function NewTemplatePage() {
   const router = useRouter()
   const { user, role, isHqAdmin, tenant } = useAuth()
+  const { upload, uploading, progress } = useUpload()
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [saving, setSaving] = useState(false)
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [formErrors, setFormErrors] = useState<FormErrors>({})
+  const [isDragging, setIsDragging] = useState(false)
 
   const [formData, setFormData] = useState<FormData>({
     name: '',
@@ -69,14 +81,70 @@ export default function NewTemplatePage() {
     difficulty: 'intro',
     is_global: isHqAdmin,
     total_days: '5',
+    is_pdf_only: false,
+    pdf_url: null,
+    pdf_name: null,
   })
 
   const userName = user?.firstName || user?.email?.split('@')[0] || 'Admin'
 
-  const updateField = (field: keyof FormData, value: string | boolean) => {
+  const updateField = (field: keyof FormData, value: string | boolean | null) => {
     setFormData(prev => ({ ...prev, [field]: value }))
     if (formErrors[field as keyof FormErrors]) {
       setFormErrors(prev => ({ ...prev, [field]: undefined }))
+    }
+  }
+
+  // PDF file handling
+  const handlePdfUpload = async (file: File) => {
+    if (file.type !== 'application/pdf') {
+      setError('Please select a PDF file')
+      return
+    }
+
+    const result = await upload(file, { folder: STORAGE_FOLDERS.CURRICULUM })
+    if (result) {
+      setFormData(prev => ({
+        ...prev,
+        pdf_url: result.fileUrl,
+        pdf_name: file.name,
+      }))
+    }
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      handlePdfUpload(file)
+    }
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+    const file = e.dataTransfer.files?.[0]
+    if (file) {
+      handlePdfUpload(file)
+    }
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = () => {
+    setIsDragging(false)
+  }
+
+  const removePdf = () => {
+    setFormData(prev => ({
+      ...prev,
+      pdf_url: null,
+      pdf_name: null,
+    }))
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
     }
   }
 
@@ -93,6 +161,12 @@ export default function NewTemplatePage() {
       if (minAge > maxAge) {
         errors.age_min = 'Min age cannot be greater than max age'
       }
+    }
+
+    // PDF-only templates must have a PDF uploaded
+    if (formData.is_pdf_only && !formData.pdf_url) {
+      setError('Please upload a PDF for PDF-only templates')
+      return false
     }
 
     setFormErrors(errors)
@@ -118,7 +192,10 @@ export default function NewTemplatePage() {
       age_max: formData.age_max ? parseInt(formData.age_max) : undefined,
       difficulty: formData.difficulty,
       is_global: formData.is_global,
-      total_days: parseInt(formData.total_days) || 5,
+      total_days: formData.is_pdf_only ? 0 : (parseInt(formData.total_days) || 5),
+      pdf_url: formData.pdf_url,
+      pdf_name: formData.pdf_name,
+      is_pdf_only: formData.is_pdf_only,
     })
 
     if (createError) {
@@ -130,9 +207,13 @@ export default function NewTemplatePage() {
     setSuccess(true)
     setSaving(false)
 
-    // Redirect to template editor after short delay
+    // Redirect - PDF-only templates go to detail, structured templates go to planner
     setTimeout(() => {
-      router.push(`/admin/curriculum/templates/${data?.id}?tab=planner`)
+      if (formData.is_pdf_only) {
+        router.push(`/admin/curriculum/templates/${data?.id}`)
+      } else {
+        router.push(`/admin/curriculum/templates/${data?.id}?tab=planner`)
+      }
     }, 1500)
   }
 
@@ -314,22 +395,160 @@ export default function NewTemplatePage() {
                   </div>
                 </div>
 
+                {/* Only show day selector for structured templates */}
+                {!formData.is_pdf_only && (
+                  <div>
+                    <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
+                      Number of Days
+                    </label>
+                    <select
+                      value={formData.total_days}
+                      onChange={(e) => updateField('total_days', e.target.value)}
+                      className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-purple focus:outline-none appearance-none"
+                    >
+                      {[1, 2, 3, 4, 5, 6, 7, 10, 14].map(n => (
+                        <option key={n} value={n}>{n} {n === 1 ? 'Day' : 'Days'}</option>
+                      ))}
+                    </select>
+                    <p className="mt-1 text-xs text-white/40">
+                      You can add more days later in the planner.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </ContentCard>
+
+            {/* PDF Document */}
+            <ContentCard title="PDF Document" accent="neon">
+              <div className="space-y-6">
+                {/* Template Type Toggle */}
                 <div>
-                  <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
-                    Number of Days
+                  <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-3">
+                    Template Type
                   </label>
-                  <select
-                    value={formData.total_days}
-                    onChange={(e) => updateField('total_days', e.target.value)}
-                    className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-purple focus:outline-none appearance-none"
-                  >
-                    {[1, 2, 3, 4, 5, 6, 7, 10, 14].map(n => (
-                      <option key={n} value={n}>{n} {n === 1 ? 'Day' : 'Days'}</option>
-                    ))}
-                  </select>
-                  <p className="mt-1 text-xs text-white/40">
-                    You can add more days later in the planner.
-                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => updateField('is_pdf_only', false)}
+                      className={cn(
+                        'p-4 border transition-colors text-left',
+                        !formData.is_pdf_only
+                          ? 'bg-neon/10 border-neon'
+                          : 'border-white/20 hover:border-white/40'
+                      )}
+                    >
+                      <BookOpen className={cn(
+                        'h-5 w-5 mb-2',
+                        !formData.is_pdf_only ? 'text-neon' : 'text-white/40'
+                      )} />
+                      <p className={cn(
+                        'font-bold text-sm',
+                        !formData.is_pdf_only ? 'text-neon' : 'text-white'
+                      )}>
+                        Structured
+                      </p>
+                      <p className="text-xs text-white/40 mt-1">
+                        Days & activity blocks
+                      </p>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateField('is_pdf_only', true)}
+                      className={cn(
+                        'p-4 border transition-colors text-left',
+                        formData.is_pdf_only
+                          ? 'bg-neon/10 border-neon'
+                          : 'border-white/20 hover:border-white/40'
+                      )}
+                    >
+                      <FileText className={cn(
+                        'h-5 w-5 mb-2',
+                        formData.is_pdf_only ? 'text-neon' : 'text-white/40'
+                      )} />
+                      <p className={cn(
+                        'font-bold text-sm',
+                        formData.is_pdf_only ? 'text-neon' : 'text-white'
+                      )}>
+                        PDF Only
+                      </p>
+                      <p className="text-xs text-white/40 mt-1">
+                        Just upload a PDF
+                      </p>
+                    </button>
+                  </div>
+                </div>
+
+                {/* PDF Upload Section */}
+                <div>
+                  <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-3">
+                    <FileUp className="h-4 w-4 inline mr-2" />
+                    {formData.is_pdf_only ? 'Curriculum PDF *' : 'Attach PDF (Optional)'}
+                  </label>
+
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="application/pdf"
+                    onChange={handleFileChange}
+                    className="hidden"
+                  />
+
+                  {formData.pdf_url ? (
+                    // Show uploaded file
+                    <div className="flex items-center justify-between p-4 bg-neon/5 border border-neon/30">
+                      <div className="flex items-center gap-3">
+                        <FileText className="h-8 w-8 text-neon" />
+                        <div>
+                          <p className="font-semibold text-white">{formData.pdf_name}</p>
+                          <p className="text-xs text-white/40">PDF uploaded successfully</p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={removePdf}
+                        className="p-2 text-white/40 hover:text-red-400 transition-colors"
+                        title="Remove PDF"
+                      >
+                        <X className="h-5 w-5" />
+                      </button>
+                    </div>
+                  ) : uploading ? (
+                    // Show upload progress
+                    <div className="p-6 border border-neon/30 bg-neon/5">
+                      <div className="flex items-center gap-4 mb-3">
+                        <Loader2 className="h-6 w-6 text-neon animate-spin" />
+                        <span className="text-white">Uploading...</span>
+                      </div>
+                      <div className="w-full h-2 bg-black rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-neon transition-all duration-300"
+                          style={{ width: `${progress}%` }}
+                        />
+                      </div>
+                      <p className="text-xs text-white/40 mt-2">{progress}% complete</p>
+                    </div>
+                  ) : (
+                    // Show dropzone
+                    <div
+                      onDrop={handleDrop}
+                      onDragOver={handleDragOver}
+                      onDragLeave={handleDragLeave}
+                      onClick={() => fileInputRef.current?.click()}
+                      className={cn(
+                        'p-8 border-2 border-dashed cursor-pointer transition-colors text-center',
+                        isDragging
+                          ? 'border-neon bg-neon/10'
+                          : 'border-white/20 hover:border-white/40'
+                      )}
+                    >
+                      <Upload className="h-10 w-10 text-white/30 mx-auto mb-3" />
+                      <p className="text-white/60">
+                        Drag and drop a PDF here, or{' '}
+                        <span className="text-neon">browse</span>
+                      </p>
+                      <p className="text-xs text-white/30 mt-2">PDF files only (max 50MB)</p>
+                    </div>
+                  )}
                 </div>
               </div>
             </ContentCard>
@@ -428,14 +647,28 @@ export default function NewTemplatePage() {
 
               {/* Help */}
               <div className="p-4 bg-black/30 border border-white/10 text-xs text-white/40">
-                <p className="font-bold text-white/60 mb-2">Next Steps</p>
-                <p>After creating your template, you'll be taken to the Day Planner where you can:</p>
-                <ul className="list-disc list-inside mt-2 space-y-1">
-                  <li>Add and name each day</li>
-                  <li>Assign blocks (warmups, drills, etc.)</li>
-                  <li>Reorder activities</li>
-                  <li>Add coaching notes</li>
-                </ul>
+                <p className="font-bold text-white/60 mb-2">Template Types</p>
+                {formData.is_pdf_only ? (
+                  <>
+                    <p>PDF-Only templates are perfect for:</p>
+                    <ul className="list-disc list-inside mt-2 space-y-1">
+                      <li>Existing curriculum documents</li>
+                      <li>Quick template creation</li>
+                      <li>Printable lesson plans</li>
+                    </ul>
+                  </>
+                ) : (
+                  <>
+                    <p>Structured templates let you:</p>
+                    <ul className="list-disc list-inside mt-2 space-y-1">
+                      <li>Add and name each day</li>
+                      <li>Assign blocks (warmups, drills, etc.)</li>
+                      <li>Reorder activities</li>
+                      <li>Add coaching notes</li>
+                      <li>Optionally attach a PDF</li>
+                    </ul>
+                  </>
+                )}
               </div>
             </div>
           </div>

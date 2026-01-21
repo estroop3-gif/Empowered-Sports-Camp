@@ -11,7 +11,7 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { useAuth } from '@/lib/auth/context'
-import { PortalLayout, PortalPageHeader, PortalCard } from '@/components/portal'
+import { PortalPageHeader, PortalCard } from '@/components/portal'
 import {
   ArrowLeft,
   Save,
@@ -293,17 +293,17 @@ export default function LicenseeVenueDetailPage() {
 
   if (loading) {
     return (
-      <PortalLayout>
+      <div>
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-8 w-8 text-neon animate-spin" />
         </div>
-      </PortalLayout>
+      </div>
     )
   }
 
   if (!venue) {
     return (
-      <PortalLayout>
+      <div>
         <PortalCard>
           <div className="text-center py-12">
             <Building2 className="h-12 w-12 text-white/20 mx-auto mb-4" />
@@ -318,12 +318,12 @@ export default function LicenseeVenueDetailPage() {
             </Link>
           </div>
         </PortalCard>
-      </PortalLayout>
+      </div>
     )
   }
 
   return (
-    <PortalLayout>
+    <div>
       <PortalPageHeader
         title={canEdit ? 'Edit Venue' : 'View Venue'}
         description={venue.name}
@@ -835,6 +835,6 @@ export default function LicenseeVenueDetailPage() {
           </PortalCard>
         </div>
       </div>
-    </PortalLayout>
+    </div>
   )
 }

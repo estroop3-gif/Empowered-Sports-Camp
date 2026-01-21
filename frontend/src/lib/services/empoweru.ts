@@ -11,13 +11,15 @@ import {
   VideoProvider,
   EmpowerUProgressStatus,
   ContributionStatus,
+  UserRole,
+  QuestionType,
 } from '@/generated/prisma'
 
 // =============================================================================
 // Types
 // =============================================================================
 
-export type { PortalType, VideoProvider, EmpowerUProgressStatus, ContributionStatus }
+export type { PortalType, VideoProvider, EmpowerUProgressStatus, ContributionStatus, QuestionType }
 
 export interface EmpowerUModuleWithProgress {
   id: string
@@ -57,19 +59,22 @@ export interface EmpowerUQuizDetail {
   questions: {
     id: string
     question_text: string
-    question_type: string
+    question_type: QuestionType
     order_index: number
+    correct_answer?: string | null // For SHORT_ANSWER type (admin only)
     options: {
       id: string
       option_text: string
       order_index: number
+      is_correct?: boolean // Only included in admin view
     }[]
   }[]
 }
 
 export interface QuizAnswerInput {
   question_id: string
-  selected_option_id: string
+  selected_option_id?: string // For MULTIPLE_CHOICE and TRUE_FALSE
+  text_answer?: string // For SHORT_ANSWER
 }
 
 export interface QuizSubmitResult {
@@ -443,8 +448,20 @@ export async function submitQuiz(params: {
     for (const answer of answers) {
       const question = quiz.questions.find((q) => q.id === answer.question_id)
       if (question) {
-        const correctOption = question.options.find((o) => o.isCorrect)
-        if (correctOption && correctOption.id === answer.selected_option_id) {
+        let isCorrect = false
+
+        if (question.questionType === QuestionType.SHORT_ANSWER) {
+          // Case-insensitive comparison for short answer
+          const userAnswer = (answer.text_answer || '').trim().toLowerCase()
+          const correctAnswer = (question.correctAnswer || '').trim().toLowerCase()
+          isCorrect = userAnswer === correctAnswer
+        } else {
+          // MULTIPLE_CHOICE or TRUE_FALSE - check selected option
+          const correctOption = question.options.find((o) => o.isCorrect)
+          isCorrect = correctOption?.id === answer.selected_option_id
+        }
+
+        if (isCorrect) {
           correctCount++
         }
       }
@@ -1211,7 +1228,9 @@ export async function upsertQuiz(params: {
   passingScore?: number
   questions: {
     questionText: string
-    options: {
+    questionType?: QuestionType
+    correctAnswer?: string // For SHORT_ANSWER
+    options?: {
       optionText: string
       isCorrect: boolean
     }[]
@@ -1219,6 +1238,8 @@ export async function upsertQuiz(params: {
 }): Promise<{ data: EmpowerUQuizDetail | null; error: Error | null }> {
   try {
     const { moduleId, title, passingScore, questions } = params
+
+    console.log('[DEBUG upsertQuiz] Questions received:', JSON.stringify(questions, null, 2))
 
     // Delete existing quiz if any
     await prisma.empowerUQuiz.deleteMany({
@@ -1232,17 +1253,40 @@ export async function upsertQuiz(params: {
         title,
         passingScore: passingScore || 80,
         questions: {
-          create: questions.map((q, qIndex) => ({
-            questionText: q.questionText,
-            orderIndex: qIndex,
-            options: {
-              create: q.options.map((o, oIndex) => ({
+          create: questions.map((q, qIndex) => {
+            // Use provided questionType or default to MULTIPLE_CHOICE
+            const questionType: QuestionType = q.questionType ?? QuestionType.MULTIPLE_CHOICE
+            console.log('[DEBUG] Question type:', q.questionType, '->', questionType)
+
+            // Determine options based on question type
+            let optionsData: { optionText: string; isCorrect: boolean; orderIndex: number }[] = []
+
+            if (questionType === QuestionType.TRUE_FALSE) {
+              // For TRUE_FALSE, auto-create True/False options
+              // The first option in q.options indicates which is correct, or default to True
+              const correctIsTrue = q.options?.[0]?.isCorrect ?? true
+              optionsData = [
+                { optionText: 'True', isCorrect: correctIsTrue, orderIndex: 0 },
+                { optionText: 'False', isCorrect: !correctIsTrue, orderIndex: 1 },
+              ]
+            } else if (questionType === QuestionType.MULTIPLE_CHOICE && q.options) {
+              // Standard multiple choice
+              optionsData = q.options.map((o, oIndex) => ({
                 optionText: o.optionText,
                 isCorrect: o.isCorrect,
                 orderIndex: oIndex,
-              })),
-            },
-          })),
+              }))
+            }
+            // SHORT_ANSWER has no options, uses correctAnswer field
+
+            return {
+              questionText: q.questionText,
+              questionType,
+              orderIndex: qIndex,
+              correctAnswer: questionType === QuestionType.SHORT_ANSWER ? q.correctAnswer : null,
+              options: optionsData.length > 0 ? { create: optionsData } : undefined,
+            }
+          }),
         },
       },
       include: {
@@ -1268,10 +1312,12 @@ export async function upsertQuiz(params: {
           question_text: q.questionText,
           question_type: q.questionType,
           order_index: q.orderIndex,
+          correct_answer: q.correctAnswer,
           options: q.options.map((o) => ({
             id: o.id,
             option_text: o.optionText,
             order_index: o.orderIndex,
+            is_correct: o.isCorrect,
           })),
         })),
       },
@@ -1311,6 +1357,743 @@ export async function createUnlockRule(params: {
     return { error: null }
   } catch (error) {
     console.error('[EmpowerU] Failed to create unlock rule:', error)
+    return { error: error as Error }
+  }
+}
+
+// =============================================================================
+// Role Requirements
+// =============================================================================
+
+/**
+ * Get required modules for a specific role
+ */
+export async function getRequiredModulesForRole(role: UserRole): Promise<{
+  data: {
+    moduleId: string
+    module: {
+      id: string
+      title: string
+      slug: string
+      portalType: PortalType
+      estimatedMinutes: number
+      hasQuiz: boolean
+    }
+  }[] | null
+  error: Error | null
+}> {
+  try {
+    const requirements = await prisma.empowerURoleRequirement.findMany({
+      where: {
+        role,
+        isActive: true,
+      },
+      include: {
+        module: {
+          select: {
+            id: true,
+            title: true,
+            slug: true,
+            portalType: true,
+            estimatedMinutes: true,
+            quiz: {
+              select: { id: true },
+            },
+          },
+        },
+      },
+    })
+
+    return {
+      data: requirements.map((r) => ({
+        moduleId: r.moduleId,
+        module: {
+          id: r.module.id,
+          title: r.module.title,
+          slug: r.module.slug,
+          portalType: r.module.portalType,
+          estimatedMinutes: r.module.estimatedMinutes,
+          hasQuiz: r.module.quiz !== null,
+        },
+      })),
+      error: null,
+    }
+  } catch (error) {
+    console.error('[EmpowerU] Failed to get required modules for role:', error)
+    return { data: null, error: error as Error }
+  }
+}
+
+/**
+ * Set role requirements (HQ Admin only)
+ */
+export async function setRoleRequirements(
+  role: UserRole,
+  moduleIds: string[],
+  createdBy: string
+): Promise<{ error: Error | null }> {
+  try {
+    // Use a transaction to replace all requirements for this role
+    await prisma.$transaction(async (tx) => {
+      // Deactivate all existing requirements for this role
+      await tx.empowerURoleRequirement.updateMany({
+        where: { role },
+        data: { isActive: false },
+      })
+
+      // Create new requirements (or reactivate existing ones)
+      for (const moduleId of moduleIds) {
+        await tx.empowerURoleRequirement.upsert({
+          where: {
+            role_moduleId: { role, moduleId },
+          },
+          create: {
+            role,
+            moduleId,
+            createdBy,
+            isActive: true,
+          },
+          update: {
+            isActive: true,
+            updatedAt: new Date(),
+          },
+        })
+      }
+    })
+
+    return { error: null }
+  } catch (error) {
+    console.error('[EmpowerU] Failed to set role requirements:', error)
+    return { error: error as Error }
+  }
+}
+
+/**
+ * List all role requirements (for admin view)
+ */
+export async function listAllRoleRequirements(): Promise<{
+  data: {
+    role: UserRole
+    modules: {
+      id: string
+      title: string
+      slug: string
+      portalType: PortalType
+    }[]
+  }[] | null
+  error: Error | null
+}> {
+  try {
+    const requirements = await prisma.empowerURoleRequirement.findMany({
+      where: { isActive: true },
+      include: {
+        module: {
+          select: {
+            id: true,
+            title: true,
+            slug: true,
+            portalType: true,
+          },
+        },
+      },
+      orderBy: [{ role: 'asc' }, { createdAt: 'asc' }],
+    })
+
+    // Group by role
+    const grouped = new Map<UserRole, { id: string; title: string; slug: string; portalType: PortalType }[]>()
+
+    for (const req of requirements) {
+      if (!grouped.has(req.role)) {
+        grouped.set(req.role, [])
+      }
+      grouped.get(req.role)!.push({
+        id: req.module.id,
+        title: req.module.title,
+        slug: req.module.slug,
+        portalType: req.module.portalType,
+      })
+    }
+
+    // Convert to array format
+    const result: { role: UserRole; modules: { id: string; title: string; slug: string; portalType: PortalType }[] }[] = []
+    for (const [role, modules] of grouped) {
+      result.push({ role, modules })
+    }
+
+    return { data: result, error: null }
+  } catch (error) {
+    console.error('[EmpowerU] Failed to list all role requirements:', error)
+    return { data: null, error: error as Error }
+  }
+}
+
+// =============================================================================
+// Enhanced Quiz Functions
+// =============================================================================
+
+export interface EnhancedQuizSubmitResult {
+  score: number
+  passed: boolean
+  totalQuestions: number
+  correctAnswers: number
+  attemptNumber: number
+  missedQuestionIds: string[]
+  missedQuestions: {
+    id: string
+    questionText: string
+    options: { id: string; optionText: string; orderIndex: number }[]
+  }[]
+}
+
+/**
+ * Get missed questions for retry attempt
+ */
+export async function getMissedQuestionsForRetry(
+  moduleId: string,
+  userId: string,
+  tenantId?: string
+): Promise<{
+  data: {
+    questions: {
+      id: string
+      questionText: string
+      questionType: string
+      orderIndex: number
+      options: { id: string; optionText: string; orderIndex: number }[]
+    }[]
+    attemptNumber: number
+    passingScore: number
+  } | null
+  error: Error | null
+}> {
+  try {
+    // Handle nullable tenantId in composite unique key
+    const normalizedTenantId = tenantId ?? null
+
+    // Get the progress record
+    const progress = await prisma.empowerUModuleProgress.findUnique({
+      where: {
+        moduleId_userId_tenantId: {
+          moduleId,
+          userId,
+          tenantId: normalizedTenantId as string,
+        },
+      },
+    })
+
+    if (!progress || progress.missedQuestionIds.length === 0) {
+      return {
+        data: null,
+        error: new Error('No missed questions to retry'),
+      }
+    }
+
+    // Get the quiz and missed questions
+    const quiz = await prisma.empowerUQuiz.findUnique({
+      where: { moduleId },
+      include: {
+        questions: {
+          where: {
+            id: { in: progress.missedQuestionIds },
+          },
+          orderBy: { orderIndex: 'asc' },
+          include: {
+            options: {
+              orderBy: { orderIndex: 'asc' },
+              select: {
+                id: true,
+                optionText: true,
+                orderIndex: true,
+              },
+            },
+          },
+        },
+      },
+    })
+
+    if (!quiz) {
+      return { data: null, error: new Error('Quiz not found') }
+    }
+
+    return {
+      data: {
+        questions: quiz.questions.map((q) => ({
+          id: q.id,
+          questionText: q.questionText,
+          questionType: q.questionType,
+          orderIndex: q.orderIndex,
+          options: q.options,
+        })),
+        attemptNumber: progress.attemptCount + 1,
+        passingScore: quiz.passingScore,
+      },
+      error: null,
+    }
+  } catch (error) {
+    console.error('[EmpowerU] Failed to get missed questions:', error)
+    return { data: null, error: error as Error }
+  }
+}
+
+/**
+ * Submit quiz with enhanced tracking (supports retry)
+ */
+export async function submitQuizEnhanced(params: {
+  moduleId: string
+  userId: string
+  answers: QuizAnswerInput[]
+  role: string
+  tenantId?: string
+  isRetry?: boolean
+}): Promise<{ data: EnhancedQuizSubmitResult | null; error: Error | null }> {
+  try {
+    const { moduleId, userId, answers, role, tenantId, isRetry = false } = params
+
+    // Handle nullable tenantId in composite unique key
+    const normalizedTenantId = tenantId ?? null
+
+    // Get the quiz with correct answers
+    const quiz = await prisma.empowerUQuiz.findUnique({
+      where: { moduleId },
+      include: {
+        questions: {
+          include: {
+            options: true,
+          },
+        },
+      },
+    })
+
+    if (!quiz) {
+      return { data: null, error: new Error('Quiz not found') }
+    }
+
+    // Get or create progress record
+    let progress = await prisma.empowerUModuleProgress.findUnique({
+      where: {
+        moduleId_userId_tenantId: {
+          moduleId,
+          userId,
+          tenantId: normalizedTenantId as string,
+        },
+      },
+    })
+
+    if (!progress) {
+      progress = await prisma.empowerUModuleProgress.create({
+        data: {
+          moduleId,
+          userId,
+          tenantId: normalizedTenantId,
+          role,
+          status: 'IN_PROGRESS',
+          attemptCount: 0,
+          missedQuestionIds: [],
+        },
+      })
+    }
+
+    // Determine which questions to grade
+    let questionsToGrade: typeof quiz.questions
+    if (isRetry && progress.missedQuestionIds.length > 0) {
+      // Only grade the previously missed questions
+      questionsToGrade = quiz.questions.filter((q) =>
+        progress!.missedQuestionIds.includes(q.id)
+      )
+    } else {
+      // Grade all questions
+      questionsToGrade = quiz.questions
+    }
+
+    // Grade the answers
+    const answerDetails: { questionId: string; optionId: string; textAnswer?: string; isCorrect: boolean }[] = []
+    const newMissedIds: string[] = []
+    let correctCount = 0
+
+    for (const question of questionsToGrade) {
+      const userAnswer = answers.find((a) => a.question_id === question.id)
+
+      if (!userAnswer) {
+        // Unanswered questions count as wrong
+        newMissedIds.push(question.id)
+        answerDetails.push({
+          questionId: question.id,
+          optionId: '',
+          isCorrect: false,
+        })
+      } else {
+        let isCorrect = false
+
+        if (question.questionType === QuestionType.SHORT_ANSWER) {
+          // Case-insensitive comparison for short answer
+          const userText = (userAnswer.text_answer || '').trim().toLowerCase()
+          const correctText = (question.correctAnswer || '').trim().toLowerCase()
+          isCorrect = userText === correctText
+          answerDetails.push({
+            questionId: question.id,
+            optionId: '',
+            textAnswer: userAnswer.text_answer,
+            isCorrect,
+          })
+        } else {
+          // MULTIPLE_CHOICE or TRUE_FALSE - check selected option
+          const correctOption = question.options.find((o) => o.isCorrect)
+          isCorrect = userAnswer.selected_option_id === correctOption?.id
+          answerDetails.push({
+            questionId: question.id,
+            optionId: userAnswer.selected_option_id || '',
+            isCorrect,
+          })
+        }
+
+        if (isCorrect) {
+          correctCount++
+        } else {
+          newMissedIds.push(question.id)
+        }
+      }
+    }
+
+    // Calculate score
+    const totalQuestions = questionsToGrade.length
+    const score = Math.round((correctCount / totalQuestions) * 100)
+    const passed = score >= quiz.passingScore
+
+    const attemptNumber = progress.attemptCount + 1
+
+    // Update progress and create attempt record in a transaction
+    await prisma.$transaction(async (tx) => {
+      // Create attempt record
+      await tx.empowerUQuizAttempt.create({
+        data: {
+          progressId: progress!.id,
+          attemptNumber,
+          score,
+          passed,
+          answers: answerDetails,
+        },
+      })
+
+      // Update progress
+      const updateData: any = {
+        attemptCount: attemptNumber,
+        lastAttemptAt: new Date(),
+        quizScore: score,
+        quizPassed: passed,
+      }
+
+      if (passed) {
+        // All questions correct! Clear missed and mark complete
+        updateData.missedQuestionIds = []
+        updateData.status = 'COMPLETED'
+        updateData.completedAt = new Date()
+      } else {
+        // Store missed questions for retry
+        updateData.missedQuestionIds = newMissedIds
+        updateData.status = 'IN_PROGRESS'
+      }
+
+      await tx.empowerUModuleProgress.update({
+        where: { id: progress!.id },
+        data: updateData,
+      })
+    })
+
+    // Get missed question details for the response
+    const missedQuestionsDetails = quiz.questions
+      .filter((q) => newMissedIds.includes(q.id))
+      .map((q) => ({
+        id: q.id,
+        questionText: q.questionText,
+        options: q.options.map((o) => ({
+          id: o.id,
+          optionText: o.optionText,
+          orderIndex: o.orderIndex,
+        })),
+      }))
+
+    return {
+      data: {
+        score,
+        passed,
+        totalQuestions,
+        correctAnswers: correctCount,
+        attemptNumber,
+        missedQuestionIds: newMissedIds,
+        missedQuestions: missedQuestionsDetails,
+      },
+      error: null,
+    }
+  } catch (error) {
+    console.error('[EmpowerU] Failed to submit quiz:', error)
+    return { data: null, error: error as Error }
+  }
+}
+
+// =============================================================================
+// Certification Functions
+// =============================================================================
+
+export interface CertificationEligibility {
+  isEligible: boolean
+  completedModules: { id: string; title: string; completedAt: string }[]
+  requiredModules: { id: string; title: string }[]
+  missingModules: { id: string; title: string }[]
+}
+
+export interface CertificationStatus {
+  isCertified: boolean
+  certifiedAt: string | null
+  certificateUrl: string | null
+  certificateNumber: string | null
+}
+
+/**
+ * Check if a user is eligible for certification
+ */
+export async function checkCertificationEligibility(
+  userId: string,
+  role: UserRole,
+  tenantId?: string
+): Promise<{ data: CertificationEligibility | null; error: Error | null }> {
+  try {
+    // Get required modules for this role
+    const { data: requirements, error: reqError } = await getRequiredModulesForRole(role)
+    if (reqError || !requirements) {
+      return { data: null, error: reqError }
+    }
+
+    if (requirements.length === 0) {
+      // No requirements = automatically eligible
+      return {
+        data: {
+          isEligible: true,
+          completedModules: [],
+          requiredModules: [],
+          missingModules: [],
+        },
+        error: null,
+      }
+    }
+
+    const requiredModuleIds = requirements.map((r) => r.moduleId)
+
+    // Get user's completed modules
+    const completedProgress = await prisma.empowerUModuleProgress.findMany({
+      where: {
+        userId,
+        tenantId: tenantId || null,
+        moduleId: { in: requiredModuleIds },
+        status: 'COMPLETED',
+        quizPassed: true,
+      },
+      include: {
+        module: {
+          select: { id: true, title: true },
+        },
+      },
+    })
+
+    const completedModuleIds = new Set(completedProgress.map((p) => p.moduleId))
+
+    const completedModules = completedProgress.map((p) => ({
+      id: p.module.id,
+      title: p.module.title,
+      completedAt: p.completedAt?.toISOString() || '',
+    }))
+
+    const requiredModules = requirements.map((r) => ({
+      id: r.module.id,
+      title: r.module.title,
+    }))
+
+    const missingModules = requiredModules.filter((m) => !completedModuleIds.has(m.id))
+
+    return {
+      data: {
+        isEligible: missingModules.length === 0,
+        completedModules,
+        requiredModules,
+        missingModules,
+      },
+      error: null,
+    }
+  } catch (error) {
+    console.error('[EmpowerU] Failed to check certification eligibility:', error)
+    return { data: null, error: error as Error }
+  }
+}
+
+/**
+ * Generate a unique certificate number
+ */
+function generateCertificateNumber(): string {
+  const year = new Date().getFullYear()
+  const random = Math.floor(Math.random() * 100000).toString().padStart(5, '0')
+  return `ESC-${year}-${random}`
+}
+
+/**
+ * Create certification record for a user
+ */
+export async function generateCertification(
+  userId: string,
+  role: UserRole,
+  tenantId?: string
+): Promise<{
+  data: {
+    id: string
+    certificateNumber: string
+    certifiedAt: string
+    certificateUrl: string | null
+  } | null
+  error: Error | null
+}> {
+  try {
+    // Handle nullable tenantId in composite unique key
+    const normalizedTenantId = tenantId ?? null
+
+    // First check eligibility
+    const { data: eligibility, error: eligError } = await checkCertificationEligibility(
+      userId,
+      role,
+      tenantId
+    )
+    if (eligError) {
+      return { data: null, error: eligError }
+    }
+    if (!eligibility?.isEligible) {
+      return {
+        data: null,
+        error: new Error('User is not eligible for certification. Complete all required modules first.'),
+      }
+    }
+
+    // Check if already certified
+    const existing = await prisma.empowerUCertification.findUnique({
+      where: {
+        userId_role_tenantId: {
+          userId,
+          role,
+          tenantId: normalizedTenantId as string,
+        },
+      },
+    })
+
+    if (existing) {
+      return {
+        data: {
+          id: existing.id,
+          certificateNumber: existing.certificateNumber,
+          certifiedAt: existing.certifiedAt.toISOString(),
+          certificateUrl: existing.certificateUrl,
+        },
+        error: null,
+      }
+    }
+
+    // Generate unique certificate number (with retry for uniqueness)
+    let certificateNumber = generateCertificateNumber()
+    let attempts = 0
+    while (attempts < 10) {
+      const existingNumber = await prisma.empowerUCertification.findUnique({
+        where: { certificateNumber },
+      })
+      if (!existingNumber) break
+      certificateNumber = generateCertificateNumber()
+      attempts++
+    }
+
+    // Create certification record
+    const certification = await prisma.empowerUCertification.create({
+      data: {
+        userId,
+        role,
+        tenantId: normalizedTenantId,
+        certificateNumber,
+        certificateUrl: null, // Will be set later when PDF is generated
+      },
+    })
+
+    return {
+      data: {
+        id: certification.id,
+        certificateNumber: certification.certificateNumber,
+        certifiedAt: certification.certifiedAt.toISOString(),
+        certificateUrl: certification.certificateUrl,
+      },
+      error: null,
+    }
+  } catch (error) {
+    console.error('[EmpowerU] Failed to generate certification:', error)
+    return { data: null, error: error as Error }
+  }
+}
+
+/**
+ * Get certification status for a user
+ */
+export async function getCertificationStatus(
+  userId: string,
+  role: UserRole,
+  tenantId?: string
+): Promise<{ data: CertificationStatus | null; error: Error | null }> {
+  try {
+    // Handle nullable tenantId in composite unique key
+    const normalizedTenantId = tenantId ?? null
+
+    const certification = await prisma.empowerUCertification.findUnique({
+      where: {
+        userId_role_tenantId: {
+          userId,
+          role,
+          tenantId: normalizedTenantId as string,
+        },
+      },
+    })
+
+    if (!certification) {
+      return {
+        data: {
+          isCertified: false,
+          certifiedAt: null,
+          certificateUrl: null,
+          certificateNumber: null,
+        },
+        error: null,
+      }
+    }
+
+    return {
+      data: {
+        isCertified: true,
+        certifiedAt: certification.certifiedAt.toISOString(),
+        certificateUrl: certification.certificateUrl,
+        certificateNumber: certification.certificateNumber,
+      },
+      error: null,
+    }
+  } catch (error) {
+    console.error('[EmpowerU] Failed to get certification status:', error)
+    return { data: null, error: error as Error }
+  }
+}
+
+/**
+ * Update certification with PDF URL
+ */
+export async function updateCertificationUrl(
+  certificationId: string,
+  certificateUrl: string
+): Promise<{ error: Error | null }> {
+  try {
+    await prisma.empowerUCertification.update({
+      where: { id: certificationId },
+      data: { certificateUrl },
+    })
+    return { error: null }
+  } catch (error) {
+    console.error('[EmpowerU] Failed to update certification URL:', error)
     return { error: error as Error }
   }
 }

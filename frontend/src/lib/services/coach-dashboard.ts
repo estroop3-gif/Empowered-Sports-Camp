@@ -1152,8 +1152,10 @@ export async function getCoachCampDetail(params: {
           })),
         })),
         staff: camp.staffAssignments.map((s) => ({
-          id: s.user.id,
-          name: `${s.user.firstName || ''} ${s.user.lastName || ''}`.trim() || 'Unknown',
+          id: s.user?.id || s.id,
+          name: s.isAdHoc
+            ? `${s.adHocFirstName || ''} ${s.adHocLastName || ''}`.trim() || 'Unknown'
+            : `${s.user?.firstName || ''} ${s.user?.lastName || ''}`.trim() || 'Unknown',
           role: s.role,
           station_name: s.stationName,
         })),

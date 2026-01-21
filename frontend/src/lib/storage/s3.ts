@@ -25,14 +25,16 @@ let s3Client: S3Client | null = null
 
 function getS3Client(): S3Client {
   if (!s3Client) {
-    const region = process.env.AWS_REGION || 'us-east-2'
+    const region = process.env.AWS_REGION || process.env.APP_AWS_REGION || 'us-east-2'
+    const accessKeyId = process.env.AWS_ACCESS_KEY_ID || process.env.APP_ACCESS_KEY_ID
+    const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY || process.env.APP_SECRET_ACCESS_KEY
 
     s3Client = new S3Client({
       region,
-      credentials: process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY
+      credentials: accessKeyId && secretAccessKey
         ? {
-            accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-            secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+            accessKeyId,
+            secretAccessKey,
           }
         : undefined, // Use default credential chain (IAM role, environment, etc.)
     })
@@ -114,7 +116,8 @@ export async function getUploadUrl(
   const uploadUrl = await getSignedUrl(client, command, { expiresIn })
 
   // Construct the public URL (assuming public read access or CloudFront)
-  const fileUrl = `https://${bucket}.s3.${process.env.AWS_REGION || 'us-east-2'}.amazonaws.com/${key}`
+  const region = process.env.AWS_REGION || process.env.APP_AWS_REGION || 'us-east-2'
+  const fileUrl = `https://${bucket}.s3.${region}.amazonaws.com/${key}`
 
   return { uploadUrl, fileUrl, key }
 }
@@ -156,7 +159,8 @@ export async function uploadFile(
 
   await client.send(command)
 
-  const url = `https://${bucket}.s3.${process.env.AWS_REGION || 'us-east-2'}.amazonaws.com/${key}`
+  const region = process.env.AWS_REGION || process.env.APP_AWS_REGION || 'us-east-2'
+  const url = `https://${bucket}.s3.${region}.amazonaws.com/${key}`
 
   return {
     key,
@@ -288,7 +292,7 @@ export async function listFiles(
 ): Promise<FileInfo[]> {
   const bucket = getBucketName()
   const client = getS3Client()
-  const region = process.env.AWS_REGION || 'us-east-2'
+  const region = process.env.AWS_REGION || process.env.APP_AWS_REGION || 'us-east-2'
 
   const command = new ListObjectsV2Command({
     Bucket: bucket,
@@ -312,7 +316,7 @@ export async function listFiles(
 export async function getFileInfo(key: string): Promise<FileInfo | null> {
   const bucket = getBucketName()
   const client = getS3Client()
-  const region = process.env.AWS_REGION || 'us-east-2'
+  const region = process.env.AWS_REGION || process.env.APP_AWS_REGION || 'us-east-2'
 
   try {
     const command = new HeadObjectCommand({
@@ -355,6 +359,10 @@ export const STORAGE_FOLDERS = {
   DOCUMENTS: 'documents',
   /** Tenant logos */
   TENANT_LOGOS: 'tenants',
+  /** Venue contracts */
+  CONTRACTS: 'contracts',
+  /** Curriculum PDFs (templates and blocks) */
+  CURRICULUM: 'curriculum',
 } as const
 
 export type StorageFolder = typeof STORAGE_FOLDERS[keyof typeof STORAGE_FOLDERS]

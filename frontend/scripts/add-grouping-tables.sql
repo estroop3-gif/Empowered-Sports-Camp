@@ -1,7 +1,7 @@
 -- ============================================================================
 -- EMPOWERED SPORTS CAMP - ADD GROUPING ENGINE TABLES
 -- ============================================================================
--- Run this in Supabase SQL Editor to add grouping functionality
+-- NOTE: This is a reference schema file. Use Prisma migrations for actual DB changes.
 -- Your existing tenants, camps, and locations data will be preserved
 -- ============================================================================
 

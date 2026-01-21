@@ -680,7 +680,7 @@ SELECT 'Curriculum tables, RLS policies, and seed data created successfully!' as
 -- - 9 complete templates (A through I) as specified
 -- - 3 days per template with ordered block schedules
 --
--- RUN THIS IN: Supabase SQL Editor
+-- NOTE: This is a reference seed data file. Use npm run seed:admin for seeding.
 -- PREREQUISITE: curriculum-tables.sql must be run first
 --
 -- ============================================

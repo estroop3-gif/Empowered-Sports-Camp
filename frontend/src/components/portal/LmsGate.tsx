@@ -50,23 +50,23 @@ export function LmsGate({
     return <>{children}</>
   }
 
-  // Determine the LMS path based on role
+  // Determine the LMS path based on role (using EmpowerU training)
   const defaultLmsPath = role === 'director'
-    ? '/director/lms'
+    ? '/director/empoweru'
     : role === 'cit_volunteer'
-      ? '/volunteer/lms'
-      : '/portal/lms'
+      ? '/cit/empoweru'
+      : role === 'coach'
+        ? '/coach/empoweru'
+        : role === 'licensee_owner'
+          ? '/licensee/empoweru'
+          : '/empoweru'
 
   const targetLmsPath = lmsPath || defaultLmsPath
   const roleConfig = role ? ROLE_CONFIG[role] : null
   const roleLabel = roleConfig?.label || 'Staff'
 
-  // Determine which modules are required
-  const requiredModules = role === 'director'
-    ? 'Director Certification Program'
-    : role === 'cit_volunteer'
-      ? 'Volunteer Orientation'
-      : 'Core Operations Training'
+  // Determine training description
+  const requiredModules = 'EmpowerU Training & Certification'
 
   // Full page variant
   if (variant === 'page') {
@@ -92,7 +92,7 @@ export function LmsGate({
           <p className="text-white/60 mb-2">
             {message || (
               <>
-                Complete your <span className="text-neon font-semibold">{requiredModules}</span> to unlock
+                Complete your required training to unlock
                 {featureName ? ` ${featureName}` : ' this feature'}.
               </>
             )}
@@ -141,7 +141,7 @@ export function LmsGate({
           <div className="flex-1">
             <h3 className="font-bold text-white mb-1">Training Required</h3>
             <p className="text-sm text-white/60 mb-4">
-              {message || `Complete your ${requiredModules} to access${featureName ? ` ${featureName}` : ' this feature'}.`}
+              {message || `Complete your required training to access${featureName ? ` ${featureName}` : ' this feature'}.`}
             </p>
             <Link
               href={targetLmsPath}

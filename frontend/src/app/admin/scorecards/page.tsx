@@ -74,51 +74,82 @@ export default function AdminScorecardsPage() {
   const [staffLoading, setStaffLoading] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
 
-  // Load global overview
+  // Load global overview and all licensees
   useEffect(() => {
     async function loadOverview() {
       try {
-        const res = await fetch('/api/incentives/overview')
-        const json = await res.json()
+        // Fetch both incentive data and all licensees in parallel
+        const [incentivesRes, licenseesRes] = await Promise.all([
+          fetch('/api/incentives/overview'),
+          fetch('/api/licensees?action=all'),
+        ])
 
-        if (res.ok && json.data) {
-          // Transform API response (array of tenant overviews) to expected format
-          const tenantOverviews = Array.isArray(json.data) ? json.data : []
+        const incentivesJson = await incentivesRes.json()
+        const licenseesJson = await licenseesRes.json()
 
-          // Calculate totals from all tenants
-          let totalCompensation = 0
-          let totalStaff = 0
-          let totalCamps = 0
-          const licensees: LicenseeOverview[] = []
+        // Build a map of tenant compensation data from incentives API
+        const tenantOverviews = Array.isArray(incentivesJson.data) ? incentivesJson.data : []
+        const compensationByTenantId = new Map<string, {
+          total_payouts: number
+          total_sessions: number
+          staff_summaries: StaffSummaryFromApi[]
+        }>()
 
-          for (const tenant of tenantOverviews) {
-            totalCompensation += tenant.total_payouts || 0
-            totalCamps += tenant.total_sessions || 0
-            totalStaff += tenant.staff_summaries?.length || 0
+        for (const tenant of tenantOverviews) {
+          compensationByTenantId.set(tenant.tenant_id, {
+            total_payouts: tenant.total_payouts || 0,
+            total_sessions: tenant.total_sessions || 0,
+            staff_summaries: tenant.staff_summaries || [],
+          })
+        }
 
-            licensees.push({
-              id: tenant.tenant_id,
-              name: tenant.tenant_name,
-              total_staff: tenant.staff_summaries?.length || 0,
-              total_camps: tenant.total_sessions || 0,
-              total_compensation: tenant.total_payouts || 0,
-              pending_compensation: 0, // API doesn't distinguish pending vs finalized at tenant level
-              finalized_compensation: tenant.total_payouts || 0,
-              staff_summaries: tenant.staff_summaries || [],
-            })
+        // Get all licensees from the licensees API
+        const allLicensees = Array.isArray(licenseesJson.data) ? licenseesJson.data : []
+
+        // Merge: start with all licensees, add compensation data where available
+        let totalCompensation = 0
+        let totalStaff = 0
+        let totalCamps = 0
+        const licensees: LicenseeOverview[] = []
+
+        for (const licensee of allLicensees) {
+          const tenantId = licensee.tenant_id
+          const compensation = tenantId ? compensationByTenantId.get(tenantId) : null
+
+          const licenseeData: LicenseeOverview = {
+            id: tenantId || licensee.id,
+            name: licensee.tenant_name || `${licensee.first_name || ''} ${licensee.last_name || ''}`.trim() || licensee.email,
+            total_staff: compensation?.staff_summaries?.length || 0,
+            total_camps: compensation?.total_sessions || 0,
+            total_compensation: compensation?.total_payouts || 0,
+            pending_compensation: 0,
+            finalized_compensation: compensation?.total_payouts || 0,
+            staff_summaries: compensation?.staff_summaries || [],
           }
 
-          setOverview({
-            total_compensation: totalCompensation,
-            pending_compensation: 0,
-            finalized_compensation: totalCompensation,
-            total_staff: totalStaff,
-            total_camps: totalCamps,
-            licensees,
-          })
-        } else {
-          setError(json.error || 'Failed to load data')
+          totalCompensation += licenseeData.total_compensation
+          totalStaff += licenseeData.total_staff
+          totalCamps += licenseeData.total_camps
+
+          licensees.push(licenseeData)
         }
+
+        // Sort by total compensation descending, then by name
+        licensees.sort((a, b) => {
+          if (b.total_compensation !== a.total_compensation) {
+            return b.total_compensation - a.total_compensation
+          }
+          return a.name.localeCompare(b.name)
+        })
+
+        setOverview({
+          total_compensation: totalCompensation,
+          pending_compensation: 0,
+          finalized_compensation: totalCompensation,
+          total_staff: totalStaff,
+          total_camps: totalCamps,
+          licensees,
+        })
       } catch (err) {
         setError('Failed to load incentive data')
       } finally {

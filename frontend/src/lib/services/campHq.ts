@@ -81,7 +81,8 @@ export interface CampHqDay {
 export interface CampHqStaffMember {
   id: string
   assignment_id: string
-  role: 'director' | 'coach' | 'assistant'
+  user_id: string | null
+  role: 'director' | 'coach' | 'assistant' | 'cit' | 'volunteer'
   first_name: string
   last_name: string
   email: string
@@ -89,6 +90,12 @@ export interface CampHqStaffMember {
   photo_url: string | null
   assigned_group_id: string | null
   assigned_group_name: string | null
+  is_ad_hoc: boolean
+  is_lead: boolean
+  call_time: string | null
+  end_time: string | null
+  notes: string | null
+  station_name: string | null
 }
 
 export interface CampHqGroup {
@@ -130,7 +137,7 @@ export async function getCampHqOverview(
         },
         location: true,
         registrations: {
-          where: { status: 'confirmed' },
+          where: { status: { not: 'cancelled' } },
           select: { id: true },
         },
         staffAssignments: {
@@ -385,7 +392,7 @@ export async function getCampHqDays(
 
 /**
  * Get staff assignments for a camp
- * Note: CampStaffAssignment.user points to Profile directly
+ * Handles both profile-linked staff and ad-hoc staff
  */
 export async function getCampHqStaff(
   campId: string
@@ -394,32 +401,41 @@ export async function getCampHqStaff(
     const assignments = await prisma.campStaffAssignment.findMany({
       where: { campId },
       include: {
-        user: true, // user is actually Profile
+        user: true, // Will be null for ad-hoc staff
       },
       orderBy: [
         { role: 'asc' },
       ],
     })
 
-    // Sort by last name after fetching
-    const sortedAssignments = assignments.sort((a, b) => {
-      const lastNameA = a.user.lastName || ''
-      const lastNameB = b.user.lastName || ''
-      return lastNameA.localeCompare(lastNameB)
-    })
+    // Helper to format time
+    const formatTime = (time: Date | null): string | null => {
+      if (!time) return null
+      return time.toISOString().split('T')[1]?.slice(0, 5) || null
+    }
 
-    const staff: CampHqStaffMember[] = sortedAssignments.map(a => ({
-      id: a.userId,
+    const staff: CampHqStaffMember[] = assignments.map(a => ({
+      id: a.id,
       assignment_id: a.id,
+      user_id: a.userId,
       role: a.role as CampHqStaffMember['role'],
-      first_name: a.user.firstName || '',
-      last_name: a.user.lastName || '',
-      email: a.user.email,
-      phone: a.user.phone || null,
-      photo_url: a.user.avatarUrl || null,
-      assigned_group_id: null, // Staff-to-group assignment not currently in schema
+      first_name: a.isAdHoc ? (a.adHocFirstName || '') : (a.user?.firstName || ''),
+      last_name: a.isAdHoc ? (a.adHocLastName || '') : (a.user?.lastName || ''),
+      email: a.isAdHoc ? (a.adHocEmail || '') : (a.user?.email || ''),
+      phone: a.isAdHoc ? a.adHocPhone : (a.user?.phone || null),
+      photo_url: a.isAdHoc ? null : (a.user?.avatarUrl || null),
+      assigned_group_id: null,
       assigned_group_name: null,
+      is_ad_hoc: a.isAdHoc,
+      is_lead: a.isLead,
+      call_time: formatTime(a.callTime),
+      end_time: formatTime(a.endTime),
+      notes: a.notes,
+      station_name: a.stationName,
     }))
+
+    // Sort by last name
+    staff.sort((a, b) => a.last_name.localeCompare(b.last_name))
 
     return { data: staff, error: null }
   } catch (error) {
@@ -440,6 +456,332 @@ export async function assignStaffToGroup(
   return {
     data: { success: false },
     error: new Error('Staff-to-group assignment is not yet implemented'),
+  }
+}
+
+// ============================================================================
+// STAFF SEARCH & CRUD
+// ============================================================================
+
+export interface TenantStaffSearchResult {
+  id: string
+  first_name: string
+  last_name: string
+  email: string
+  phone: string | null
+  avatar_url: string | null
+  role: string
+  territories: Array<{
+    id: string
+    name: string
+    state_region: string
+    city: string | null
+  }>
+}
+
+/**
+ * Search for staff in a tenant's roster who can be assigned to a camp
+ * Excludes staff already assigned to the camp
+ * Supports filtering by territory
+ */
+export async function searchTenantStaff(
+  tenantId: string,
+  campId: string,
+  search?: string,
+  territoryId?: string,
+  limit: number = 50
+): Promise<{ data: TenantStaffSearchResult[] | null; error: Error | null }> {
+  try {
+    // Get existing profile-linked assignments to exclude them (only those with linked profiles)
+    const existingAssignments = await prisma.campStaffAssignment.findMany({
+      where: { campId, isAdHoc: false },
+      select: { userId: true },
+    })
+    const assignedUserIds = existingAssignments
+      .map(a => a.userId)
+      .filter((id): id is string => id !== null)
+
+    // Also exclude users with pending requests for this camp
+    const pendingRequests = await prisma.staffAssignmentRequest.findMany({
+      where: { campId, status: 'pending' },
+      select: { requestedUserId: true },
+    })
+    const pendingUserIds = pendingRequests.map(r => r.requestedUserId)
+
+    const excludeUserIds = [...assignedUserIds, ...pendingUserIds]
+
+    // Build the where clause
+    const searchCondition = search && search.length > 0 ? {
+      OR: [
+        { firstName: { contains: search, mode: 'insensitive' as const } },
+        { lastName: { contains: search, mode: 'insensitive' as const } },
+        { email: { contains: search, mode: 'insensitive' as const } },
+        // Also search by territory name
+        {
+          territoryAssignments: {
+            some: {
+              territory: {
+                name: { contains: search, mode: 'insensitive' as const },
+              },
+            },
+          },
+        },
+      ],
+    } : {}
+
+    const territoryCondition = territoryId ? {
+      territoryAssignments: {
+        some: { territoryId },
+      },
+    } : {}
+
+    // Search profiles with staff roles (any staff role, not just this tenant)
+    const profiles = await prisma.profile.findMany({
+      where: {
+        id: { notIn: excludeUserIds.length > 0 ? excludeUserIds : undefined },
+        userRoles: {
+          some: {
+            isActive: true,
+            // Include all staff roles, exclude parent and hq_admin
+            role: { in: ['coach', 'director', 'cit_volunteer', 'licensee_owner'] },
+          },
+        },
+        ...searchCondition,
+        ...territoryCondition,
+      },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        phone: true,
+        avatarUrl: true,
+        userRoles: {
+          where: {
+            isActive: true,
+            role: { in: ['coach', 'director', 'cit_volunteer', 'licensee_owner'] },
+          },
+          select: { role: true },
+          take: 1,
+        },
+        territoryAssignments: {
+          select: {
+            territory: {
+              select: {
+                id: true,
+                name: true,
+                stateRegion: true,
+                city: true,
+              },
+            },
+          },
+        },
+      },
+      take: limit,
+      orderBy: [
+        { lastName: 'asc' },
+        { firstName: 'asc' },
+      ],
+    })
+
+    return {
+      data: profiles.map(p => ({
+        id: p.id,
+        first_name: p.firstName || '',
+        last_name: p.lastName || '',
+        email: p.email,
+        phone: p.phone,
+        avatar_url: p.avatarUrl,
+        role: p.userRoles[0]?.role || 'coach',
+        territories: p.territoryAssignments.map(ta => ({
+          id: ta.territory.id,
+          name: ta.territory.name,
+          state_region: ta.territory.stateRegion,
+          city: ta.territory.city,
+        })),
+      })),
+      error: null,
+    }
+  } catch (error) {
+    console.error('[searchTenantStaff] Error:', error)
+    return { data: null, error: error as Error }
+  }
+}
+
+/**
+ * Get all territories for filtering in staff search
+ */
+export async function getTenantTerritories(
+  tenantId: string
+): Promise<{ data: Array<{ id: string; name: string; state_region: string; city: string | null }> | null; error: Error | null }> {
+  try {
+    const territories = await prisma.territory.findMany({
+      where: { tenantId },
+      select: {
+        id: true,
+        name: true,
+        stateRegion: true,
+        city: true,
+      },
+      orderBy: { name: 'asc' },
+    })
+
+    return {
+      data: territories.map(t => ({
+        id: t.id,
+        name: t.name,
+        state_region: t.stateRegion,
+        city: t.city,
+      })),
+      error: null,
+    }
+  } catch (error) {
+    console.error('[getTenantTerritories] Error:', error)
+    return { data: null, error: error as Error }
+  }
+}
+
+export interface AddStaffAssignmentInput {
+  campId: string
+  // For profile-linked staff
+  userId?: string
+  // For ad-hoc staff
+  adHocFirstName?: string
+  adHocLastName?: string
+  adHocEmail?: string
+  adHocPhone?: string
+  // Common fields
+  role: string
+  isLead?: boolean
+  callTime?: string
+  endTime?: string
+  notes?: string
+  stationName?: string
+}
+
+/**
+ * Parse time string (HH:MM) to Date for storage
+ */
+function parseTimeString(timeStr: string | undefined): Date | null {
+  if (!timeStr) return null
+  const [hours, minutes] = timeStr.split(':').map(Number)
+  if (isNaN(hours) || isNaN(minutes)) return null
+  const date = new Date()
+  date.setHours(hours, minutes, 0, 0)
+  return date
+}
+
+/**
+ * Add a staff assignment to a camp
+ * Supports both profile-linked staff and ad-hoc staff
+ */
+export async function addStaffAssignment(
+  input: AddStaffAssignmentInput
+): Promise<{ data: { id: string } | null; error: Error | null }> {
+  try {
+    const isAdHoc = !input.userId
+
+    // Validate: either userId or ad-hoc info required
+    if (!isAdHoc && !input.userId) {
+      return { data: null, error: new Error('User ID required for profile-linked staff') }
+    }
+    if (isAdHoc && (!input.adHocFirstName || !input.adHocLastName)) {
+      return { data: null, error: new Error('First and last name required for ad-hoc staff') }
+    }
+
+    // Check for duplicate profile assignment
+    if (!isAdHoc) {
+      const existing = await prisma.campStaffAssignment.findFirst({
+        where: { campId: input.campId, userId: input.userId },
+      })
+      if (existing) {
+        return { data: null, error: new Error('This staff member is already assigned to this camp') }
+      }
+    }
+
+    const assignment = await prisma.campStaffAssignment.create({
+      data: {
+        campId: input.campId,
+        userId: input.userId || null,
+        role: input.role,
+        isLead: input.isLead || false,
+        callTime: parseTimeString(input.callTime),
+        endTime: parseTimeString(input.endTime),
+        notes: input.notes || null,
+        stationName: input.stationName || null,
+        isAdHoc,
+        adHocFirstName: isAdHoc ? input.adHocFirstName : null,
+        adHocLastName: isAdHoc ? input.adHocLastName : null,
+        adHocEmail: isAdHoc ? (input.adHocEmail || null) : null,
+        adHocPhone: isAdHoc ? (input.adHocPhone || null) : null,
+      },
+    })
+
+    return { data: { id: assignment.id }, error: null }
+  } catch (error) {
+    console.error('[addStaffAssignment] Error:', error)
+    return { data: null, error: error as Error }
+  }
+}
+
+export interface UpdateStaffAssignmentInput {
+  role?: string
+  isLead?: boolean
+  callTime?: string | null
+  endTime?: string | null
+  notes?: string | null
+  stationName?: string | null
+  // For ad-hoc staff only
+  adHocFirstName?: string
+  adHocLastName?: string
+  adHocEmail?: string | null
+  adHocPhone?: string | null
+}
+
+/**
+ * Update an existing staff assignment
+ */
+export async function updateStaffAssignment(
+  assignmentId: string,
+  updates: UpdateStaffAssignmentInput
+): Promise<{ data: { success: boolean } | null; error: Error | null }> {
+  try {
+    await prisma.campStaffAssignment.update({
+      where: { id: assignmentId },
+      data: {
+        role: updates.role,
+        isLead: updates.isLead,
+        callTime: updates.callTime !== undefined ? parseTimeString(updates.callTime || undefined) : undefined,
+        endTime: updates.endTime !== undefined ? parseTimeString(updates.endTime || undefined) : undefined,
+        notes: updates.notes,
+        stationName: updates.stationName,
+        adHocFirstName: updates.adHocFirstName,
+        adHocLastName: updates.adHocLastName,
+        adHocEmail: updates.adHocEmail,
+        adHocPhone: updates.adHocPhone,
+      },
+    })
+    return { data: { success: true }, error: null }
+  } catch (error) {
+    console.error('[updateStaffAssignment] Error:', error)
+    return { data: null, error: error as Error }
+  }
+}
+
+/**
+ * Remove a staff assignment from a camp
+ */
+export async function removeStaffAssignment(
+  assignmentId: string
+): Promise<{ data: { success: boolean } | null; error: Error | null }> {
+  try {
+    await prisma.campStaffAssignment.delete({
+      where: { id: assignmentId },
+    })
+    return { data: { success: true }, error: null }
+  } catch (error) {
+    console.error('[removeStaffAssignment] Error:', error)
+    return { data: null, error: error as Error }
   }
 }
 
@@ -619,8 +961,11 @@ export async function startCampDay(
   date?: Date
 ): Promise<{ data: { camp_day_id: string } | null; error: Error | null }> {
   try {
+    console.log('[startCampDay] Starting for campId:', campId)
+
     const targetDate = date || new Date()
     targetDate.setHours(0, 0, 0, 0)
+    console.log('[startCampDay] Target date:', targetDate.toISOString())
 
     const camp = await prisma.camp.findUnique({
       where: { id: campId },
@@ -628,6 +973,7 @@ export async function startCampDay(
     })
 
     if (!camp) {
+      console.log('[startCampDay] Camp not found')
       return { data: null, error: new Error('Camp not found') }
     }
 
@@ -635,6 +981,8 @@ export async function startCampDay(
     const endDate = new Date(camp.endDate)
     startDate.setHours(0, 0, 0, 0)
     endDate.setHours(0, 0, 0, 0)
+
+    console.log('[startCampDay] Camp dates:', { startDate: startDate.toISOString(), endDate: endDate.toISOString() })
 
     if (targetDate < startDate || targetDate > endDate) {
       return { data: null, error: new Error('Date is outside camp date range') }
@@ -644,6 +992,8 @@ export async function startCampDay(
     const dayNumber = Math.floor(
       (targetDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)
     ) + 1
+
+    console.log('[startCampDay] Upserting camp day, dayNumber:', dayNumber)
 
     // Upsert camp day
     const campDay = await prisma.campDay.upsert({
@@ -665,12 +1015,17 @@ export async function startCampDay(
       },
     })
 
+    console.log('[startCampDay] Camp day created/updated:', campDay.id)
+
     // Initialize attendance records if not exists
     const registrations = await prisma.registration.findMany({
       where: { campId, status: 'confirmed' },
-      include: {
+      select: {
+        id: true,
+        athleteId: true,
+        parentId: true,
         athlete: {
-          include: {
+          select: {
             camperSessionData: {
               where: { campId },
               select: { assignedGroupId: true },
@@ -680,10 +1035,14 @@ export async function startCampDay(
       },
     })
 
+    console.log('[startCampDay] Found registrations:', registrations.length)
+
     const existingAttendance = await prisma.campAttendance.findMany({
       where: { campDayId: campDay.id },
       select: { athleteId: true },
     })
+
+    console.log('[startCampDay] Existing attendance:', existingAttendance.length)
 
     const existingAthleteIds = new Set(existingAttendance.map(a => a.athleteId))
 
@@ -698,15 +1057,22 @@ export async function startCampDay(
         status: 'not_arrived' as const,
       }))
 
+    console.log('[startCampDay] New attendance records to create:', newAttendance.length)
+
     if (newAttendance.length > 0) {
       await prisma.campAttendance.createMany({
         data: newAttendance,
       })
+      console.log('[startCampDay] Attendance records created')
     }
 
     return { data: { camp_day_id: campDay.id }, error: null }
   } catch (error) {
     console.error('[startCampDay] Error:', error)
+    console.error('[startCampDay] Error details:', error instanceof Error ? error.message : String(error))
+    if (error instanceof Error && error.stack) {
+      console.error('[startCampDay] Stack:', error.stack)
+    }
     return { data: null, error: error as Error }
   }
 }

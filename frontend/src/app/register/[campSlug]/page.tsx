@@ -144,7 +144,7 @@ const DEFAULT_ADDONS: AddOn[] = [
       { id: 'var-004', addonId: 'addon-002', name: 'YL', sku: 'TEE-YL', priceOverride: null, inventoryQuantity: 3, lowStockThreshold: 5, allowBackorder: false, isLowStock: true, isSoldOut: false },
       { id: 'var-005', addonId: 'addon-002', name: 'AS', sku: 'TEE-AS', priceOverride: null, inventoryQuantity: 50, lowStockThreshold: 5, allowBackorder: false, isLowStock: false, isSoldOut: false },
       { id: 'var-006', addonId: 'addon-002', name: 'AM', sku: 'TEE-AM', priceOverride: null, inventoryQuantity: 50, lowStockThreshold: 5, allowBackorder: false, isLowStock: false, isSoldOut: false },
-      { id: 'var-007', addonId: 'addon-002', name: 'AL', sku: 'TEE-AL', priceOverride: null, inventoryQuantity: 0, lowStockThreshold: 5, allowBackorder: false, isLowStock: false, isSoldOut: true },
+      { id: 'var-007', addonId: 'addon-002', name: 'AL', sku: 'TEE-AL', priceOverride: null, inventoryQuantity: 50, lowStockThreshold: 5, allowBackorder: false, isLowStock: false, isSoldOut: false },
       { id: 'var-008', addonId: 'addon-002', name: 'AXL', sku: 'TEE-AXL', priceOverride: null, inventoryQuantity: 50, lowStockThreshold: 5, allowBackorder: false, isLowStock: false, isSoldOut: false },
     ],
   },

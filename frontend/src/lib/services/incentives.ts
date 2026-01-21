@@ -1359,3 +1359,174 @@ export async function getDirectorIncentiveOverview(params: {
     return { data: null, error: error as Error }
   }
 }
+
+// =============================================================================
+// Licensee Incentive Summary (for licensee dashboard)
+// =============================================================================
+
+export interface LicenseeStaffIncentive {
+  staff_id: string
+  staff_name: string
+  role: string
+  sessions_this_season: number
+  total_compensation: number
+  pending_compensation: number
+  finalized_compensation: number
+  avg_csat: number | null
+  avg_enrollment: number
+  is_finalized: boolean
+}
+
+export interface LicenseeIncentiveSummary {
+  total_paid: number
+  total_pending: number
+  staff_count: number
+  avg_per_session: number
+  staff: LicenseeStaffIncentive[]
+}
+
+/**
+ * Get licensee incentive summary with staff compensation breakdown
+ * Includes both pending and finalized compensation records
+ */
+export async function getLicenseeIncentiveSummary(
+  tenantId: string
+): Promise<{ data: LicenseeIncentiveSummary | null; error: Error | null }> {
+  try {
+    // Get current season dates (April to August of current year)
+    const now = new Date()
+    const currentYear = now.getFullYear()
+    const seasonStart = new Date(currentYear, 3, 1) // April 1
+    const seasonEnd = new Date(currentYear, 7, 31) // August 31
+
+    // Get all session compensations for this tenant (both pending and finalized)
+    const sessions = await prisma.campSessionCompensation.findMany({
+      where: {
+        tenantId,
+        camp: {
+          startDate: {
+            gte: seasonStart,
+            lte: seasonEnd,
+          },
+        },
+      },
+      include: {
+        staffProfile: true,
+        camp: {
+          include: {
+            staffAssignments: {
+              select: {
+                role: true,
+                userId: true,
+              },
+            },
+          },
+        },
+      },
+    })
+
+    // Build staff aggregations
+    const staffMap = new Map<
+      string,
+      {
+        staffProfile: (typeof sessions)[0]['staffProfile']
+        role: string
+        sessions: (typeof sessions)[0][]
+      }
+    >()
+
+    for (const session of sessions) {
+      const existing = staffMap.get(session.staffProfileId)
+
+      // Get role from camp staff assignment
+      const assignment = session.camp.staffAssignments.find(
+        (a) => a.userId === session.staffProfileId
+      )
+      const role = assignment?.role || 'staff'
+
+      if (existing) {
+        existing.sessions.push(session)
+      } else {
+        staffMap.set(session.staffProfileId, {
+          staffProfile: session.staffProfile,
+          role,
+          sessions: [session],
+        })
+      }
+    }
+
+    // Calculate totals and build staff list
+    let totalPaid = 0
+    let totalPending = 0
+    let totalSessions = 0
+    const staffList: LicenseeStaffIncentive[] = []
+
+    for (const [staffId, data] of staffMap) {
+      const finalized = data.sessions.filter((s) => s.isFinalized)
+      const pending = data.sessions.filter((s) => !s.isFinalized)
+
+      const finalizedComp = finalized.reduce(
+        (sum, s) => sum + (decimalToNumber(s.totalCompensation) || 0),
+        0
+      )
+      const pendingComp = pending.reduce(
+        (sum, s) => {
+          // For pending, estimate based on fixed stipend if total not yet calculated
+          const total = decimalToNumber(s.totalCompensation)
+          if (total !== null) return sum + total
+          return sum + (decimalToNumber(s.preCampStipendAmount) || 0) + (decimalToNumber(s.onSiteStipendAmount) || 0)
+        },
+        0
+      )
+
+      totalPaid += finalizedComp
+      totalPending += pendingComp
+      totalSessions += data.sessions.length
+
+      // Calculate averages
+      const csatScores = data.sessions
+        .map((s) => decimalToNumber(s.csatAvgScore))
+        .filter((s): s is number => s !== null)
+      const avgCsat = csatScores.length
+        ? csatScores.reduce((a, b) => a + b, 0) / csatScores.length
+        : null
+
+      const enrollments = data.sessions
+        .map((s) => s.totalEnrolledCampers)
+        .filter((e): e is number => e !== null)
+      const avgEnrollment = enrollments.length
+        ? enrollments.reduce((a, b) => a + b, 0) / enrollments.length
+        : 0
+
+      staffList.push({
+        staff_id: staffId,
+        staff_name: `${data.staffProfile.firstName || ''} ${data.staffProfile.lastName || ''}`.trim(),
+        role: data.role,
+        sessions_this_season: data.sessions.length,
+        total_compensation: finalizedComp + pendingComp,
+        pending_compensation: pendingComp,
+        finalized_compensation: finalizedComp,
+        avg_csat: avgCsat,
+        avg_enrollment: avgEnrollment,
+        is_finalized: pending.length === 0 && finalized.length > 0,
+      })
+    }
+
+    // Sort by total compensation descending
+    staffList.sort((a, b) => b.total_compensation - a.total_compensation)
+
+    return {
+      data: {
+        total_paid: totalPaid,
+        total_pending: totalPending,
+        staff_count: staffMap.size,
+        avg_per_session: totalSessions > 0 ? (totalPaid + totalPending) / totalSessions : 0,
+        staff: staffList,
+      },
+      error: null,
+    }
+  } catch (error) {
+    console.error('[Incentives] Failed to get licensee incentive summary:', error)
+    return { data: null, error: error as Error }
+  }
+}

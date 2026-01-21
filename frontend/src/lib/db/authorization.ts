@@ -1,7 +1,7 @@
 /**
  * Authorization Layer
  *
- * Replaces Supabase RLS with application-level authorization.
+ * Application-level authorization.
  * Provides tenant filtering and role-based access control.
  */
 

@@ -67,6 +67,8 @@ export default function SoccerAndStrengthPage() {
         title="Serious Players"
         titleAccent="Only"
         accentColor="purple"
+        imageSrc="https://empowered-sports-camp-new.s3.us-east-2.amazonaws.com/programs/soccer-serious-players.png"
+        imageAlt="Soccer & Strength - Serious Players Only"
         content={
           <>
             <p>

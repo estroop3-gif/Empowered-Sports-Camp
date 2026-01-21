@@ -12,15 +12,15 @@ import { cookies } from 'next/headers'
 
 export async function POST(request: NextRequest) {
   try {
-    // Verify authentication
+    // Verify authentication using id_token
     const cookieStore = await cookies()
-    const accessToken = cookieStore.get('access_token')?.value
+    const idToken = cookieStore.get('id_token')?.value
 
-    if (!accessToken) {
+    if (!idToken) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const user = await verifyToken(accessToken)
+    const user = await verifyToken(idToken)
     if (!user) {
       return NextResponse.json({ error: 'Invalid session' }, { status: 401 })
     }

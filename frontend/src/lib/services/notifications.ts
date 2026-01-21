@@ -1701,3 +1701,99 @@ export async function notifySquadInviteDeclined(params: {
     data: { squadId, declinerName, campName },
   })
 }
+
+// =============================================================================
+// Staff Assignment Request Notifications
+// =============================================================================
+
+/**
+ * Notify a user when they receive a staff assignment request
+ */
+export async function notifyStaffAssignmentRequestReceived(params: {
+  userId: string
+  tenantId: string | null
+  campId: string
+  campName: string
+  role: string
+  requestedByName: string
+}): Promise<void> {
+  const { userId, tenantId, campId, campName, role, requestedByName } = params
+
+  await createNotification({
+    userId,
+    tenantId,
+    type: 'staff_assignment_request_received',
+    category: 'camp',
+    severity: 'info',
+    title: 'Staff Assignment Request',
+    body: `${requestedByName} has invited you to work at ${campName} as a ${role}. Review and respond to this invitation.`,
+    actionUrl: `/coach`,
+    data: { campId, campName, role, requestedByName },
+  })
+
+  // Also send email notification
+  const email = await getUserEmail(userId)
+  if (email) {
+    sendTransactionalEmail({
+      templateCode: 'SYSTEM_ALERT',
+      to: email,
+      context: {
+        title: 'You\'ve Been Invited to Staff a Camp!',
+        message: `${requestedByName} has invited you to join the team at ${campName} as a ${role}. Log in to accept or decline this invitation.`,
+      },
+      tenantId: tenantId || undefined,
+    }).catch((err) => console.error('[Notifications] Failed to send staff request email:', err))
+  }
+}
+
+/**
+ * Notify the requester when a staff member accepts their assignment request
+ */
+export async function notifyStaffAssignmentRequestAccepted(params: {
+  userId: string
+  tenantId: string | null
+  campId: string
+  campName: string
+  staffName: string
+  role: string
+}): Promise<void> {
+  const { userId, tenantId, campId, campName, staffName, role } = params
+
+  await createNotification({
+    userId,
+    tenantId,
+    type: 'staff_assignment_request_accepted',
+    category: 'camp',
+    severity: 'success',
+    title: 'Staff Request Accepted!',
+    body: `${staffName} accepted your invitation to work at ${campName} as a ${role}.`,
+    actionUrl: `/director/camps/${campId}/hq?tab=staffing`,
+    data: { campId, campName, staffName, role },
+  })
+}
+
+/**
+ * Notify the requester when a staff member declines their assignment request
+ */
+export async function notifyStaffAssignmentRequestDeclined(params: {
+  userId: string
+  tenantId: string | null
+  campId: string
+  campName: string
+  staffName: string
+  role: string
+}): Promise<void> {
+  const { userId, tenantId, campId, campName, staffName, role } = params
+
+  await createNotification({
+    userId,
+    tenantId,
+    type: 'staff_assignment_request_declined',
+    category: 'camp',
+    severity: 'info',
+    title: 'Staff Request Declined',
+    body: `${staffName} declined your invitation to work at ${campName} as a ${role}.`,
+    actionUrl: `/director/camps/${campId}/hq?tab=staffing`,
+    data: { campId, campName, staffName, role },
+  })
+}

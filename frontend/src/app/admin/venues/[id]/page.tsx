@@ -4,6 +4,7 @@ import { useState, useEffect, use } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { AdminLayout, PageHeader, ContentCard } from '@/components/admin/admin-layout'
+import ContractList from '@/components/admin/venues/ContractList'
 import { cn } from '@/lib/utils'
 import {
   ArrowLeft,
@@ -32,6 +33,10 @@ import {
   Plus,
   Lock,
   ImagePlus,
+  MoreVertical,
+  X,
+  Edit2,
+  FileSignature,
 } from 'lucide-react'
 
 // Types
@@ -65,11 +70,6 @@ interface Venue {
   updated_at: string
   tenant_name?: string | null
   camp_count?: number
-}
-
-interface Tenant {
-  id: string
-  name: string
 }
 
 interface Territory {
@@ -145,18 +145,34 @@ const INDOOR_OUTDOOR_OPTIONS: { value: IndoorOutdoor; label: string }[] = [
   { value: 'both', label: 'Mixed (Both)' },
 ]
 
+function getFacilityTypeLabel(type: FacilityType | null): string {
+  return FACILITY_TYPES.find(t => t.value === type)?.label || 'Other'
+}
+
+function getIndoorOutdoorLabel(type: IndoorOutdoor | null): string {
+  return INDOOR_OUTDOOR_OPTIONS.find(t => t.value === type)?.label || 'Mixed'
+}
+
 export default function VenueDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: venueId } = use(params)
   const router = useRouter()
   const [venue, setVenue] = useState<Venue | null>(null)
-  const [saving, setSaving] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // Edit mode state
+  const [isEditing, setIsEditing] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [success, setSuccess] = useState(false)
-  const [tenants, setTenants] = useState<Tenant[]>([])
   const [territories, setTerritories] = useState<Territory[]>([])
   const [selectedTerritoryId, setSelectedTerritoryId] = useState<string>('')
-  const [loading, setLoading] = useState(true)
   const [processingAction, setProcessingAction] = useState<string | null>(null)
+
+  // Actions menu
+  const [showActionsMenu, setShowActionsMenu] = useState(false)
+
+  // Contracts modal trigger
+  const [showAddContractTrigger, setShowAddContractTrigger] = useState(false)
 
   const [formData, setFormData] = useState<FormData>({
     tenant_id: '',
@@ -199,14 +215,12 @@ export default function VenueDetailPage({ params }: { params: Promise<{ id: stri
   useEffect(() => {
     async function fetchData() {
       try {
-        const [venueRes, tenantsRes, territoriesRes] = await Promise.all([
+        const [venueRes, territoriesRes] = await Promise.all([
           fetch(`/api/admin/venues/${venueId}`, { credentials: 'include' }),
-          fetch('/api/admin/camps/tenants', { credentials: 'include' }),
           fetch('/api/admin/camps/territories', { credentials: 'include' }),
         ])
 
         const venueData = await venueRes.json()
-        const tenantsData = await tenantsRes.json()
         const territoriesData = await territoriesRes.json()
 
         if (!venueRes.ok) {
@@ -217,7 +231,6 @@ export default function VenueDetailPage({ params }: { params: Promise<{ id: stri
 
         const v = venueData.data
         setVenue(v)
-        setTenants(tenantsData.tenants || [])
 
         const territoriesList = territoriesData.territories || []
         setTerritories(territoriesList)
@@ -324,6 +337,7 @@ export default function VenueDetailPage({ params }: { params: Promise<{ id: stri
 
       setVenue(result.data)
       setSuccess(true)
+      setIsEditing(false)
       setTimeout(() => setSuccess(false), 3000)
     } catch {
       setError('Failed to update venue')
@@ -333,6 +347,7 @@ export default function VenueDetailPage({ params }: { params: Promise<{ id: stri
 
   const handleArchive = async () => {
     if (!confirm('Are you sure you want to archive this venue?')) return
+    setShowActionsMenu(false)
 
     setProcessingAction('archive')
     try {
@@ -357,6 +372,7 @@ export default function VenueDetailPage({ params }: { params: Promise<{ id: stri
   }
 
   const handleReactivate = async () => {
+    setShowActionsMenu(false)
     setProcessingAction('reactivate')
     try {
       const response = await fetch(`/api/admin/venues/${venueId}`, {
@@ -381,6 +397,7 @@ export default function VenueDetailPage({ params }: { params: Promise<{ id: stri
   const handleDelete = async () => {
     if (!confirm('Are you sure you want to permanently delete this venue? This action cannot be undone.')) return
     if (!confirm('This will remove this venue from all associated camps. Are you absolutely sure?')) return
+    setShowActionsMenu(false)
 
     setProcessingAction('delete')
     try {
@@ -400,6 +417,47 @@ export default function VenueDetailPage({ params }: { params: Promise<{ id: stri
       alert('Failed to delete venue')
     }
     setProcessingAction(null)
+  }
+
+  const handleAddContract = () => {
+    setShowActionsMenu(false)
+    setShowAddContractTrigger(true)
+    // The ContractList component will pick up this trigger
+    setTimeout(() => setShowAddContractTrigger(false), 100)
+  }
+
+  const handleStartEditing = () => {
+    setShowActionsMenu(false)
+    setIsEditing(true)
+  }
+
+  const handleCancelEdit = () => {
+    // Reset form data from venue
+    if (venue) {
+      setFormData({
+        tenant_id: venue.tenant_id || '',
+        name: venue.name,
+        short_name: venue.short_name || '',
+        address_line_1: venue.address_line_1,
+        address_line_2: venue.address_line_2 || '',
+        city: venue.city,
+        state: venue.state,
+        postal_code: venue.postal_code,
+        country: venue.country || 'US',
+        region_label: venue.region_label || '',
+        facility_type: venue.facility_type || 'other',
+        indoor_outdoor: venue.indoor_outdoor || 'both',
+        sports_supported: venue.sports_supported || [],
+        max_daily_capacity: venue.max_daily_capacity?.toString() || '',
+        primary_contact_name: venue.primary_contact_name || '',
+        primary_contact_email: venue.primary_contact_email || '',
+        primary_contact_phone: venue.primary_contact_phone || '',
+        notes: venue.notes || '',
+        hero_image_url: venue.hero_image_url || '',
+      })
+    }
+    setIsEditing(false)
+    setError(null)
   }
 
   if (loading) {
@@ -439,23 +497,103 @@ export default function VenueDetailPage({ params }: { params: Promise<{ id: stri
         </Link>
       </div>
 
-      <PageHeader
-        title={venue.name}
-        description={`${venue.city}, ${venue.state}${venue.region_label ? ` • ${venue.region_label}` : ''}`}
-      >
-        <div className="flex items-center gap-2">
-          {!venue.is_active && (
-            <span className="px-3 py-1 bg-white/10 text-white/50 text-sm font-bold uppercase">
-              Archived
-            </span>
-          )}
-          {venue.camp_count && venue.camp_count > 0 && (
-            <span className="px-3 py-1 bg-magenta/20 text-magenta text-sm">
-              {venue.camp_count} camp{venue.camp_count > 1 ? 's' : ''}
-            </span>
+      <div className="flex items-start justify-between mb-8">
+        <div>
+          <div className="flex items-center gap-3 mb-2">
+            <h1 className="text-3xl font-black uppercase tracking-tight text-white">
+              {venue.name}
+            </h1>
+            {!venue.is_active && (
+              <span className="px-3 py-1 bg-white/10 text-white/50 text-sm font-bold uppercase">
+                Archived
+              </span>
+            )}
+          </div>
+          <p className="text-white/50">
+            {venue.city}, {venue.state}
+            {venue.region_label ? ` • ${venue.region_label}` : ''}
+            {venue.tenant_name ? ` • ${venue.tenant_name}` : ''}
+          </p>
+        </div>
+
+        {/* Actions Menu */}
+        <div className="relative">
+          <button
+            onClick={() => setShowActionsMenu(!showActionsMenu)}
+            className="p-3 border border-white/20 text-white/60 hover:text-white hover:border-white/40 transition-colors"
+          >
+            <MoreVertical className="h-5 w-5" />
+          </button>
+
+          {showActionsMenu && (
+            <>
+              {/* Backdrop */}
+              <div
+                className="fixed inset-0 z-40"
+                onClick={() => setShowActionsMenu(false)}
+              />
+
+              {/* Menu */}
+              <div className="absolute right-0 top-full mt-2 w-56 bg-dark-gray border border-white/20 z-50 shadow-xl">
+                <button
+                  onClick={handleStartEditing}
+                  className="flex items-center gap-3 w-full px-4 py-3 text-left text-white hover:bg-white/5 transition-colors"
+                >
+                  <Edit2 className="h-4 w-4 text-neon" />
+                  Edit Venue
+                </button>
+                <button
+                  onClick={handleAddContract}
+                  className="flex items-center gap-3 w-full px-4 py-3 text-left text-white hover:bg-white/5 transition-colors"
+                >
+                  <FileSignature className="h-4 w-4 text-neon" />
+                  Add Contract
+                </button>
+                <div className="border-t border-white/10" />
+                {venue.is_active ? (
+                  <button
+                    onClick={handleArchive}
+                    disabled={processingAction === 'archive'}
+                    className="flex items-center gap-3 w-full px-4 py-3 text-left text-magenta hover:bg-magenta/10 transition-colors disabled:opacity-50"
+                  >
+                    {processingAction === 'archive' ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Archive className="h-4 w-4" />
+                    )}
+                    Archive Venue
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleReactivate}
+                    disabled={processingAction === 'reactivate'}
+                    className="flex items-center gap-3 w-full px-4 py-3 text-left text-neon hover:bg-neon/10 transition-colors disabled:opacity-50"
+                  >
+                    {processingAction === 'reactivate' ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <RotateCcw className="h-4 w-4" />
+                    )}
+                    Reactivate Venue
+                  </button>
+                )}
+                <button
+                  onClick={handleDelete}
+                  disabled={processingAction === 'delete'}
+                  className="flex items-center gap-3 w-full px-4 py-3 text-left text-red-400 hover:bg-red-400/10 transition-colors disabled:opacity-50"
+                >
+                  {processingAction === 'delete' ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-4 w-4" />
+                  )}
+                  Delete Venue
+                </button>
+              </div>
+            </>
           )}
         </div>
-      </PageHeader>
+      </div>
 
       {/* Success Banner */}
       {success && (
@@ -473,97 +611,383 @@ export default function VenueDetailPage({ params }: { params: Promise<{ id: stri
         </div>
       )}
 
-      <form onSubmit={handleSubmit}>
+      {isEditing ? (
+        /* ========== EDIT MODE ========== */
+        <form onSubmit={handleSubmit}>
+          <div className="grid gap-8 lg:grid-cols-3">
+            {/* Main Form */}
+            <div className="lg:col-span-2 space-y-8">
+              {/* Basic Information */}
+              <ContentCard title="Basic Information" accent="neon">
+                <div className="space-y-6">
+                  {/* Territory Selector */}
+                  <div>
+                    <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
+                      <Globe className="h-4 w-4 inline mr-2" />
+                      Territory
+                    </label>
+                    <select
+                      value={selectedTerritoryId}
+                      onChange={(e) => handleTerritoryChange(e.target.value)}
+                      className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-neon focus:outline-none"
+                    >
+                      <option value="">Global (Available to all territories)</option>
+                      {territories.map((territory) => (
+                        <option key={territory.id} value={territory.id}>
+                          {territory.name} - {territory.city ? `${territory.city}, ` : ''}{territory.state_region}
+                          {territory.tenant_name ? ` (${territory.tenant_name})` : ' (Unassigned)'}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="grid gap-6 sm:grid-cols-2">
+                    <div>
+                      <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
+                        <Building2 className="h-4 w-4 inline mr-2" />
+                        Venue Name *
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.name}
+                        onChange={(e) => updateField('name', e.target.value)}
+                        className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-neon focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
+                        Short Name
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.short_name}
+                        onChange={(e) => updateField('short_name', e.target.value)}
+                        className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-neon focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid gap-6 sm:grid-cols-2">
+                    <div>
+                      <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
+                        Facility Type
+                      </label>
+                      <select
+                        value={formData.facility_type}
+                        onChange={(e) => updateField('facility_type', e.target.value)}
+                        className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-neon focus:outline-none"
+                      >
+                        {FACILITY_TYPES.map(({ value, label }) => (
+                          <option key={value} value={value}>{label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
+                        Indoor / Outdoor
+                      </label>
+                      <select
+                        value={formData.indoor_outdoor}
+                        onChange={(e) => updateField('indoor_outdoor', e.target.value)}
+                        className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-neon focus:outline-none"
+                      >
+                        {INDOOR_OUTDOOR_OPTIONS.map(({ value, label }) => (
+                          <option key={value} value={value}>{label}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </ContentCard>
+
+              {/* Location */}
+              <ContentCard title="Location" accent="magenta">
+                <div className="space-y-6">
+                  <div>
+                    <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
+                      <MapPin className="h-4 w-4 inline mr-2" />
+                      Address Line 1 *
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.address_line_1}
+                      onChange={(e) => updateField('address_line_1', e.target.value)}
+                      className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-magenta focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
+                      Address Line 2
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.address_line_2}
+                      onChange={(e) => updateField('address_line_2', e.target.value)}
+                      className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-magenta focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="grid gap-6 sm:grid-cols-3">
+                    <div>
+                      <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
+                        City *
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.city}
+                        onChange={(e) => updateField('city', e.target.value)}
+                        className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-magenta focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
+                        State *
+                      </label>
+                      <select
+                        value={formData.state}
+                        onChange={(e) => updateField('state', e.target.value)}
+                        className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-magenta focus:outline-none"
+                      >
+                        <option value="">Select...</option>
+                        {US_STATES.map((state) => (
+                          <option key={state} value={state}>{state}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
+                        Postal Code *
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.postal_code}
+                        onChange={(e) => updateField('postal_code', e.target.value)}
+                        className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-magenta focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
+                      Region Label
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.region_label}
+                      onChange={(e) => updateField('region_label', e.target.value)}
+                      placeholder="e.g., Chicago – North, West Suburbs"
+                      className="w-full px-4 py-3 bg-black border border-white/20 text-white placeholder:text-white/30 focus:border-magenta focus:outline-none"
+                    />
+                  </div>
+                </div>
+              </ContentCard>
+
+              {/* Sports & Capacity */}
+              <ContentCard title="Sports & Capacity" accent="purple">
+                <div className="space-y-6">
+                  <div>
+                    <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-3">
+                      Sports Supported
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {SPORTS.map((sport) => (
+                        <button
+                          key={sport}
+                          type="button"
+                          onClick={() => toggleSport(sport)}
+                          className={cn(
+                            'px-3 py-1.5 border text-sm transition-colors',
+                            formData.sports_supported.includes(sport)
+                              ? 'border-purple bg-purple/20 text-white'
+                              : 'border-white/20 text-white/60 hover:border-white/40'
+                          )}
+                        >
+                          {sport}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="max-w-xs">
+                    <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
+                      <Users className="h-4 w-4 inline mr-2" />
+                      Max Daily Capacity
+                    </label>
+                    <input
+                      type="number"
+                      value={formData.max_daily_capacity}
+                      onChange={(e) => updateField('max_daily_capacity', e.target.value)}
+                      min="0"
+                      className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-purple focus:outline-none"
+                    />
+                  </div>
+                </div>
+              </ContentCard>
+
+              {/* Contact & Notes */}
+              <ContentCard title="Contact & Notes" accent="neon">
+                <div className="space-y-6">
+                  <div className="grid gap-6 sm:grid-cols-3">
+                    <div>
+                      <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
+                        <User className="h-4 w-4 inline mr-2" />
+                        Contact Name
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.primary_contact_name}
+                        onChange={(e) => updateField('primary_contact_name', e.target.value)}
+                        className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-neon focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
+                        <Mail className="h-4 w-4 inline mr-2" />
+                        Contact Email
+                      </label>
+                      <input
+                        type="email"
+                        value={formData.primary_contact_email}
+                        onChange={(e) => updateField('primary_contact_email', e.target.value)}
+                        className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-neon focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
+                        <Phone className="h-4 w-4 inline mr-2" />
+                        Contact Phone
+                      </label>
+                      <input
+                        type="tel"
+                        value={formData.primary_contact_phone}
+                        onChange={(e) => updateField('primary_contact_phone', e.target.value)}
+                        className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-neon focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
+                      <FileText className="h-4 w-4 inline mr-2" />
+                      Notes
+                    </label>
+                    <textarea
+                      value={formData.notes}
+                      onChange={(e) => updateField('notes', e.target.value)}
+                      rows={4}
+                      className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-neon focus:outline-none resize-none"
+                    />
+                  </div>
+                </div>
+              </ContentCard>
+            </div>
+
+            {/* Sidebar */}
+            <div className="lg:col-span-1">
+              <div className="sticky top-44 space-y-6">
+                {/* Media */}
+                <ContentCard title="Media" accent="magenta">
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
+                        <Image className="h-4 w-4 inline mr-2" />
+                        Hero Image URL
+                      </label>
+                      <input
+                        type="url"
+                        value={formData.hero_image_url}
+                        onChange={(e) => updateField('hero_image_url', e.target.value)}
+                        className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-magenta focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                </ContentCard>
+
+                {/* Actions */}
+                <div className="space-y-3">
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    className="flex items-center justify-center gap-2 w-full py-4 bg-neon text-black font-bold uppercase tracking-widest hover:bg-neon/90 transition-colors disabled:opacity-50"
+                  >
+                    {saving ? (
+                      <>
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="h-5 w-5" />
+                        Save Changes
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleCancelEdit}
+                    className="flex items-center justify-center gap-2 w-full py-3 border border-white/20 text-white/60 font-bold uppercase tracking-wider hover:border-white/40 hover:text-white transition-colors"
+                  >
+                    <X className="h-4 w-4" />
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </form>
+      ) : (
+        /* ========== READ-ONLY MODE ========== */
         <div className="grid gap-8 lg:grid-cols-3">
-          {/* Main Form */}
+          {/* Main Content */}
           <div className="lg:col-span-2 space-y-8">
             {/* Basic Information */}
-            <ContentCard title="Basic Information" accent="neon">
+            <ContentCard title="Venue Details" accent="neon">
               <div className="space-y-6">
-                {/* Territory Selector */}
-                <div>
-                  <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
-                    <Globe className="h-4 w-4 inline mr-2" />
-                    Territory
-                  </label>
-                  <select
-                    value={selectedTerritoryId}
-                    onChange={(e) => handleTerritoryChange(e.target.value)}
-                    className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-neon focus:outline-none"
-                  >
-                    <option value="">Global (Available to all territories)</option>
-                    {territories.map((territory) => (
-                      <option key={territory.id} value={territory.id}>
-                        {territory.name} - {territory.city ? `${territory.city}, ` : ''}{territory.state_region}
-                        {territory.tenant_name ? ` (${territory.tenant_name})` : ' (Unassigned)'}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="mt-2 text-xs text-white/40">
-                    {selectedTerritoryId ? (
-                      territories.find(t => t.id === selectedTerritoryId)?.tenant_name
-                        ? `This venue is assigned to ${territories.find(t => t.id === selectedTerritoryId)?.tenant_name}`
-                        : 'Warning: This territory has no assigned licensee'
-                    ) : (
-                      'Global venues are available to all licensees'
+                {/* Hero Image */}
+                {venue.hero_image_url && (
+                  <div className="aspect-video bg-white/5 overflow-hidden mb-6">
+                    <img
+                      src={venue.hero_image_url}
+                      alt={venue.name}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                )}
+
+                <div className="grid gap-6 sm:grid-cols-2">
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-white/40 mb-1">
+                      Venue Name
+                    </label>
+                    <p className="text-white text-lg font-medium">{venue.name}</p>
+                    {venue.short_name && (
+                      <p className="text-white/50 text-sm">({venue.short_name})</p>
                     )}
-                  </p>
-                </div>
-
-                <div className="grid gap-6 sm:grid-cols-2">
-                  <div>
-                    <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
-                      <Building2 className="h-4 w-4 inline mr-2" />
-                      Venue Name *
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.name}
-                      onChange={(e) => updateField('name', e.target.value)}
-                      className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-neon focus:outline-none"
-                    />
                   </div>
                   <div>
-                    <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
-                      Short Name
+                    <label className="block text-xs font-bold uppercase tracking-wider text-white/40 mb-1">
+                      Territory
                     </label>
-                    <input
-                      type="text"
-                      value={formData.short_name}
-                      onChange={(e) => updateField('short_name', e.target.value)}
-                      className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-neon focus:outline-none"
-                    />
+                    <p className="text-white">
+                      {venue.tenant_name || 'Global (All territories)'}
+                    </p>
                   </div>
                 </div>
 
                 <div className="grid gap-6 sm:grid-cols-2">
                   <div>
-                    <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
+                    <label className="block text-xs font-bold uppercase tracking-wider text-white/40 mb-1">
                       Facility Type
                     </label>
-                    <select
-                      value={formData.facility_type}
-                      onChange={(e) => updateField('facility_type', e.target.value)}
-                      className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-neon focus:outline-none"
-                    >
-                      {FACILITY_TYPES.map(({ value, label }) => (
-                        <option key={value} value={value}>{label}</option>
-                      ))}
-                    </select>
+                    <p className="text-white">{getFacilityTypeLabel(venue.facility_type)}</p>
                   </div>
                   <div>
-                    <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
+                    <label className="block text-xs font-bold uppercase tracking-wider text-white/40 mb-1">
                       Indoor / Outdoor
                     </label>
-                    <select
-                      value={formData.indoor_outdoor}
-                      onChange={(e) => updateField('indoor_outdoor', e.target.value)}
-                      className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-neon focus:outline-none"
-                    >
-                      {INDOOR_OUTDOOR_OPTIONS.map(({ value, label }) => (
-                        <option key={value} value={value}>{label}</option>
-                      ))}
-                    </select>
+                    <p className="text-white">{getIndoorOutdoorLabel(venue.indoor_outdoor)}</p>
                   </div>
                 </div>
               </div>
@@ -571,84 +995,19 @@ export default function VenueDetailPage({ params }: { params: Promise<{ id: stri
 
             {/* Location */}
             <ContentCard title="Location" accent="magenta">
-              <div className="space-y-6">
-                <div>
-                  <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
-                    <MapPin className="h-4 w-4 inline mr-2" />
-                    Address Line 1 *
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.address_line_1}
-                    onChange={(e) => updateField('address_line_1', e.target.value)}
-                    className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-magenta focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
-                    Address Line 2
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.address_line_2}
-                    onChange={(e) => updateField('address_line_2', e.target.value)}
-                    className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-magenta focus:outline-none"
-                  />
-                </div>
-
-                <div className="grid gap-6 sm:grid-cols-3">
+              <div className="space-y-4">
+                <div className="flex items-start gap-3">
+                  <MapPin className="h-5 w-5 text-magenta flex-shrink-0 mt-0.5" />
                   <div>
-                    <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
-                      City *
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.city}
-                      onChange={(e) => updateField('city', e.target.value)}
-                      className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-magenta focus:outline-none"
-                    />
+                    <p className="text-white">{venue.address_line_1}</p>
+                    {venue.address_line_2 && (
+                      <p className="text-white">{venue.address_line_2}</p>
+                    )}
+                    <p className="text-white">{venue.city}, {venue.state} {venue.postal_code}</p>
+                    {venue.region_label && (
+                      <p className="text-white/50 text-sm mt-1">{venue.region_label}</p>
+                    )}
                   </div>
-                  <div>
-                    <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
-                      State *
-                    </label>
-                    <select
-                      value={formData.state}
-                      onChange={(e) => updateField('state', e.target.value)}
-                      className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-magenta focus:outline-none"
-                    >
-                      <option value="">Select...</option>
-                      {US_STATES.map((state) => (
-                        <option key={state} value={state}>{state}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
-                      Postal Code *
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.postal_code}
-                      onChange={(e) => updateField('postal_code', e.target.value)}
-                      className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-magenta focus:outline-none"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
-                    <Globe className="h-4 w-4 inline mr-2" />
-                    Region Label
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.region_label}
-                    onChange={(e) => updateField('region_label', e.target.value)}
-                    placeholder="e.g., Chicago – North, West Suburbs"
-                    className="w-full px-4 py-3 bg-black border border-white/20 text-white placeholder:text-white/30 focus:border-magenta focus:outline-none"
-                  />
                 </div>
               </div>
             </ContentCard>
@@ -657,265 +1016,142 @@ export default function VenueDetailPage({ params }: { params: Promise<{ id: stri
             <ContentCard title="Sports & Capacity" accent="purple">
               <div className="space-y-6">
                 <div>
-                  <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-3">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-white/40 mb-3">
                     Sports Supported
                   </label>
                   <div className="flex flex-wrap gap-2">
-                    {SPORTS.map((sport) => (
-                      <button
-                        key={sport}
-                        type="button"
-                        onClick={() => toggleSport(sport)}
-                        className={cn(
-                          'px-3 py-1.5 border text-sm transition-colors',
-                          formData.sports_supported.includes(sport)
-                            ? 'border-purple bg-purple/20 text-white'
-                            : 'border-white/20 text-white/60 hover:border-white/40'
-                        )}
-                      >
-                        {sport}
-                      </button>
-                    ))}
+                    {venue.sports_supported && venue.sports_supported.length > 0 ? (
+                      venue.sports_supported.map((sport) => (
+                        <span
+                          key={sport}
+                          className="px-3 py-1.5 border border-purple bg-purple/20 text-white text-sm"
+                        >
+                          {sport}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-white/40">No sports specified</span>
+                    )}
                   </div>
                 </div>
 
-                <div className="max-w-xs">
-                  <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
-                    <Users className="h-4 w-4 inline mr-2" />
-                    Max Daily Capacity
-                  </label>
-                  <input
-                    type="number"
-                    value={formData.max_daily_capacity}
-                    onChange={(e) => updateField('max_daily_capacity', e.target.value)}
-                    min="0"
-                    className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-purple focus:outline-none"
-                  />
-                </div>
+                {venue.max_daily_capacity && (
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-white/40 mb-1">
+                      Max Daily Capacity
+                    </label>
+                    <p className="text-white text-lg font-medium flex items-center gap-2">
+                      <Users className="h-5 w-5 text-purple" />
+                      {venue.max_daily_capacity} campers
+                    </p>
+                  </div>
+                )}
               </div>
             </ContentCard>
 
-            {/* Contact & Notes */}
-            <ContentCard title="Contact & Notes" accent="neon">
-              <div className="space-y-6">
-                <div className="grid gap-6 sm:grid-cols-3">
-                  <div>
-                    <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
-                      <User className="h-4 w-4 inline mr-2" />
-                      Contact Name
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.primary_contact_name}
-                      onChange={(e) => updateField('primary_contact_name', e.target.value)}
-                      className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-neon focus:outline-none"
-                    />
+            {/* Contact Information */}
+            <ContentCard title="Contact Information" accent="neon">
+              <div className="space-y-4">
+                {venue.primary_contact_name || venue.primary_contact_email || venue.primary_contact_phone ? (
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    {venue.primary_contact_name && (
+                      <div className="flex items-center gap-3">
+                        <User className="h-5 w-5 text-neon flex-shrink-0" />
+                        <span className="text-white">{venue.primary_contact_name}</span>
+                      </div>
+                    )}
+                    {venue.primary_contact_email && (
+                      <div className="flex items-center gap-3">
+                        <Mail className="h-5 w-5 text-neon flex-shrink-0" />
+                        <a href={`mailto:${venue.primary_contact_email}`} className="text-neon hover:underline">
+                          {venue.primary_contact_email}
+                        </a>
+                      </div>
+                    )}
+                    {venue.primary_contact_phone && (
+                      <div className="flex items-center gap-3">
+                        <Phone className="h-5 w-5 text-neon flex-shrink-0" />
+                        <a href={`tel:${venue.primary_contact_phone}`} className="text-white hover:text-neon">
+                          {venue.primary_contact_phone}
+                        </a>
+                      </div>
+                    )}
                   </div>
-                  <div>
-                    <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
-                      <Mail className="h-4 w-4 inline mr-2" />
-                      Contact Email
-                    </label>
-                    <input
-                      type="email"
-                      value={formData.primary_contact_email}
-                      onChange={(e) => updateField('primary_contact_email', e.target.value)}
-                      className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-neon focus:outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
-                      <Phone className="h-4 w-4 inline mr-2" />
-                      Contact Phone
-                    </label>
-                    <input
-                      type="tel"
-                      value={formData.primary_contact_phone}
-                      onChange={(e) => updateField('primary_contact_phone', e.target.value)}
-                      className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-neon focus:outline-none"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
-                    <FileText className="h-4 w-4 inline mr-2" />
-                    Notes
-                  </label>
-                  <textarea
-                    value={formData.notes}
-                    onChange={(e) => updateField('notes', e.target.value)}
-                    rows={4}
-                    className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-neon focus:outline-none resize-none"
-                  />
-                </div>
+                ) : (
+                  <p className="text-white/40">No contact information available</p>
+                )}
               </div>
+            </ContentCard>
+
+            {/* Notes */}
+            {venue.notes && (
+              <ContentCard title="Notes">
+                <p className="text-white/80 whitespace-pre-wrap">{venue.notes}</p>
+              </ContentCard>
+            )}
+
+            {/* Contracts Section */}
+            <ContentCard title="Contracts" accent="magenta">
+              <ContractList
+                venueId={venueId}
+                venueName={venue.name}
+                venueContactEmail={venue.primary_contact_email}
+                openAddModal={showAddContractTrigger}
+              />
             </ContentCard>
           </div>
 
           {/* Sidebar */}
           <div className="lg:col-span-1">
             <div className="sticky top-44 space-y-6">
-              {/* Venue Preview Card */}
-              {venue.hero_image_url && (
-                <ContentCard>
-                  <div className="aspect-video bg-white/5 overflow-hidden mb-4">
-                    <img
-                      src={venue.hero_image_url}
-                      alt={venue.name}
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                  <h3 className="font-bold text-white">{venue.name}</h3>
-                  <p className="text-sm text-white/50">{venue.city}, {venue.state}</p>
-                </ContentCard>
-              )}
-
-              {/* Media */}
-              <ContentCard title="Media" accent="magenta">
+              {/* Quick Stats */}
+              <ContentCard title="Stats">
                 <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
-                      <Image className="h-4 w-4 inline mr-2" />
-                      Hero Image URL
-                    </label>
-                    <input
-                      type="url"
-                      value={formData.hero_image_url}
-                      onChange={(e) => updateField('hero_image_url', e.target.value)}
-                      className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-magenta focus:outline-none"
-                    />
-                  </div>
-
-                  {/* Photo Gallery - Coming Soon */}
-                  <div className="relative">
-                    <div className="absolute inset-0 bg-black/60 z-10 flex items-center justify-center">
-                      <div className="text-center">
-                        <Lock className="h-6 w-6 text-white/40 mx-auto mb-2" />
-                        <span className="text-sm font-bold uppercase tracking-wider text-white/40">Coming Soon</span>
-                      </div>
-                    </div>
-                    <div className="opacity-50 pointer-events-none">
-                      <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
-                        <ImagePlus className="h-4 w-4 inline mr-2" />
-                        Photo Gallery
-                      </label>
-                      <div className="grid grid-cols-3 gap-2">
-                        {[1, 2, 3].map((i) => (
-                          <div key={i} className="aspect-square bg-white/5 border border-dashed border-white/20 flex items-center justify-center">
-                            <Plus className="h-5 w-5 text-white/20" />
-                          </div>
-                        ))}
-                      </div>
-                      <p className="mt-2 text-xs text-white/40">
-                        Upload multiple photos to showcase this venue
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </ContentCard>
-
-              {/* Metadata */}
-              <ContentCard title="Details">
-                <div className="space-y-3 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-white/50">Created</span>
-                    <span className="text-white">{new Date(venue.created_at).toLocaleDateString()}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-white/50">Updated</span>
-                    <span className="text-white">{new Date(venue.updated_at).toLocaleDateString()}</span>
-                  </div>
-                  <div className="flex justify-between">
+                  <div className="flex items-center justify-between">
                     <span className="text-white/50">Status</span>
                     <span className={venue.is_active ? 'text-neon' : 'text-white/40'}>
                       {venue.is_active ? 'Active' : 'Archived'}
                     </span>
                   </div>
+                  {venue.camp_count !== undefined && venue.camp_count > 0 && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-white/50">Camps</span>
+                      <span className="text-magenta">{venue.camp_count}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between">
+                    <span className="text-white/50">Created</span>
+                    <span className="text-white">{new Date(venue.created_at).toLocaleDateString()}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-white/50">Updated</span>
+                    <span className="text-white">{new Date(venue.updated_at).toLocaleDateString()}</span>
+                  </div>
                 </div>
               </ContentCard>
 
-              {/* Actions */}
+              {/* Quick Actions */}
               <div className="space-y-3">
                 <button
-                  type="submit"
-                  disabled={saving}
-                  className="flex items-center justify-center gap-2 w-full py-4 bg-neon text-black font-bold uppercase tracking-widest hover:bg-neon/90 transition-colors disabled:opacity-50"
+                  onClick={handleStartEditing}
+                  className="flex items-center justify-center gap-2 w-full py-4 bg-neon text-black font-bold uppercase tracking-widest hover:bg-neon/90 transition-colors"
                 >
-                  {saving ? (
-                    <>
-                      <Loader2 className="h-5 w-5 animate-spin" />
-                      Saving...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="h-5 w-5" />
-                      Save Changes
-                    </>
-                  )}
+                  <Edit2 className="h-5 w-5" />
+                  Edit Venue
                 </button>
 
-                {venue.is_active ? (
-                  <button
-                    type="button"
-                    onClick={handleArchive}
-                    disabled={processingAction === 'archive'}
-                    className="flex items-center justify-center gap-2 w-full py-3 border border-magenta/30 text-magenta font-bold uppercase tracking-wider hover:bg-magenta/10 transition-colors disabled:opacity-50"
-                  >
-                    {processingAction === 'archive' ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Archive className="h-4 w-4" />
-                    )}
-                    Archive Venue
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={handleReactivate}
-                    disabled={processingAction === 'reactivate'}
-                    className="flex items-center justify-center gap-2 w-full py-3 border border-neon/30 text-neon font-bold uppercase tracking-wider hover:bg-neon/10 transition-colors disabled:opacity-50"
-                  >
-                    {processingAction === 'reactivate' ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <RotateCcw className="h-4 w-4" />
-                    )}
-                    Reactivate Venue
-                  </button>
-                )}
-
-                <Link
-                  href="/admin/venues"
-                  className="flex items-center justify-center gap-2 w-full py-3 border border-white/20 text-white/60 font-bold uppercase tracking-wider hover:border-white/40 hover:text-white transition-colors"
+                <button
+                  onClick={handleAddContract}
+                  className="flex items-center justify-center gap-2 w-full py-3 border border-neon/30 text-neon font-bold uppercase tracking-wider hover:bg-neon/10 transition-colors"
                 >
-                  Cancel
-                </Link>
-
-                {/* Danger Zone */}
-                <div className="pt-4 mt-4 border-t border-white/10">
-                  <button
-                    type="button"
-                    onClick={handleDelete}
-                    disabled={processingAction === 'delete'}
-                    className="flex items-center justify-center gap-2 w-full py-3 border border-red-500/30 text-red-500 font-bold uppercase tracking-wider hover:bg-red-500/10 transition-colors disabled:opacity-50"
-                  >
-                    {processingAction === 'delete' ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Trash2 className="h-4 w-4" />
-                    )}
-                    Delete Venue
-                  </button>
-                  <p className="mt-2 text-xs text-white/30 text-center">
-                    This action cannot be undone
-                  </p>
-                </div>
+                  <FileSignature className="h-4 w-4" />
+                  Add Contract
+                </button>
               </div>
             </div>
           </div>
         </div>
-      </form>
+      )}
     </AdminLayout>
   )
 }

@@ -72,7 +72,7 @@ export function CTABanner() {
           <div className="mt-12 flex items-center gap-3">
             <Crown className="h-5 w-5 text-neon" />
             <p className="text-sm text-white/40 uppercase tracking-wider">
-              Trusted by 5,000+ families across Chicagoland
+              Trusted by 5,000+ families across the US
             </p>
             <Crown className="h-5 w-5 text-neon" />
           </div>

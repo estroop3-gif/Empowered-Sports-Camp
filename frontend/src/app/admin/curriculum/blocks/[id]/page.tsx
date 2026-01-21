@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter, useParams } from 'next/navigation'
 import { AdminLayout, PageHeader, ContentCard } from '@/components/admin/admin-layout'
@@ -17,6 +17,8 @@ import {
   IntensityLevel,
   CurriculumBlock,
 } from '@/lib/services/curriculum'
+import { useUpload, STORAGE_FOLDERS } from '@/lib/storage/use-upload'
+import { PdfViewer } from '@/components/ui/pdf-viewer'
 import { cn } from '@/lib/utils'
 import {
   ArrowLeft,
@@ -29,6 +31,10 @@ import {
   Building2,
   Clock,
   Trash2,
+  FileText,
+  Upload,
+  X,
+  Eye,
 } from 'lucide-react'
 
 /**
@@ -48,6 +54,9 @@ interface FormData {
   setup_notes: string
   coaching_points: string
   is_global: boolean
+  // PDF fields
+  pdf_url: string | null
+  pdf_name: string | null
 }
 
 interface FormErrors {
@@ -60,6 +69,8 @@ export default function EditBlockPage() {
   const params = useParams()
   const blockId = params.id as string
   const { user, role, isHqAdmin, tenant } = useAuth()
+  const { upload, uploading, progress } = useUpload()
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -69,6 +80,10 @@ export default function EditBlockPage() {
   const [formErrors, setFormErrors] = useState<FormErrors>({})
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [block, setBlock] = useState<CurriculumBlock | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
+  const [showPdfViewer, setShowPdfViewer] = useState(false)
+  const [pdfViewerUrl, setPdfViewerUrl] = useState<string | null>(null)
+  const [loadingPdf, setLoadingPdf] = useState(false)
 
   const [formData, setFormData] = useState<FormData>({
     title: '',
@@ -81,6 +96,8 @@ export default function EditBlockPage() {
     setup_notes: '',
     coaching_points: '',
     is_global: false,
+    pdf_url: null,
+    pdf_name: null,
   })
 
   const userName = user?.firstName || user?.email?.split('@')[0] || 'Admin'
@@ -109,6 +126,8 @@ export default function EditBlockPage() {
         setup_notes: data.setup_notes || '',
         coaching_points: data.coaching_points || '',
         is_global: data.is_global,
+        pdf_url: data.pdf_url,
+        pdf_name: data.pdf_name,
       })
       setLoading(false)
     }
@@ -121,10 +140,81 @@ export default function EditBlockPage() {
   // Check if user can edit this block
   const canEdit = isHqAdmin || (block && block.licensee_id === tenant?.id)
 
-  const updateField = (field: keyof FormData, value: string | boolean) => {
+  const updateField = (field: keyof FormData, value: string | boolean | null) => {
     setFormData(prev => ({ ...prev, [field]: value }))
     if (formErrors[field as keyof FormErrors]) {
       setFormErrors(prev => ({ ...prev, [field]: undefined }))
+    }
+  }
+
+  // PDF file handling
+  const handlePdfUpload = async (file: File) => {
+    if (file.type !== 'application/pdf') {
+      setError('Please select a PDF file')
+      return
+    }
+
+    const result = await upload(file, { folder: STORAGE_FOLDERS.CURRICULUM })
+    if (result) {
+      setFormData(prev => ({
+        ...prev,
+        pdf_url: result.fileUrl,
+        pdf_name: file.name,
+      }))
+    }
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      handlePdfUpload(file)
+    }
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+    const file = e.dataTransfer.files?.[0]
+    if (file) {
+      handlePdfUpload(file)
+    }
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = () => {
+    setIsDragging(false)
+  }
+
+  const removePdf = () => {
+    setFormData(prev => ({
+      ...prev,
+      pdf_url: null,
+      pdf_name: null,
+    }))
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
+  const handleViewPdf = async () => {
+    if (!formData.pdf_url) return
+
+    setLoadingPdf(true)
+    try {
+      const res = await fetch(`/api/curriculum/document?type=block&id=${blockId}`)
+      const data = await res.json()
+      if (data.url) {
+        setPdfViewerUrl(data.url)
+        setShowPdfViewer(true)
+      }
+    } catch (err) {
+      setError('Failed to load PDF')
+    } finally {
+      setLoadingPdf(false)
     }
   }
 
@@ -166,6 +256,8 @@ export default function EditBlockPage() {
       setup_notes: formData.setup_notes.trim() || undefined,
       coaching_points: formData.coaching_points.trim() || undefined,
       is_global: formData.is_global,
+      pdf_url: formData.pdf_url,
+      pdf_name: formData.pdf_name,
     })
 
     if (updateError) {
@@ -455,6 +547,98 @@ export default function EditBlockPage() {
                 </div>
               </div>
             </ContentCard>
+
+            {/* PDF Document */}
+            <ContentCard title="PDF Document" accent="purple">
+              <div className="space-y-4">
+                <p className="text-sm text-white/50">
+                  Attach a PDF document to this block (optional). This could be a detailed drill diagram,
+                  coaching guide, or any supplementary material.
+                </p>
+
+                {formData.pdf_url ? (
+                  <div className="border border-purple/30 bg-purple/5 p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-purple/20 border border-purple/30">
+                          <FileText className="h-6 w-6 text-purple" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-white">{formData.pdf_name}</p>
+                          <p className="text-xs text-white/50">PDF Document</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handleViewPdf}
+                          disabled={loadingPdf}
+                          className="flex items-center gap-1 px-3 py-1.5 bg-purple/20 border border-purple/30 text-purple text-sm font-bold uppercase tracking-wider hover:bg-purple/30 transition-colors disabled:opacity-50"
+                        >
+                          {loadingPdf ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Eye className="h-4 w-4" />
+                          )}
+                          View
+                        </button>
+                        {canEdit && (
+                          <button
+                            type="button"
+                            onClick={removePdf}
+                            className="p-1.5 text-red-400 hover:bg-red-500/20 transition-colors"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ) : canEdit ? (
+                  <div
+                    onDrop={handleDrop}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    className={cn(
+                      'border-2 border-dashed p-8 text-center transition-colors cursor-pointer',
+                      isDragging
+                        ? 'border-purple bg-purple/10'
+                        : 'border-white/20 hover:border-purple/50'
+                    )}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".pdf"
+                      onChange={handleFileChange}
+                      className="hidden"
+                    />
+                    {uploading ? (
+                      <div className="flex flex-col items-center gap-3">
+                        <Loader2 className="h-10 w-10 text-purple animate-spin" />
+                        <p className="text-white/60">Uploading... {progress}%</p>
+                      </div>
+                    ) : (
+                      <>
+                        <Upload className="h-10 w-10 text-white/30 mx-auto mb-3" />
+                        <p className="text-white/60 mb-1">
+                          Drag and drop a PDF here, or click to browse
+                        </p>
+                        <p className="text-xs text-white/30">
+                          PDF files only
+                        </p>
+                      </>
+                    )}
+                  </div>
+                ) : (
+                  <div className="border border-white/10 p-8 text-center">
+                    <FileText className="h-10 w-10 text-white/20 mx-auto mb-3" />
+                    <p className="text-white/40">No PDF attached to this block</p>
+                  </div>
+                )}
+              </div>
+            </ContentCard>
           </div>
 
           {/* Sidebar */}
@@ -659,6 +843,30 @@ export default function EditBlockPage() {
                 )}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* PDF Viewer Modal */}
+      {showPdfViewer && pdfViewerUrl && (
+        <div className="fixed inset-0 bg-black/90 z-50 flex flex-col">
+          <div className="flex items-center justify-between p-4 border-b border-white/10">
+            <h3 className="text-lg font-bold text-white">{formData.pdf_name}</h3>
+            <button
+              onClick={() => {
+                setShowPdfViewer(false)
+                setPdfViewerUrl(null)
+              }}
+              className="p-2 text-white/60 hover:text-white hover:bg-white/10 transition-colors"
+            >
+              <X className="h-6 w-6" />
+            </button>
+          </div>
+          <div className="flex-1 overflow-hidden">
+            <PdfViewer
+              url={pdfViewerUrl}
+              filename={formData.pdf_name || 'document.pdf'}
+            />
           </div>
         </div>
       )}

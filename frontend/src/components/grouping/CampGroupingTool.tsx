@@ -31,6 +31,7 @@ import {
   useSortable,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
+import { useDroppable } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
 import Link from 'next/link'
 import { useBannerOffset } from '@/hooks/useBannerOffset'
@@ -247,13 +248,19 @@ function GroupColumn({
   onEditCamper?: (camper: GroupingCamper) => void
   isFinalized?: boolean
 }) {
+  const { setNodeRef, isOver: isDroppableOver } = useDroppable({
+    id: group.id,
+  })
+
   const hasViolations = group.stats.has_size_violation || group.stats.has_grade_violation
   const borderColor = group.group_color || '#333'
+  const isHighlighted = isOver || isDroppableOver
 
   return (
     <div
-      className={`bg-dark-100 border-2 flex flex-col min-h-[400px] ${
-        isOver ? 'ring-2 ring-neon' : ''
+      ref={setNodeRef}
+      className={`bg-dark-100 border-2 flex flex-col min-h-[400px] transition-all ${
+        isHighlighted ? 'ring-2 ring-neon bg-neon/5' : ''
       }`}
       style={{ borderColor: hasViolations ? '#ef4444' : borderColor }}
     >
@@ -332,6 +339,60 @@ function GroupColumn({
         {group.campers.length === 0 && (
           <div className="text-center py-8 text-white/30 text-sm">
             Drop campers here
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// Ungrouped Column Component
+function UngroupedColumn({
+  campers,
+  isOver,
+  onEditCamper,
+  isFinalized,
+}: {
+  campers: GroupingCamper[]
+  isOver?: boolean
+  onEditCamper?: (camper: GroupingCamper) => void
+  isFinalized?: boolean
+}) {
+  const { setNodeRef, isOver: isDroppableOver } = useDroppable({
+    id: 'ungrouped',
+  })
+
+  const isHighlighted = isOver || isDroppableOver
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`bg-dark-100 border-2 border-dashed flex flex-col min-h-[400px] transition-all ${
+        isHighlighted ? 'border-neon bg-neon/5' : 'border-white/20'
+      }`}
+    >
+      <div className="p-4 border-b border-white/10">
+        <h3 className="font-bold text-white">Ungrouped</h3>
+        <p className="text-sm text-white/50">{campers.length} campers</p>
+      </div>
+      <div className="flex-1 p-3 space-y-2 overflow-y-auto">
+        <SortableContext
+          items={campers.map(c => c.camper_session_id)}
+          strategy={verticalListSortingStrategy}
+        >
+          {campers.map(camper => (
+            <SortableCamperCard
+              key={camper.camper_session_id}
+              camper={camper}
+              onEdit={onEditCamper}
+              showEditButton={!isFinalized}
+            />
+          ))}
+        </SortableContext>
+
+        {campers.length === 0 && (
+          <div className="text-center py-8 text-white/30 text-sm">
+            All campers assigned!
           </div>
         )}
       </div>
@@ -483,9 +544,10 @@ export default function CampGroupingTool({
     }
   }
 
-  // Handle print
-  const handlePrint = () => {
-    window.open(`/director/camps/${campId}/grouping/report`, '_blank')
+  // Handle download PDF
+  const handleDownloadPDF = () => {
+    const basePath = mode === 'admin' ? '/admin' : mode === 'licensee' ? '/licensee' : '/director'
+    window.open(`${basePath}/camps/${campId}/grouping/report`, '_blank')
   }
 
   // Group management handlers
@@ -870,10 +932,10 @@ export default function CampGroupingTool({
                   </button>
                 )}
                 <button
-                  onClick={handlePrint}
+                  onClick={handleDownloadPDF}
                   className="px-4 py-2 border border-white/20 text-white font-bold uppercase tracking-wider hover:bg-white/10 transition-colors"
                 >
-                  Print Report
+                  Download PDF
                 </button>
               </div>
             </div>
@@ -924,37 +986,12 @@ export default function CampGroupingTool({
             ))}
 
             {/* Ungrouped */}
-            <div
-              className={`bg-dark-100 border-2 border-dashed flex flex-col min-h-[400px] ${
-                overGroupId === 'ungrouped' ? 'border-neon' : 'border-white/20'
-              }`}
-            >
-              <div className="p-4 border-b border-white/10">
-                <h3 className="font-bold text-white">Ungrouped</h3>
-                <p className="text-sm text-white/50">{state.ungrouped_campers.length} campers</p>
-              </div>
-              <div className="flex-1 p-3 space-y-2 overflow-y-auto">
-                <SortableContext
-                  items={state.ungrouped_campers.map(c => c.camper_session_id)}
-                  strategy={verticalListSortingStrategy}
-                >
-                  {state.ungrouped_campers.map(camper => (
-                    <SortableCamperCard
-                      key={camper.camper_session_id}
-                      camper={camper}
-                      onEdit={handleOpenEditModal}
-                      showEditButton={!state.is_finalized}
-                    />
-                  ))}
-                </SortableContext>
-
-                {state.ungrouped_campers.length === 0 && (
-                  <div className="text-center py-8 text-white/30 text-sm">
-                    All campers assigned!
-                  </div>
-                )}
-              </div>
-            </div>
+            <UngroupedColumn
+              campers={state.ungrouped_campers}
+              isOver={overGroupId === 'ungrouped'}
+              onEditCamper={handleOpenEditModal}
+              isFinalized={state.is_finalized}
+            />
           </div>
 
           {/* Summary Stats */}

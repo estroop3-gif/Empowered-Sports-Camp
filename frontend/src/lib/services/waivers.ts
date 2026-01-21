@@ -39,6 +39,8 @@ export interface WaiverSigningData {
   signerEmail: string
   signerIpAddress?: string | null
   signaturePayloadJson?: Record<string, unknown> | null
+  signatureTyped: string
+  signatureDateEntered: Date
 }
 
 // =============================================================================
@@ -496,6 +498,8 @@ export async function getRegistrationWaiverStatus(registrationId: string) {
         status: signing?.status || 'pending',
         signedAt: signing?.signedAt,
         signerName: signing?.signerName,
+        signatureTyped: signing?.signatureTyped,
+        signatureDateEntered: signing?.signatureDateEntered,
       }
     })
 
@@ -571,6 +575,8 @@ export async function signWaiver(data: WaiverSigningData, tenantId?: string | nu
           signerEmail: data.signerEmail,
           signerIpAddress: data.signerIpAddress,
           signaturePayloadJson: data.signaturePayloadJson as Prisma.InputJsonValue | undefined,
+          signatureTyped: data.signatureTyped,
+          signatureDateEntered: data.signatureDateEntered,
         },
       })
     } else {
@@ -592,6 +598,8 @@ export async function signWaiver(data: WaiverSigningData, tenantId?: string | nu
           signerEmail: data.signerEmail,
           signerIpAddress: data.signerIpAddress,
           signaturePayloadJson: data.signaturePayloadJson as Prisma.InputJsonValue | undefined,
+          signatureTyped: data.signatureTyped,
+          signatureDateEntered: data.signatureDateEntered,
         },
       })
     }
@@ -681,6 +689,8 @@ export async function getCampWaiverSignings(campId: string) {
           status: signing?.status || 'pending',
           signedAt: signing?.signedAt,
           signerName: signing?.signerName,
+          signatureTyped: signing?.signatureTyped,
+          signatureDateEntered: signing?.signatureDateEntered,
         }
       })
 

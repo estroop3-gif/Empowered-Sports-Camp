@@ -2,7 +2,6 @@
  * Admin Camps Service (Prisma)
  *
  * Handles camp management for admin dashboard.
- * Migrated from Supabase to Prisma.
  */
 
 import prisma from '@/lib/db/client'

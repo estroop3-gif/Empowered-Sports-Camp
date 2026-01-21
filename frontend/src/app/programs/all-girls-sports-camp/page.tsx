@@ -42,6 +42,8 @@ export default function AllGirlsSportsCampPage() {
         title="Every Girl Is"
         titleAccent="Welcome"
         accentColor="neon"
+        imageSrc="https://empowered-sports-camp-new.s3.us-east-2.amazonaws.com/programs/all-girls-welcome.png"
+        imageAlt="All Girls Sports Camp - Every Girl Is Welcome"
         content={
           <>
             <p>

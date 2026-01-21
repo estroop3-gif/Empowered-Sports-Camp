@@ -1,7 +1,7 @@
 -- ============================================================================
 -- EMPOWERED SPORTS CAMP - FIND CAMPS FEATURE SUPPORT
 -- ============================================================================
--- Run this in Supabase SQL Editor (Dashboard > SQL Editor)
+-- NOTE: This is a reference schema file. Use Prisma migrations for actual DB changes.
 -- Adds: status workflow, grade ranges, public camp view, RLS for public access
 -- ============================================================================
 

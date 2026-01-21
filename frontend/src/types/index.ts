@@ -1,5 +1,4 @@
-// Database types - these would typically be auto-generated from Supabase
-// For now, defining manually based on our schema
+// Database types - defined manually based on our schema
 
 export type UserRole = 'parent' | 'coach' | 'admin' | 'super_admin'
 export type RegistrationStatus = 'pending' | 'confirmed' | 'cancelled' | 'refunded'

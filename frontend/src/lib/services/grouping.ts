@@ -274,12 +274,12 @@ export async function syncCamperSessionData(
   campId: string
 ): Promise<{ synced: number; error: Error | null }> {
   try {
-    // Find confirmed registrations without CamperSessionData
+    // Find active registrations without CamperSessionData
+    // Use same filter as roster service: all non-cancelled registrations
     const confirmedRegistrations = await prisma.registration.findMany({
       where: {
         campId,
-        status: 'confirmed',
-        paymentStatus: 'paid',
+        status: { not: 'cancelled' },
       },
       include: {
         athlete: true,
@@ -970,6 +970,7 @@ export async function updateGroupingAssignments(
       where: { id: camp_id },
       select: {
         id: true,
+        tenantId: true,
         maxGroupSize: true,
         maxGradeSpread: true,
         groupingFinalizedAt: true,
@@ -1097,12 +1098,12 @@ export async function updateGroupingAssignments(
       })
 
       // Create assignment record
-      if (update.new_group_id) {
+      if (update.new_group_id && camp.tenantId) {
         await prisma.groupAssignment.create({
           data: {
             camperSessionId: update.camper_session_id,
             campId: camp_id,
-            tenantId: camp.id, // Will fix this below
+            tenantId: camp.tenantId,
             fromGroupId,
             toGroupId: update.new_group_id,
             assignmentType: update.override_acknowledged ? 'override' : 'manual',

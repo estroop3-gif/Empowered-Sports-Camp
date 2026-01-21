@@ -132,11 +132,24 @@ export async function getAuthenticatedUser(): Promise<VerifiedUser | null> {
 /**
  * Get authenticated user from request headers (for API routes)
  * Looks up the user's role from the database for accurate permissions
+ * Attempts server-side token refresh if ID token is expired but refresh token exists
  */
 export async function getAuthenticatedUserFromRequest(
   request: Request
 ): Promise<VerifiedUser | null> {
   let user: VerifiedUser | null = null
+  let cookies: Record<string, string> = {}
+
+  // Parse cookies once for reuse
+  const cookieHeader = request.headers.get('cookie')
+  if (cookieHeader) {
+    cookies = Object.fromEntries(
+      cookieHeader.split('; ').map((c) => {
+        const [key, ...rest] = c.split('=')
+        return [key, rest.join('=')]
+      })
+    )
+  }
 
   // Try Authorization header first
   const authHeader = request.headers.get('Authorization')
@@ -148,20 +161,30 @@ export async function getAuthenticatedUserFromRequest(
 
   // Fall back to cookie
   if (!user) {
-    const cookieHeader = request.headers.get('cookie')
     console.log('[auth] Checking cookies, header present:', !!cookieHeader)
-    if (cookieHeader) {
-      const cookies = Object.fromEntries(
-        cookieHeader.split('; ').map((c) => {
-          const [key, ...rest] = c.split('=')
-          return [key, rest.join('=')]
-        })
-      )
-      const token = cookies['id_token']
-      console.log('[auth] id_token cookie present:', !!token)
-      if (token) {
-        user = await verifyToken(token)
-        console.log('[auth] Token verification result:', user ? 'success' : 'failed')
+    const token = cookies['id_token']
+    console.log('[auth] id_token cookie present:', !!token)
+    if (token) {
+      user = await verifyToken(token)
+      console.log('[auth] Token verification result:', user ? 'success' : 'failed')
+
+      // If ID token verification failed, try to refresh using refresh_token
+      if (!user && cookies['refresh_token']) {
+        console.log('[auth] ID token expired, attempting server-side refresh...')
+        try {
+          const newTokens = await refreshTokens(cookies['refresh_token'])
+          if (newTokens?.id_token) {
+            console.log('[auth] Server-side refresh successful, verifying new token...')
+            user = await verifyToken(newTokens.id_token)
+            if (user) {
+              console.log('[auth] New token verified successfully')
+              // Note: We can't set cookies from here, but the user is now authenticated
+              // The client should refresh its tokens on next checkSession call
+            }
+          }
+        } catch (refreshError) {
+          console.error('[auth] Server-side refresh failed:', refreshError)
+        }
       }
     }
   }
@@ -272,7 +295,7 @@ export async function refreshTokens(refreshToken: string): Promise<{
   id_token: string
   expires_in: number
 } | null> {
-  const region = process.env.AWS_REGION || 'us-east-2'
+  const region = process.env.AWS_REGION || process.env.APP_AWS_REGION || 'us-east-2'
   const userPoolId = process.env.COGNITO_USER_POOL_ID
   const clientId = process.env.COGNITO_CLIENT_ID
   const clientSecret = process.env.COGNITO_CLIENT_SECRET
@@ -331,7 +354,7 @@ export async function exchangeCodeForTokens(code: string): Promise<{
   refresh_token?: string
   expires_in: number
 } | null> {
-  const region = process.env.AWS_REGION || 'us-east-2'
+  const region = process.env.AWS_REGION || process.env.APP_AWS_REGION || 'us-east-2'
   const userPoolId = process.env.COGNITO_USER_POOL_ID
   const clientId = process.env.COGNITO_CLIENT_ID
   const clientSecret = process.env.COGNITO_CLIENT_SECRET

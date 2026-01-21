@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { AdminLayout, PageHeader, ContentCard } from '@/components/admin/admin-layout'
 import { DataTable, TableBadge } from '@/components/ui/data-table'
@@ -20,6 +21,7 @@ import {
   Clock,
   CheckCircle,
   Copy,
+  Info,
 } from 'lucide-react'
 import { WaiverTemplateModal } from '@/components/waivers/WaiverTemplateModal'
 import { WaiverPreviewModal } from '@/components/waivers/WaiverPreviewModal'
@@ -49,6 +51,8 @@ export default function AdminWaiversPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('')
   const [actionMenuOpen, setActionMenuOpen] = useState<string | null>(null)
+  const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null)
+  const menuButtonRefs = useRef<Map<string, HTMLButtonElement>>(new Map())
 
   // Modal states
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -103,6 +107,29 @@ export default function AdminWaiversPage() {
       day: 'numeric',
       year: 'numeric',
     })
+  }
+
+  const handleOpenMenu = (waiverId: string) => {
+    if (actionMenuOpen === waiverId) {
+      setActionMenuOpen(null)
+      setMenuPosition(null)
+      return
+    }
+
+    const button = menuButtonRefs.current.get(waiverId)
+    if (button) {
+      const rect = button.getBoundingClientRect()
+      setMenuPosition({
+        top: rect.bottom + 4,
+        left: rect.right - 192, // 192px = w-48 menu width
+      })
+      setActionMenuOpen(waiverId)
+    }
+  }
+
+  const closeMenu = () => {
+    setActionMenuOpen(null)
+    setMenuPosition(null)
   }
 
   const filteredWaivers = waivers.filter((waiver) => {
@@ -248,9 +275,15 @@ export default function AdminWaiversPage() {
                     </td>
                     <td className="py-4 px-4">
                       {waiver.isMandatorySiteWide ? (
-                        <div className="flex items-center gap-2 text-magenta">
-                          <Globe className="h-4 w-4" />
-                          <span className="text-sm">Site-Wide</span>
+                        <div className="group relative">
+                          <div className="flex items-center gap-2 text-magenta">
+                            <Globe className="h-4 w-4" />
+                            <span className="text-sm font-bold">All Camps</span>
+                            <Info className="h-3 w-3 text-magenta/60" />
+                          </div>
+                          <div className="absolute left-0 top-full mt-1 hidden group-hover:block z-50 w-64 p-2 bg-dark-100 border border-magenta/30 text-xs text-white/70 shadow-lg">
+                            Required for every camp registration. Automatically included in all registration flows.
+                          </div>
                         </div>
                       ) : waiver.tenant ? (
                         <div className="flex items-center gap-2 text-white/70">
@@ -283,53 +316,15 @@ export default function AdminWaiversPage() {
                       </TableBadge>
                     </td>
                     <td className="py-4 px-4 text-right">
-                      <div className="relative inline-block">
-                        <button
-                          onClick={() =>
-                            setActionMenuOpen(actionMenuOpen === waiver.id ? null : waiver.id)
-                          }
-                          className="p-2 hover:bg-white/10 transition-colors"
-                        >
-                          <MoreHorizontal className="h-5 w-5 text-white/50" />
-                        </button>
-                        {actionMenuOpen === waiver.id && (
-                          <>
-                            <div
-                              className="fixed inset-0 z-[60]"
-                              onClick={() => setActionMenuOpen(null)}
-                            />
-                            <div className="absolute right-0 top-full mt-1 w-48 bg-dark-100 border border-white/10 shadow-xl z-[70]">
-                              <button
-                                onClick={() => {
-                                  setPreviewingWaiver(waiver)
-                                  setActionMenuOpen(null)
-                                }}
-                                className="flex items-center gap-3 w-full px-4 py-3 text-sm text-white/70 hover:bg-white/5 hover:text-white transition-colors"
-                              >
-                                <Eye className="h-4 w-4" />
-                                Preview
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setEditingWaiver(waiver)
-                                  setActionMenuOpen(null)
-                                }}
-                                className="flex items-center gap-3 w-full px-4 py-3 text-sm text-white/70 hover:bg-white/5 hover:text-white transition-colors"
-                              >
-                                <Edit className="h-4 w-4" />
-                                Edit
-                              </button>
-                              <button
-                                onClick={() => handleDelete(waiver.id)}
-                                className="flex items-center gap-3 w-full px-4 py-3 text-sm text-magenta hover:bg-magenta/10 transition-colors"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                                Delete
-                              </button>
-                            </div>
-                          </>
-                        )}
-                      </div>
+                      <button
+                        ref={(el) => {
+                          if (el) menuButtonRefs.current.set(waiver.id, el)
+                        }}
+                        onClick={() => handleOpenMenu(waiver.id)}
+                        className="p-2 hover:bg-white/10 transition-colors"
+                      >
+                        <MoreHorizontal className="h-5 w-5 text-white/50" />
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -338,6 +333,65 @@ export default function AdminWaiversPage() {
           </div>
         </ContentCard>
       )}
+
+      {/* Action Menu Portal - Rendered outside of table to avoid overflow clipping */}
+      {actionMenuOpen && menuPosition && typeof document !== 'undefined' &&
+        createPortal(
+          <>
+            <div
+              className="fixed inset-0 z-[60]"
+              onClick={closeMenu}
+            />
+            <div
+              className="fixed w-48 bg-dark-100 border border-white/10 shadow-xl z-[70]"
+              style={{
+                top: menuPosition.top,
+                left: menuPosition.left,
+              }}
+            >
+              {(() => {
+                const waiver = waivers.find((w) => w.id === actionMenuOpen)
+                if (!waiver) return null
+                return (
+                  <>
+                    <button
+                      onClick={() => {
+                        setPreviewingWaiver(waiver)
+                        closeMenu()
+                      }}
+                      className="flex items-center gap-3 w-full px-4 py-3 text-sm text-white/70 hover:bg-white/5 hover:text-white transition-colors"
+                    >
+                      <Eye className="h-4 w-4" />
+                      Preview
+                    </button>
+                    <button
+                      onClick={() => {
+                        setEditingWaiver(waiver)
+                        closeMenu()
+                      }}
+                      className="flex items-center gap-3 w-full px-4 py-3 text-sm text-white/70 hover:bg-white/5 hover:text-white transition-colors"
+                    >
+                      <Edit className="h-4 w-4" />
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => {
+                        handleDelete(waiver.id)
+                        closeMenu()
+                      }}
+                      className="flex items-center gap-3 w-full px-4 py-3 text-sm text-magenta hover:bg-magenta/10 transition-colors"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Delete
+                    </button>
+                  </>
+                )
+              })()}
+            </div>
+          </>,
+          document.body
+        )
+      }
 
       {/* Create/Edit Modal */}
       {(showCreateModal || editingWaiver) && (

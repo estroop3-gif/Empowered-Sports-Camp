@@ -11,7 +11,7 @@ import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { useAuth } from '@/lib/auth/context'
-import { PortalLayout, PortalPageHeader, PortalCard } from '@/components/portal'
+import { PortalPageHeader, PortalCard } from '@/components/portal'
 import {
   MapPin,
   Plus,
@@ -209,7 +209,7 @@ export default function LicenseeVenuesPage() {
   const isOwnVenue = (venue: Venue) => venue.tenant_id === tenant?.id
 
   return (
-    <PortalLayout>
+    <div>
       <PortalPageHeader
         title="Venues"
         description="Manage your camp venues and locations"
@@ -522,6 +522,6 @@ export default function LicenseeVenuesPage() {
           ))}
         </div>
       )}
-    </PortalLayout>
+    </div>
   )
 }

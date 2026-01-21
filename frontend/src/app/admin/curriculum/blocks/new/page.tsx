@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { AdminLayout, PageHeader, ContentCard } from '@/components/admin/admin-layout'
@@ -14,6 +14,7 @@ import {
   BlockCategory,
   IntensityLevel,
 } from '@/lib/services/curriculum'
+import { useUpload, STORAGE_FOLDERS } from '@/lib/storage/use-upload'
 import { cn } from '@/lib/utils'
 import {
   ArrowLeft,
@@ -25,6 +26,9 @@ import {
   Globe,
   Building2,
   Clock,
+  FileText,
+  Upload,
+  X,
 } from 'lucide-react'
 
 /**
@@ -44,6 +48,9 @@ interface FormData {
   setup_notes: string
   coaching_points: string
   is_global: boolean
+  // PDF fields
+  pdf_url: string | null
+  pdf_name: string | null
 }
 
 interface FormErrors {
@@ -54,11 +61,14 @@ interface FormErrors {
 export default function NewBlockPage() {
   const router = useRouter()
   const { user, role, isHqAdmin, tenant } = useAuth()
+  const { upload, uploading, progress } = useUpload()
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [saving, setSaving] = useState(false)
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [formErrors, setFormErrors] = useState<FormErrors>({})
+  const [isDragging, setIsDragging] = useState(false)
 
   const [formData, setFormData] = useState<FormData>({
     title: '',
@@ -71,14 +81,69 @@ export default function NewBlockPage() {
     setup_notes: '',
     coaching_points: '',
     is_global: isHqAdmin,
+    pdf_url: null,
+    pdf_name: null,
   })
 
   const userName = user?.firstName || user?.email?.split('@')[0] || 'Admin'
 
-  const updateField = (field: keyof FormData, value: string | boolean) => {
+  const updateField = (field: keyof FormData, value: string | boolean | null) => {
     setFormData(prev => ({ ...prev, [field]: value }))
     if (formErrors[field as keyof FormErrors]) {
       setFormErrors(prev => ({ ...prev, [field]: undefined }))
+    }
+  }
+
+  // PDF file handling
+  const handlePdfUpload = async (file: File) => {
+    if (file.type !== 'application/pdf') {
+      setError('Please select a PDF file')
+      return
+    }
+
+    const result = await upload(file, { folder: STORAGE_FOLDERS.CURRICULUM })
+    if (result) {
+      setFormData(prev => ({
+        ...prev,
+        pdf_url: result.fileUrl,
+        pdf_name: file.name,
+      }))
+    }
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      handlePdfUpload(file)
+    }
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+    const file = e.dataTransfer.files?.[0]
+    if (file) {
+      handlePdfUpload(file)
+    }
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = () => {
+    setIsDragging(false)
+  }
+
+  const removePdf = () => {
+    setFormData(prev => ({
+      ...prev,
+      pdf_url: null,
+      pdf_name: null,
+    }))
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
     }
   }
 
@@ -120,6 +185,8 @@ export default function NewBlockPage() {
       setup_notes: formData.setup_notes.trim() || undefined,
       coaching_points: formData.coaching_points.trim() || undefined,
       is_global: formData.is_global,
+      pdf_url: formData.pdf_url,
+      pdf_name: formData.pdf_name,
     })
 
     if (createError) {
@@ -341,6 +408,81 @@ export default function NewBlockPage() {
                     className="w-full px-4 py-3 bg-black border border-white/20 text-white placeholder:text-white/30 focus:border-neon focus:outline-none resize-none"
                   />
                 </div>
+              </div>
+            </ContentCard>
+
+            {/* PDF Attachment */}
+            <ContentCard title="PDF Attachment" accent="purple">
+              <div>
+                <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-3">
+                  <FileText className="h-4 w-4 inline mr-2" />
+                  Attach PDF (Optional)
+                </label>
+
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="application/pdf"
+                  onChange={handleFileChange}
+                  className="hidden"
+                />
+
+                {formData.pdf_url ? (
+                  // Show uploaded file
+                  <div className="flex items-center justify-between p-4 bg-purple/5 border border-purple/30">
+                    <div className="flex items-center gap-3">
+                      <FileText className="h-8 w-8 text-purple" />
+                      <div>
+                        <p className="font-semibold text-white">{formData.pdf_name}</p>
+                        <p className="text-xs text-white/40">PDF uploaded successfully</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={removePdf}
+                      className="p-2 text-white/40 hover:text-red-400 transition-colors"
+                      title="Remove PDF"
+                    >
+                      <X className="h-5 w-5" />
+                    </button>
+                  </div>
+                ) : uploading ? (
+                  // Show upload progress
+                  <div className="p-6 border border-purple/30 bg-purple/5">
+                    <div className="flex items-center gap-4 mb-3">
+                      <Loader2 className="h-6 w-6 text-purple animate-spin" />
+                      <span className="text-white">Uploading...</span>
+                    </div>
+                    <div className="w-full h-2 bg-black rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-purple transition-all duration-300"
+                        style={{ width: `${progress}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-white/40 mt-2">{progress}% complete</p>
+                  </div>
+                ) : (
+                  // Show dropzone
+                  <div
+                    onDrop={handleDrop}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onClick={() => fileInputRef.current?.click()}
+                    className={cn(
+                      'p-6 border-2 border-dashed cursor-pointer transition-colors text-center',
+                      isDragging
+                        ? 'border-purple bg-purple/10'
+                        : 'border-white/20 hover:border-white/40'
+                    )}
+                  >
+                    <Upload className="h-8 w-8 text-white/30 mx-auto mb-2" />
+                    <p className="text-sm text-white/60">
+                      Drag and drop a PDF, or{' '}
+                      <span className="text-purple">browse</span>
+                    </p>
+                    <p className="text-xs text-white/30 mt-1">PDF files only</p>
+                  </div>
+                )}
               </div>
             </ContentCard>
           </div>

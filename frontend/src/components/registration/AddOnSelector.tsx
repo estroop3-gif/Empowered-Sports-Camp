@@ -374,7 +374,7 @@ export function AddOnSelector({ availableAddOns, onContinue, onBack }: AddOnSele
           className="flex-1"
           onClick={onContinue}
         >
-          Continue to Payment
+          Continue to Waivers
         </Button>
       </div>
 

@@ -7,13 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/client'
-import { Resend } from 'resend'
-
-// Initialize Resend client
-const resend = process.env.RESEND_API_KEY
-  ? new Resend(process.env.RESEND_API_KEY)
-  : null
-const DEFAULT_FROM = process.env.RESEND_FROM_EMAIL || 'Empowered Athletes <noreply@empoweredathletes.com>'
+import { sendEmail } from '@/lib/email/ses-client'
 
 export async function POST(request: NextRequest) {
   try {
@@ -136,20 +130,14 @@ export async function POST(request: NextRequest) {
         </div>
       `
 
-      if (resend) {
-        await resend.emails.send({
-          from: DEFAULT_FROM,
-          to: [inviteeEmail],
-          subject: `${inviterName || 'A friend'} wants your daughter to join their camp squad!`,
-          html: emailHtml,
-        })
-      } else {
-        // Dev mode - log to console
-        console.log('=== DEV MODE: Guest Squad Invite Email ===')
-        console.log('To:', inviteeEmail)
-        console.log('Subject:', `${inviterName || 'A friend'} wants your daughter to join their camp squad!`)
-        console.log('Register URL:', registerUrl)
-        console.log('==========================================')
+      const result = await sendEmail({
+        to: inviteeEmail,
+        subject: `${inviterName || 'A friend'} wants your daughter to join their camp squad!`,
+        html: emailHtml,
+      })
+
+      if (!result.success) {
+        console.error('SES error sending guest squad invite:', result.error)
       }
     } catch (emailError) {
       console.error('Failed to send squad invite email:', emailError)

@@ -17,7 +17,7 @@ import { cn } from '@/lib/utils'
  * This only changes what navigation links are shown.
  * Actual route access is still controlled by:
  * - Middleware (real role check)
- * - Supabase RLS (real user identity)
+ * - Application-level authorization (real user identity)
  */
 
 interface RoleBasedNavProps {

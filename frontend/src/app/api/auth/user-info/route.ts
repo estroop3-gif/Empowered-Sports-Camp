@@ -10,6 +10,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedUserFromRequest } from '@/lib/auth/cognito-server'
 import prisma from '@/lib/db/client'
+import { getCertificationStatus } from '@/lib/services/empoweru'
+import { UserRole } from '@/generated/prisma'
 
 export async function GET(request: NextRequest) {
   // Authenticate the request
@@ -67,15 +69,46 @@ export async function GET(request: NextRequest) {
           hasCompletedCore: false,
           hasCompletedDirector: false,
           hasCompletedVolunteer: false,
+          isCertified: true, // Parents don't need certification
+          certifiedAt: null,
+          certificateUrl: null,
+          certificateNumber: null,
         },
       })
     }
 
-    // Get LMS status from the already-fetched profile
-    const lmsStatus = {
+    // Get legacy LMS status from the already-fetched profile
+    const legacyLmsStatus = {
       hasCompletedCore: profile.hasCompletedLmsCore ?? false,
       hasCompletedDirector: profile.hasCompletedLmsDirector ?? false,
       hasCompletedVolunteer: profile.hasCompletedLmsVolunteer ?? false,
+    }
+
+    // Get certification status for the user's role
+    const role = userRole.role as UserRole
+    const tenantId = userRole.tenantId || undefined
+
+    // HQ Admin and Parent don't need certification
+    let certStatus = {
+      isCertified: true,
+      certifiedAt: null as string | null,
+      certificateUrl: null as string | null,
+      certificateNumber: null as string | null,
+    }
+
+    if (role !== 'hq_admin' && role !== 'parent') {
+      const { data } = await getCertificationStatus(profileId, role, tenantId)
+      if (data) {
+        certStatus = data
+      } else {
+        certStatus.isCertified = false
+      }
+    }
+
+    // Combine legacy and new certification status
+    const lmsStatus = {
+      ...legacyLmsStatus,
+      ...certStatus,
     }
 
     // Get tenant info if applicable

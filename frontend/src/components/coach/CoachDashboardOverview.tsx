@@ -42,6 +42,7 @@ import {
   Target,
 } from 'lucide-react'
 import type { CoachDashboardOverview as CoachDashboardData } from '@/lib/services/coach-dashboard'
+import { AssignmentRequestsCard } from '@/components/staff-requests'
 
 interface CoachDashboardOverviewProps {
   initialData?: CoachDashboardData | null
@@ -119,6 +120,9 @@ export function CoachDashboardOverview({ initialData }: CoachDashboardOverviewPr
     <div className="space-y-8">
       {/* Welcome Card */}
       <WelcomeCard firstName={firstName} quickStats={quick_stats} />
+
+      {/* Assignment Requests */}
+      <AssignmentRequestsCard />
 
       {/* Training Alert Banner */}
       {quick_actions.needs_training && (

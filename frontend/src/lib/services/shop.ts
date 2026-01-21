@@ -856,3 +856,116 @@ export function calculateCartTotals(
 
   return { subtotal, itemCount }
 }
+
+// ============================================================================
+// LICENSEE SHOP STATS
+// ============================================================================
+
+export interface LicenseeShopProductSales {
+  productId: string
+  productName: string
+  category: string
+  unitsSold: number
+  revenue: number
+  imageUrl: string | null
+}
+
+export interface LicenseeShopStats {
+  localRevenue: number
+  ordersThisMonth: number
+  totalOrders: number
+  topProducts: LicenseeShopProductSales[]
+}
+
+/**
+ * Get shop stats for a licensee territory
+ */
+export async function getLicenseeShopStats(
+  tenantId: string
+): Promise<{ data: LicenseeShopStats | null; error: Error | null }> {
+  try {
+    // Get start of current month
+    const now = new Date()
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+
+    // Get all completed orders for this licensee
+    const orders = await prisma.shopOrder.findMany({
+      where: {
+        licenseeId: tenantId,
+        status: { in: ['paid', 'processing', 'shipped', 'delivered'] },
+      },
+      include: {
+        items: {
+          include: {
+            product: {
+              select: {
+                id: true,
+                name: true,
+                category: true,
+                imageUrl: true,
+              },
+            },
+          },
+        },
+      },
+    })
+
+    // Calculate total revenue
+    const localRevenue = orders.reduce((sum, order) => sum + order.totalCents, 0)
+
+    // Count orders this month
+    const ordersThisMonth = orders.filter(
+      (order) => order.createdAt >= monthStart
+    ).length
+
+    // Aggregate sales by product
+    const productSalesMap = new Map<
+      string,
+      {
+        productId: string
+        productName: string
+        category: string
+        unitsSold: number
+        revenue: number
+        imageUrl: string | null
+      }
+    >()
+
+    for (const order of orders) {
+      for (const item of order.items) {
+        const existing = productSalesMap.get(item.productId)
+        if (existing) {
+          existing.unitsSold += item.quantity
+          existing.revenue += item.totalPriceCents
+        } else {
+          productSalesMap.set(item.productId, {
+            productId: item.productId,
+            productName: item.product?.name || item.productName,
+            category: (item.product?.category as string) || 'unknown',
+            unitsSold: item.quantity,
+            revenue: item.totalPriceCents,
+            imageUrl: item.product?.imageUrl || null,
+          })
+        }
+      }
+    }
+
+    // Convert to array and sort by revenue
+    const topProducts = Array.from(productSalesMap.values())
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 10)
+
+    return {
+      data: {
+        localRevenue,
+        ordersThisMonth,
+        totalOrders: orders.length,
+        topProducts,
+      },
+      error: null,
+    }
+  } catch (error) {
+    console.error('[getLicenseeShopStats] Error:', error)
+    return { data: null, error: error as Error }
+  }
+}

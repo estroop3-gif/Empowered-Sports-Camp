@@ -39,9 +39,18 @@ import {
   Send,
   DollarSign,
   Shield,
+  Plus,
+  Pencil,
+  Trash2,
+  Flag,
+  Lock,
 } from 'lucide-react'
 import { IncentiveSummaryPanel, GuestSpeakerManager } from '@/components/incentives'
 import { ScheduleBuilder } from '@/components/camp-hq/schedule'
+import { AddStaffModal, EditStaffModal } from '@/components/camp-hq/staffing'
+import { StartDayModal } from './StartDayModal'
+import { EndDayModal } from './EndDayModal'
+import { ConcludeCampModal } from './ConcludeCampModal'
 import type {
   CampHqOverview,
   CampHqDay,
@@ -137,6 +146,17 @@ export function CampHqShell({
     loadOverview()
   }, [loadOverview])
 
+  // Auto-refresh when day is in progress (every 30 seconds)
+  useEffect(() => {
+    if (!overview || overview.today.status !== 'in_progress') return
+
+    const interval = setInterval(() => {
+      loadOverview()
+    }, 30000) // 30 seconds
+
+    return () => clearInterval(interval)
+  }, [overview, loadOverview])
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -165,7 +185,7 @@ export function CampHqShell({
   }
 
   return (
-    <div>
+    <div className="overflow-x-hidden">
       {/* Camp Header */}
       <CampHqHeader
         overview={overview}
@@ -200,7 +220,7 @@ export function CampHqShell({
       </div>
 
       {/* Tab Content */}
-      <div>
+      <div className="max-w-full">
         {activeTab === 'overview' && (
           <OverviewTab
             campId={campId}
@@ -385,150 +405,258 @@ function OverviewTab({
 }) {
   const [actions, setActions] = useState<CampHqQuickAction[]>([])
   const [actionsLoading, setActionsLoading] = useState(true)
-  const [actionInProgress, setActionInProgress] = useState<string | null>(null)
+  const [lastUpdated, setLastUpdated] = useState<Date>(new Date())
+  const [refreshing, setRefreshing] = useState(false)
 
-  useEffect(() => {
-    async function loadActions() {
-      try {
-        const res = await fetch(`/api/camps/${campId}/hq/actions`)
-        const json = await res.json()
-        if (res.ok) {
-          setActions(json.data || [])
-        }
-      } catch (err) {
-        console.error('Failed to load actions:', err)
-      } finally {
-        setActionsLoading(false)
-      }
-    }
-    loadActions()
-  }, [campId])
+  // Modal states
+  const [showStartDayModal, setShowStartDayModal] = useState(false)
+  const [showEndDayModal, setShowEndDayModal] = useState(false)
+  const [showConcludeModal, setShowConcludeModal] = useState(false)
 
-  async function handleAction(action: string) {
-    if (actionInProgress) return
-    setActionInProgress(action)
-
+  const loadActions = useCallback(async () => {
     try {
-      if (action === 'start_day') {
-        const res = await fetch(`/api/camps/${campId}/hq/day/start`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({}),
-        })
-        if (res.ok) {
-          onRefresh()
-        }
-      } else if (action === 'end_day' && overview.today.camp_day_id) {
-        const res = await fetch(
-          `/api/camps/${campId}/hq/day/${overview.today.camp_day_id}/end`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId }),
-          }
-        )
-        if (res.ok) {
-          onRefresh()
-        }
+      const res = await fetch(`/api/camps/${campId}/hq/actions`)
+      const json = await res.json()
+      if (res.ok) {
+        setActions(json.data || [])
       }
     } catch (err) {
-      console.error('Action failed:', err)
+      console.error('Failed to load actions:', err)
     } finally {
-      setActionInProgress(null)
+      setActionsLoading(false)
     }
+  }, [campId])
+
+  useEffect(() => {
+    loadActions()
+  }, [loadActions])
+
+  // Update last updated timestamp when overview changes
+  useEffect(() => {
+    setLastUpdated(new Date())
+  }, [overview])
+
+  // Manual refresh handler
+  const handleManualRefresh = async () => {
+    setRefreshing(true)
+    await Promise.all([onRefresh(), loadActions()])
+    setRefreshing(false)
+  }
+
+  const handleModalSuccess = async () => {
+    setShowStartDayModal(false)
+    setShowEndDayModal(false)
+    setShowConcludeModal(false)
+    // Refresh both overview and actions to update button states
+    await Promise.all([onRefresh(), loadActions()])
   }
 
   const { today, stats } = overview
 
+  // Determine action availability
+  const startDayAction = actions.find((a) => a.action === 'start_day')
+  const endDayAction = actions.find((a) => a.action === 'end_day')
+
+  // Check if camp is concluded/locked
+  const isLocked = (overview.camp as { is_locked?: boolean }).is_locked || false
+  const isConcluded = overview.camp.status === 'completed'
+  const allDaysCompleted = stats.days_completed === stats.days_total
+
   return (
     <div className="space-y-6">
-      {/* Today's Status */}
-      {today.is_camp_day && (
-        <PortalCard
-          accent={today.status === 'in_progress' ? 'neon' : today.status === 'finished' ? 'purple' : undefined}
-        >
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-3 mb-2">
-                <h3 className="text-lg font-bold text-white">
-                  Day {today.day_number} - Today
-                </h3>
-                <div
-                  className={cn(
-                    'px-2 py-1 text-xs font-bold uppercase',
-                    today.status === 'in_progress'
-                      ? 'bg-neon/20 text-neon'
-                      : today.status === 'finished'
-                        ? 'bg-purple/20 text-purple'
-                        : 'bg-white/10 text-white/50'
-                  )}
-                >
-                  {today.status === 'in_progress'
-                    ? 'In Progress'
-                    : today.status === 'finished'
-                      ? 'Completed'
-                      : 'Not Started'}
-                </div>
-              </div>
-
-              {/* Today's Attendance */}
-              <div className="flex flex-wrap gap-6 text-sm">
-                <div className="flex items-center gap-2">
-                  <div className="h-3 w-3 bg-neon rounded-full" />
-                  <span className="text-white">{today.on_site} on-site</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="h-3 w-3 bg-purple rounded-full" />
-                  <span className="text-white/70">{today.checked_out} checked out</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="h-3 w-3 bg-white/30 rounded-full" />
-                  <span className="text-white/50">{today.not_arrived} not arrived</span>
-                </div>
-                {today.absent > 0 && (
-                  <div className="flex items-center gap-2">
-                    <div className="h-3 w-3 bg-magenta rounded-full" />
-                    <span className="text-white/50">{today.absent} absent</span>
-                  </div>
-                )}
-              </div>
+      {/* Live Status Indicator */}
+      {today.status === 'in_progress' && (
+        <div className="flex items-center justify-between p-3 bg-neon/10 border border-neon/30">
+          <div className="flex items-center gap-3">
+            <div className="relative flex h-3 w-3">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-neon opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-neon"></span>
             </div>
+            <span className="text-neon font-bold uppercase tracking-wider text-sm">Live - Day In Progress</span>
+            <span className="text-white/50 text-xs">
+              Auto-updates every 30s • Last: {lastUpdated.toLocaleTimeString()}
+            </span>
+          </div>
+          <button
+            onClick={handleManualRefresh}
+            disabled={refreshing}
+            className={cn(
+              'flex items-center gap-2 px-3 py-1 text-xs font-bold uppercase tracking-wider transition-colors',
+              refreshing
+                ? 'bg-white/5 text-white/30 cursor-not-allowed'
+                : 'bg-white/10 text-white hover:bg-white/20'
+            )}
+          >
+            <RefreshCw className={cn('h-3 w-3', refreshing && 'animate-spin')} />
+            Refresh
+          </button>
+        </div>
+      )}
 
-            {/* Quick Actions */}
-            <div className="flex gap-2">
-              {!actionsLoading &&
-                actions.map((action) => (
-                  <button
-                    key={action.action}
-                    onClick={() => handleAction(action.action)}
-                    disabled={!action.available || !!actionInProgress}
-                    className={cn(
-                      'flex items-center gap-2 px-4 py-2 text-sm font-bold uppercase tracking-wider transition-colors',
-                      action.available
-                        ? action.action === 'start_day'
-                          ? 'bg-neon text-black hover:bg-neon/90'
-                          : action.action === 'end_day'
-                            ? 'bg-purple text-white hover:bg-purple/90'
-                            : 'bg-white/10 text-white hover:bg-white/20'
-                        : 'bg-white/5 text-white/30 cursor-not-allowed'
-                    )}
-                    title={action.reason}
-                  >
-                    {actionInProgress === action.action ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : action.action === 'start_day' ? (
-                      <Play className="h-4 w-4" />
-                    ) : action.action === 'end_day' ? (
-                      <Square className="h-4 w-4" />
-                    ) : action.action === 'send_recap' ? (
-                      <Send className="h-4 w-4" />
-                    ) : null}
-                    {action.label}
-                  </button>
-                ))}
+      {/* Locked/Concluded Banner */}
+      {(isLocked || isConcluded) && (
+        <div className="p-4 bg-magenta/10 border border-magenta/30 flex items-center gap-3">
+          <Lock className="h-5 w-5 text-magenta shrink-0" />
+          <div>
+            <div className="font-bold text-magenta">
+              {isConcluded ? 'Camp Concluded' : 'Camp Locked'}
+            </div>
+            <div className="text-sm text-white/50">
+              {isConcluded
+                ? 'This camp has been concluded. No further modifications can be made.'
+                : 'This camp is locked. Contact an administrator to unlock.'}
             </div>
           </div>
-        </PortalCard>
+        </div>
+      )}
+
+      {/* Camp Day Actions Card */}
+      <PortalCard title="Camp Day Actions" accent={today.status === 'in_progress' ? 'neon' : undefined}>
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          {/* Status Info */}
+          <div>
+            {today.is_camp_day ? (
+              <>
+                <div className="flex items-center gap-3 mb-2">
+                  <h3 className="text-lg font-bold text-white">
+                    Day {today.day_number} - Today
+                  </h3>
+                  <div
+                    className={cn(
+                      'px-2 py-1 text-xs font-bold uppercase',
+                      today.status === 'in_progress'
+                        ? 'bg-neon/20 text-neon'
+                        : today.status === 'finished'
+                          ? 'bg-purple/20 text-purple'
+                          : 'bg-white/10 text-white/50'
+                    )}
+                  >
+                    {today.status === 'in_progress'
+                      ? 'In Progress'
+                      : today.status === 'finished'
+                        ? 'Completed'
+                        : 'Not Started'}
+                  </div>
+                </div>
+
+                {/* Today's Attendance */}
+                <div className="flex flex-wrap gap-6 text-sm">
+                  <div className="flex items-center gap-2">
+                    <div className="h-3 w-3 bg-neon rounded-full" />
+                    <span className="text-white">{today.on_site} on-site</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="h-3 w-3 bg-purple rounded-full" />
+                    <span className="text-white/70">{today.checked_out} checked out</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="h-3 w-3 bg-white/30 rounded-full" />
+                    <span className="text-white/50">{today.not_arrived} not arrived</span>
+                  </div>
+                  {today.absent > 0 && (
+                    <div className="flex items-center gap-2">
+                      <div className="h-3 w-3 bg-magenta rounded-full" />
+                      <span className="text-white/50">{today.absent} absent</span>
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="text-white/50">
+                {new Date(overview.camp.start_date) > new Date()
+                  ? 'Camp has not started yet'
+                  : 'No camp day scheduled for today'}
+              </div>
+            )}
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex flex-wrap gap-2">
+            {/* Start Day Button */}
+            <button
+              onClick={() => setShowStartDayModal(true)}
+              disabled={isLocked || isConcluded || !startDayAction?.available}
+              className={cn(
+                'flex items-center gap-2 px-4 py-2 text-sm font-bold uppercase tracking-wider transition-colors',
+                !isLocked && !isConcluded && startDayAction?.available
+                  ? 'bg-neon text-black hover:bg-neon/90'
+                  : 'bg-white/5 text-white/30 cursor-not-allowed'
+              )}
+              title={startDayAction?.reason}
+            >
+              <Play className="h-4 w-4" />
+              Start Day
+            </button>
+
+            {/* End Day Button */}
+            <button
+              onClick={() => setShowEndDayModal(true)}
+              disabled={isLocked || isConcluded || !endDayAction?.available || !overview.today.camp_day_id}
+              className={cn(
+                'flex items-center gap-2 px-4 py-2 text-sm font-bold uppercase tracking-wider transition-colors',
+                !isLocked && !isConcluded && endDayAction?.available
+                  ? 'bg-purple text-white hover:bg-purple/90'
+                  : 'bg-white/5 text-white/30 cursor-not-allowed'
+              )}
+              title={endDayAction?.reason}
+            >
+              <Square className="h-4 w-4" />
+              End Day
+            </button>
+
+            {/* Conclude Camp Button */}
+            <button
+              onClick={() => setShowConcludeModal(true)}
+              disabled={isLocked || isConcluded}
+              className={cn(
+                'flex items-center gap-2 px-4 py-2 text-sm font-bold uppercase tracking-wider transition-colors',
+                !isLocked && !isConcluded
+                  ? allDaysCompleted
+                    ? 'bg-magenta text-white hover:bg-magenta/90'
+                    : 'bg-magenta/50 text-white/70 hover:bg-magenta/70'
+                  : 'bg-white/5 text-white/30 cursor-not-allowed'
+              )}
+              title={
+                isConcluded
+                  ? 'Camp has already been concluded'
+                  : isLocked
+                    ? 'Camp is locked'
+                    : !allDaysCompleted
+                      ? 'Not all days completed - force conclude available'
+                      : undefined
+              }
+            >
+              <Flag className="h-4 w-4" />
+              Conclude Camp
+            </button>
+          </div>
+        </div>
+      </PortalCard>
+
+      {/* Modals */}
+      {showStartDayModal && (
+        <StartDayModal
+          campId={campId}
+          onClose={() => setShowStartDayModal(false)}
+          onSuccess={handleModalSuccess}
+        />
+      )}
+
+      {showEndDayModal && overview.today.camp_day_id && (
+        <EndDayModal
+          campId={campId}
+          campDayId={overview.today.camp_day_id}
+          onClose={() => setShowEndDayModal(false)}
+          onSuccess={handleModalSuccess}
+        />
+      )}
+
+      {showConcludeModal && (
+        <ConcludeCampModal
+          campId={campId}
+          onClose={() => setShowConcludeModal(false)}
+          onSuccess={handleModalSuccess}
+        />
       )}
 
       {/* Quick Links */}
@@ -847,6 +975,39 @@ interface TeamColorState {
   balance_diff: number
 }
 
+// Helper to deduplicate campers by ID (prevents duplicate key errors)
+function deduplicateCampers<T extends { id: string }>(campers: T[]): T[] {
+  const seen = new Set<string>()
+  return campers.filter(camper => {
+    if (seen.has(camper.id)) {
+      console.warn(`[CampHqShell] Duplicate camper ID detected: ${camper.id}`)
+      return false
+    }
+    seen.add(camper.id)
+    return true
+  })
+}
+
+// Helper to deduplicate team color state
+function deduplicateTeamColorState(state: TeamColorState | null): TeamColorState | null {
+  if (!state) return null
+  return {
+    ...state,
+    pink_team: {
+      ...state.pink_team,
+      campers: deduplicateCampers(state.pink_team.campers),
+    },
+    purple_team: {
+      ...state.purple_team,
+      campers: deduplicateCampers(state.purple_team.campers),
+    },
+    unassigned: {
+      ...state.unassigned,
+      campers: deduplicateCampers(state.unassigned.campers),
+    },
+  }
+}
+
 function GroupsTab({ campId, routePrefix, canEdit }: { campId: string; routePrefix: string; canEdit: boolean }) {
   const [groups, setGroups] = useState<CampHqGroup[]>([])
   const [teamColorState, setTeamColorState] = useState<TeamColorState | null>(null)
@@ -878,7 +1039,7 @@ function GroupsTab({ campId, routePrefix, canEdit }: { campId: string; routePref
         const res = await fetch(`/api/camps/${campId}/hq/team-colors`)
         const json = await res.json()
         if (res.ok) {
-          setTeamColorState(json.data)
+          setTeamColorState(deduplicateTeamColorState(json.data))
         }
       } catch (err) {
         console.error('Failed to load team colors:', err)
@@ -903,7 +1064,7 @@ function GroupsTab({ campId, routePrefix, canEdit }: { campId: string; routePref
         const reloadRes = await fetch(`/api/camps/${campId}/hq/team-colors`)
         const reloadJson = await reloadRes.json()
         if (reloadRes.ok) {
-          setTeamColorState(reloadJson.data)
+          setTeamColorState(deduplicateTeamColorState(reloadJson.data))
         }
       } else {
         console.error('Auto-assign failed:', json.error)
@@ -931,7 +1092,7 @@ function GroupsTab({ campId, routePrefix, canEdit }: { campId: string; routePref
         const reloadRes = await fetch(`/api/camps/${campId}/hq/team-colors`)
         const reloadJson = await reloadRes.json()
         if (reloadRes.ok) {
-          setTeamColorState(reloadJson.data)
+          setTeamColorState(deduplicateTeamColorState(reloadJson.data))
         }
       }
     } catch (err) {
@@ -1421,26 +1582,68 @@ function WaiversTab({ campId, routePrefix }: { campId: string; routePrefix: stri
   )
 }
 
+interface PendingRequest {
+  id: string
+  camp_id: string
+  requested_user_id: string
+  requested_user_name: string
+  requested_user_email: string
+  role: string
+  status: string
+  requested_at: string
+  is_lead: boolean
+  call_time: string | null
+  station_name: string | null
+}
+
 function StaffingTab({ campId, routePrefix }: { campId: string; routePrefix: string }) {
   const [staff, setStaff] = useState<CampHqStaffMember[]>([])
+  const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>([])
   const [loading, setLoading] = useState(true)
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [editingAssignment, setEditingAssignment] = useState<CampHqStaffMember | null>(null)
+  const [cancellingRequestId, setCancellingRequestId] = useState<string | null>(null)
+
+  const loadStaff = useCallback(async () => {
+    try {
+      const [staffRes, requestsRes] = await Promise.all([
+        fetch(`/api/camps/${campId}/hq/staff`),
+        fetch(`/api/camps/${campId}/hq/staff/requests`),
+      ])
+      const staffJson = await staffRes.json()
+      const requestsJson = await requestsRes.json()
+      if (staffRes.ok) {
+        setStaff(staffJson.data || [])
+      }
+      if (requestsRes.ok) {
+        setPendingRequests(requestsJson.data || [])
+      }
+    } catch (err) {
+      console.error('Failed to load staff:', err)
+    } finally {
+      setLoading(false)
+    }
+  }, [campId])
 
   useEffect(() => {
-    async function loadStaff() {
-      try {
-        const res = await fetch(`/api/camps/${campId}/hq/staff`)
-        const json = await res.json()
-        if (res.ok) {
-          setStaff(json.data || [])
-        }
-      } catch (err) {
-        console.error('Failed to load staff:', err)
-      } finally {
-        setLoading(false)
-      }
-    }
     loadStaff()
-  }, [campId])
+  }, [loadStaff])
+
+  const handleCancelRequest = async (requestId: string) => {
+    setCancellingRequestId(requestId)
+    try {
+      const res = await fetch(`/api/camps/${campId}/hq/staff/requests/${requestId}`, {
+        method: 'DELETE',
+      })
+      if (res.ok) {
+        setPendingRequests((prev) => prev.filter((r) => r.id !== requestId))
+      }
+    } catch (err) {
+      console.error('Failed to cancel request:', err)
+    } finally {
+      setCancellingRequestId(null)
+    }
+  }
 
   if (loading) {
     return (
@@ -1453,15 +1656,94 @@ function StaffingTab({ campId, routePrefix }: { campId: string; routePrefix: str
   const directors = staff.filter((s) => s.role === 'director')
   const coaches = staff.filter((s) => s.role === 'coach')
   const assistants = staff.filter((s) => s.role === 'assistant')
+  const cits = staff.filter((s) => s.role === 'cit')
+  const volunteers = staff.filter((s) => s.role === 'volunteer')
+
+  const handleEdit = (member: CampHqStaffMember) => {
+    setEditingAssignment(member)
+  }
+
+  const handleModalSuccess = () => {
+    setShowAddModal(false)
+    setEditingAssignment(null)
+    loadStaff()
+  }
 
   return (
     <div className="space-y-6">
+      {/* Header with Add Button */}
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-bold text-white">Staff Assignments</h2>
+        <button
+          onClick={() => setShowAddModal(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-neon text-black font-bold uppercase tracking-wider hover:bg-neon/90 transition-colors"
+        >
+          <Plus className="h-4 w-4" />
+          Add Staff
+        </button>
+      </div>
+
+      {/* Pending Requests */}
+      {pendingRequests.length > 0 && (
+        <PortalCard title="Pending Requests" accent="purple">
+          <div className="space-y-3">
+            {pendingRequests.map((request) => (
+              <div
+                key={request.id}
+                className="flex items-center gap-4 p-3 bg-purple/10 border border-purple/20"
+              >
+                {/* Avatar */}
+                <div className="h-10 w-10 bg-purple/20 flex items-center justify-center text-purple font-bold text-sm uppercase shrink-0">
+                  {request.requested_user_name.split(' ').map((n) => n.charAt(0)).join('').slice(0, 2)}
+                </div>
+
+                {/* Info */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-bold text-white">
+                      {request.requested_user_name}
+                    </span>
+                    <span className="px-1.5 py-0.5 text-[10px] bg-purple/30 text-purple font-bold uppercase">
+                      Awaiting Response
+                    </span>
+                    {request.is_lead && (
+                      <span className="px-1.5 py-0.5 text-[10px] bg-neon/20 text-neon font-bold uppercase">
+                        Lead
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 text-sm text-white/50 mt-0.5">
+                    <span className="capitalize">{request.role}</span>
+                    <span className="text-white/20">·</span>
+                    <span>Sent {new Date(request.requested_at).toLocaleDateString()}</span>
+                  </div>
+                </div>
+
+                {/* Cancel Button */}
+                <button
+                  onClick={() => handleCancelRequest(request.id)}
+                  disabled={cancellingRequestId === request.id}
+                  className="p-2 text-white/40 hover:text-red-400 transition-colors disabled:opacity-50"
+                  title="Cancel request"
+                >
+                  {cancellingRequestId === request.id ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <XCircle className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+            ))}
+          </div>
+        </PortalCard>
+      )}
+
       {/* Directors */}
       {directors.length > 0 && (
         <PortalCard title="Directors" accent="neon">
           <div className="space-y-3">
             {directors.map((member) => (
-              <StaffMemberRow key={member.id} member={member} />
+              <StaffMemberRow key={member.id} member={member} onEdit={() => handleEdit(member)} />
             ))}
           </div>
         </PortalCard>
@@ -1472,7 +1754,7 @@ function StaffingTab({ campId, routePrefix }: { campId: string; routePrefix: str
         <PortalCard title="Coaches" accent="purple">
           <div className="space-y-3">
             {coaches.map((member) => (
-              <StaffMemberRow key={member.id} member={member} />
+              <StaffMemberRow key={member.id} member={member} onEdit={() => handleEdit(member)} />
             ))}
           </div>
         </PortalCard>
@@ -1483,7 +1765,29 @@ function StaffingTab({ campId, routePrefix }: { campId: string; routePrefix: str
         <PortalCard title="Assistants">
           <div className="space-y-3">
             {assistants.map((member) => (
-              <StaffMemberRow key={member.id} member={member} />
+              <StaffMemberRow key={member.id} member={member} onEdit={() => handleEdit(member)} />
+            ))}
+          </div>
+        </PortalCard>
+      )}
+
+      {/* CITs */}
+      {cits.length > 0 && (
+        <PortalCard title="CITs">
+          <div className="space-y-3">
+            {cits.map((member) => (
+              <StaffMemberRow key={member.id} member={member} onEdit={() => handleEdit(member)} />
+            ))}
+          </div>
+        </PortalCard>
+      )}
+
+      {/* Volunteers */}
+      {volunteers.length > 0 && (
+        <PortalCard title="Volunteers">
+          <div className="space-y-3">
+            {volunteers.map((member) => (
+              <StaffMemberRow key={member.id} member={member} onEdit={() => handleEdit(member)} />
             ))}
           </div>
         </PortalCard>
@@ -1494,70 +1798,198 @@ function StaffingTab({ campId, routePrefix }: { campId: string; routePrefix: str
           <div className="text-center py-8">
             <UserCog className="h-12 w-12 text-white/20 mx-auto mb-4" />
             <p className="text-white/50">No staff assigned to this camp yet.</p>
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-neon text-black font-bold uppercase tracking-wider hover:bg-neon/90 transition-colors"
+            >
+              <Plus className="h-4 w-4" />
+              Add Staff
+            </button>
           </div>
         </PortalCard>
       )}
-    </div>
-  )
-}
 
-function StaffMemberRow({ member }: { member: CampHqStaffMember }) {
-  return (
-    <div className="flex items-center gap-4 p-3 bg-white/5">
-      <div className="h-10 w-10 bg-white/10 flex items-center justify-center text-white font-bold text-sm uppercase">
-        {member.first_name.charAt(0)}
-        {member.last_name.charAt(0)}
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="font-bold text-white">
-          {member.first_name} {member.last_name}
-        </div>
-        <div className="text-sm text-white/50 truncate">{member.email}</div>
-      </div>
-      {member.assigned_group_name && (
-        <div className="px-2 py-1 text-xs font-bold uppercase bg-white/10 text-white/70">
-          {member.assigned_group_name}
-        </div>
+      {/* Add Staff Modal */}
+      {showAddModal && (
+        <AddStaffModal
+          campId={campId}
+          onClose={() => setShowAddModal(false)}
+          onSuccess={handleModalSuccess}
+        />
+      )}
+
+      {/* Edit Staff Modal */}
+      {editingAssignment && (
+        <EditStaffModal
+          campId={campId}
+          assignment={editingAssignment}
+          onClose={() => setEditingAssignment(null)}
+          onSuccess={handleModalSuccess}
+        />
       )}
     </div>
   )
 }
 
-function ReportsTab({ campId, routePrefix }: { campId: string; routePrefix: string }) {
+function StaffMemberRow({ member, onEdit }: { member: CampHqStaffMember; onEdit: () => void }) {
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-      <PortalCard title="Attendance Report">
-        <p className="text-white/50 text-sm mb-4">
-          Daily and weekly attendance summaries
+    <div className="flex items-center gap-4 p-3 bg-white/5 group">
+      {/* Avatar */}
+      <div className="h-10 w-10 bg-white/10 flex items-center justify-center text-white font-bold text-sm uppercase shrink-0">
+        {member.first_name.charAt(0)}
+        {member.last_name.charAt(0)}
+      </div>
+
+      {/* Info */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="font-bold text-white">
+            {member.first_name} {member.last_name}
+          </span>
+          {member.is_lead && (
+            <span className="px-1.5 py-0.5 text-[10px] bg-neon/20 text-neon font-bold uppercase">
+              Lead
+            </span>
+          )}
+          {member.is_ad_hoc && (
+            <span className="px-1.5 py-0.5 text-[10px] bg-purple/20 text-purple font-bold uppercase">
+              Ad-hoc
+            </span>
+          )}
+        </div>
+        <div className="text-sm text-white/50 truncate">{member.email}</div>
+        {member.call_time && (
+          <div className="text-xs text-white/40 mt-0.5">
+            {member.call_time}{member.end_time ? ` - ${member.end_time}` : ''}
+          </div>
+        )}
+      </div>
+
+      {/* Station */}
+      {member.station_name && (
+        <div className="px-2 py-1 text-xs font-bold uppercase bg-white/10 text-white/70 shrink-0">
+          {member.station_name}
+        </div>
+      )}
+
+      {/* Edit Button */}
+      <button
+        onClick={onEdit}
+        className="p-2 text-white/30 hover:text-white opacity-0 group-hover:opacity-100 transition-all shrink-0"
+        title="Edit"
+      >
+        <Pencil className="h-4 w-4" />
+      </button>
+    </div>
+  )
+}
+
+interface DailyReport {
+  id: string
+  dayNumber: number
+  date: string
+  status: string
+  recap?: {
+    wordOfTheDay?: string
+    primarySport?: string
+    secondarySport?: string
+    guestSpeakerName?: string
+  }
+  stats: {
+    checkedIn: number
+    checkedOut: number
+    absent: number
+  }
+}
+
+function ReportsTab({ campId, routePrefix }: { campId: string; routePrefix: string }) {
+  const [loading, setLoading] = useState(true)
+  const [reportSummary, setReportSummary] = useState<{
+    completedDays: number
+    totalDays: number
+    confirmedCampers: number
+    avgAttendanceRate: number
+  } | null>(null)
+
+  useEffect(() => {
+    async function loadReportSummary() {
+      try {
+        const res = await fetch(`/api/camps/${campId}/reports/daily`)
+        if (res.ok) {
+          const data = await res.json()
+          setReportSummary({
+            completedDays: data.attendance?.completedDays || 0,
+            totalDays: data.attendance?.totalDays || 0,
+            confirmedCampers: data.registration?.confirmed || 0,
+            avgAttendanceRate: data.attendance?.averageAttendanceRate || 0,
+          })
+        }
+      } catch (err) {
+        console.error('Failed to load report summary:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadReportSummary()
+  }, [campId])
+
+  return (
+    <div className="space-y-6">
+      {/* Main Report Card */}
+      <PortalCard title="Camp Report" accent="neon">
+        <p className="text-white/50 text-sm mb-6">
+          Comprehensive report with registration, attendance, daily breakdowns, and session highlights
         </p>
-        <Link
-          href={`${routePrefix}/${campId}/reports/attendance`}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-white/10 text-white font-bold uppercase tracking-wider hover:bg-white/20 transition-colors"
-        >
-          View Report
-          <ArrowRight className="h-4 w-4" />
-        </Link>
+
+        {loading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-6 w-6 text-neon animate-spin" />
+          </div>
+        ) : (
+          <>
+            {/* Quick Stats */}
+            {reportSummary && (
+              <div className="grid grid-cols-4 gap-4 mb-6">
+                <div className="text-center p-3 bg-neon/10 border border-neon/20">
+                  <div className="text-2xl font-bold text-neon">{reportSummary.confirmedCampers}</div>
+                  <div className="text-xs text-white/50">Campers</div>
+                </div>
+                <div className="text-center p-3 bg-purple/10 border border-purple/20">
+                  <div className="text-2xl font-bold text-purple">
+                    {reportSummary.avgAttendanceRate.toFixed(0)}%
+                  </div>
+                  <div className="text-xs text-white/50">Avg Attendance</div>
+                </div>
+                <div className="text-center p-3 bg-white/5 border border-white/10">
+                  <div className="text-2xl font-bold text-white">{reportSummary.completedDays}</div>
+                  <div className="text-xs text-white/50">Days Completed</div>
+                </div>
+                <div className="text-center p-3 bg-white/5 border border-white/10">
+                  <div className="text-2xl font-bold text-white">{reportSummary.totalDays}</div>
+                  <div className="text-xs text-white/50">Total Days</div>
+                </div>
+              </div>
+            )}
+
+            <Link
+              href={`${routePrefix}/${campId}/reports`}
+              className="inline-flex items-center gap-2 px-6 py-3 bg-neon text-black font-bold uppercase tracking-wider hover:bg-neon/90 transition-colors"
+            >
+              <FileBarChart className="h-5 w-5" />
+              View Full Report
+              <ArrowRight className="h-5 w-5" />
+            </Link>
+          </>
+        )}
       </PortalCard>
 
+      {/* Group Report - Keep separate as it's different */}
       <PortalCard title="Group Report">
         <p className="text-white/50 text-sm mb-4">
           Camper distribution across groups
         </p>
         <Link
           href={`${routePrefix}/${campId}/grouping/report`}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-white/10 text-white font-bold uppercase tracking-wider hover:bg-white/20 transition-colors"
-        >
-          View Report
-          <ArrowRight className="h-4 w-4" />
-        </Link>
-      </PortalCard>
-
-      <PortalCard title="Registration Report">
-        <p className="text-white/50 text-sm mb-4">
-          Registration trends and demographics
-        </p>
-        <Link
-          href={`${routePrefix}/${campId}/reports/registration`}
           className="inline-flex items-center gap-2 px-4 py-2 bg-white/10 text-white font-bold uppercase tracking-wider hover:bg-white/20 transition-colors"
         >
           View Report

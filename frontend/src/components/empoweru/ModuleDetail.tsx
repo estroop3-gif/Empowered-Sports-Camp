@@ -25,6 +25,7 @@ import type {
   PortalType,
 } from '@/lib/services/empoweru'
 import { QuizComponent } from './QuizComponent'
+import { useAuth } from '@/lib/auth/context'
 
 interface ModuleDetailProps {
   slug: string
@@ -34,6 +35,7 @@ interface ModuleDetailProps {
 
 export function ModuleDetail({ slug, portalType, backRoute }: ModuleDetailProps) {
   const router = useRouter()
+  const { refreshAuth } = useAuth()
   const [module, setModule] = useState<EmpowerUModuleWithProgress | null>(null)
   const [quiz, setQuiz] = useState<EmpowerUQuizDetail | null>(null)
   const [loading, setLoading] = useState(true)
@@ -100,7 +102,7 @@ export function ModuleDetail({ slug, portalType, backRoute }: ModuleDetailProps)
     }
   }
 
-  async function handleQuizSubmit(answers: { question_id: string; selected_option_id: string }[]) {
+  async function handleQuizSubmit(answers: { question_id: string; selected_option_id?: string; text_answer?: string }[]) {
     if (!module) return
 
     const res = await fetch(`/api/empoweru/modules/${module.id}/quiz`, {
@@ -128,6 +130,12 @@ export function ModuleDetail({ slug, portalType, backRoute }: ModuleDetailProps)
         quiz_score: json.data.score,
         quiz_passed: true,
       })
+
+      // If certification was awarded, refresh auth so dashboard unlocks
+      if (json.data.certification_awarded) {
+        console.log('[ModuleDetail] Certification awarded! Refreshing auth state...')
+        await refreshAuth()
+      }
     }
   }
 

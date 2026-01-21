@@ -1,17 +1,15 @@
 /**
  * Incentive Email Helper
  *
- * Sends compensation report emails using the email service.
+ * Sends compensation report emails using AWS SES.
  */
 
 import prisma from '@/lib/db/client'
-import { Resend } from 'resend'
+import { sendEmail, isEmailConfigured } from './ses-client'
 import type { CompensationSummary } from '@/lib/services/incentives'
 
 // HQ email for licensor notifications
 const HQ_OPS_EMAIL = process.env.HQ_OPS_EMAIL || 'ops@empoweredathletes.com'
-const DEFAULT_FROM_EMAIL = process.env.FROM_EMAIL || 'Empowered Sports Camp <noreply@empoweredsportscamp.com>'
-const RESEND_API_KEY = process.env.RESEND_API_KEY || ''
 const IS_DEVELOPMENT = process.env.NODE_ENV !== 'production'
 
 interface SendReportResult {
@@ -56,8 +54,8 @@ export async function sendCompensationReportEmail(params: {
     const emailHtml = buildCompensationReportHtml(summary, tenant.name)
     const subject = `Compensation Report: ${summary.camp.name} - ${summary.staff.name}`
 
-    // In development without API key, just log
-    if (IS_DEVELOPMENT && !RESEND_API_KEY) {
+    // In development without AWS credentials, just log
+    if (IS_DEVELOPMENT && !isEmailConfigured()) {
       console.log('[Email] Would send compensation report:', {
         to: recipients,
         cc: summary.staff.email,
@@ -73,17 +71,17 @@ export async function sendCompensationReportEmail(params: {
       }
     }
 
-    // Send via Resend
-    if (RESEND_API_KEY) {
-      const resend = new Resend(RESEND_API_KEY)
+    // Send via AWS SES
+    const result = await sendEmail({
+      to: recipients,
+      cc: summary.staff.email,
+      subject,
+      html: emailHtml,
+    })
 
-      await resend.emails.send({
-        from: DEFAULT_FROM_EMAIL,
-        to: recipients,
-        cc: summary.staff.email,
-        subject,
-        html: emailHtml,
-      })
+    if (!result.success) {
+      console.error('[Email] SES error:', result.error)
+      return { data: null, error: new Error(result.error) }
     }
 
     return {

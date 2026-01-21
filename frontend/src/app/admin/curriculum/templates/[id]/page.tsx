@@ -24,6 +24,7 @@ import {
   DIFFICULTIES,
   BLOCK_CATEGORIES,
 } from '@/lib/services/curriculum'
+import { PdfViewer } from '@/components/ui/pdf-viewer'
 import { cn } from '@/lib/utils'
 import {
   ArrowLeft,
@@ -48,17 +49,19 @@ import {
   Eye,
   Copy,
   Printer,
+  FileText,
 } from 'lucide-react'
 
 /**
  * Template Detail / Edit / Planner Page
  *
- * Three modes:
+ * Modes:
  * - Details tab: View/edit template metadata
- * - Planner tab: Day-by-day block editor
+ * - Planner tab: Day-by-day block editor (for structured templates)
+ * - PDF tab: View attached PDF document
  */
 
-type TabType = 'details' | 'planner'
+type TabType = 'details' | 'planner' | 'pdf'
 
 export default function TemplateDetailPage() {
   const router = useRouter()
@@ -74,9 +77,21 @@ export default function TemplateDetailPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Tab state
-  const initialTab = searchParams.get('tab') as TabType || 'details'
-  const [activeTab, setActiveTab] = useState<TabType>(initialTab)
+  // Tab state - default to 'pdf' for PDF-only templates
+  const tabFromUrl = searchParams.get('tab') as TabType
+  const getInitialTab = (): TabType => {
+    if (tabFromUrl) return tabFromUrl
+    // Will be updated once template loads
+    return 'details'
+  }
+  const [activeTab, setActiveTab] = useState<TabType>(getInitialTab())
+
+  // Update tab when template loads for PDF-only templates
+  useEffect(() => {
+    if (template?.is_pdf_only && !tabFromUrl && activeTab !== 'pdf') {
+      setActiveTab('pdf')
+    }
+  }, [template?.is_pdf_only, tabFromUrl, activeTab])
 
   // Modal states
   const [showAddDay, setShowAddDay] = useState(false)
@@ -85,6 +100,10 @@ export default function TemplateDetailPage() {
   const [showDuplicateModal, setShowDuplicateModal] = useState(false)
   const [duplicating, setDuplicating] = useState(false)
   const [showPrintView, setShowPrintView] = useState(false)
+
+  // PDF viewer state
+  const [pdfViewerUrl, setPdfViewerUrl] = useState<string | null>(null)
+  const [loadingPdf, setLoadingPdf] = useState(false)
 
   // Drag and drop state
   const [draggedBlockId, setDraggedBlockId] = useState<string | null>(null)
@@ -419,26 +438,58 @@ export default function TemplateDetailPage() {
             <Eye className="h-4 w-4" />
             Details
           </button>
-          <button
-            onClick={() => setActiveTab('planner')}
-            className={cn(
-              'flex items-center gap-2 px-6 py-4 text-sm font-bold uppercase tracking-wider transition-colors border-b-2 -mb-px',
-              activeTab === 'planner'
-                ? 'text-magenta border-magenta'
-                : 'text-white/50 border-transparent hover:text-white/70'
-            )}
-          >
-            <Blocks className="h-4 w-4" />
-            Day Planner
-            <span className={cn(
-              'ml-2 px-2 py-0.5 text-xs rounded-sm',
-              activeTab === 'planner'
-                ? 'bg-magenta/20 text-magenta'
-                : 'bg-white/10 text-white/50'
-            )}>
-              {template.days?.length || 0} days
-            </span>
-          </button>
+          {/* Only show Day Planner for structured templates */}
+          {!template.is_pdf_only && (
+            <button
+              onClick={() => setActiveTab('planner')}
+              className={cn(
+                'flex items-center gap-2 px-6 py-4 text-sm font-bold uppercase tracking-wider transition-colors border-b-2 -mb-px',
+                activeTab === 'planner'
+                  ? 'text-magenta border-magenta'
+                  : 'text-white/50 border-transparent hover:text-white/70'
+              )}
+            >
+              <Blocks className="h-4 w-4" />
+              Day Planner
+              <span className={cn(
+                'ml-2 px-2 py-0.5 text-xs rounded-sm',
+                activeTab === 'planner'
+                  ? 'bg-magenta/20 text-magenta'
+                  : 'bg-white/10 text-white/50'
+              )}>
+                {template.days?.length || 0} days
+              </span>
+            </button>
+          )}
+          {/* Show PDF tab if template has a PDF */}
+          {template.pdf_url && (
+            <button
+              onClick={() => {
+                setActiveTab('pdf')
+                // Fetch presigned URL when tab is clicked
+                if (!pdfViewerUrl && !loadingPdf) {
+                  setLoadingPdf(true)
+                  fetch(`/api/curriculum/document?type=template&id=${template.id}`)
+                    .then(res => res.json())
+                    .then(data => {
+                      if (data.url) {
+                        setPdfViewerUrl(data.url)
+                      }
+                    })
+                    .finally(() => setLoadingPdf(false))
+                }
+              }}
+              className={cn(
+                'flex items-center gap-2 px-6 py-4 text-sm font-bold uppercase tracking-wider transition-colors border-b-2 -mb-px',
+                activeTab === 'pdf'
+                  ? 'text-purple border-purple'
+                  : 'text-white/50 border-transparent hover:text-white/70'
+              )}
+            >
+              <FileText className="h-4 w-4" />
+              PDF Document
+            </button>
+          )}
         </div>
       </div>
 
@@ -448,7 +499,7 @@ export default function TemplateDetailPage() {
       )}
 
       {/* Planner Tab */}
-      {activeTab === 'planner' && (
+      {activeTab === 'planner' && !template.is_pdf_only && (
         <DayPlannerTab
           template={template}
           allBlocks={allBlocks}
@@ -464,6 +515,49 @@ export default function TemplateDetailPage() {
           onDragEnd={handleDragEnd}
           draggedBlockId={draggedBlockId}
         />
+      )}
+
+      {/* PDF Tab */}
+      {activeTab === 'pdf' && template.pdf_url && (
+        <div className="h-[calc(100vh-320px)] min-h-[600px]">
+          {loadingPdf ? (
+            <div className="flex items-center justify-center h-full bg-gray-900">
+              <div className="flex flex-col items-center gap-4">
+                <Loader2 className="h-12 w-12 animate-spin text-neon" />
+                <p className="text-white/60">Loading PDF...</p>
+              </div>
+            </div>
+          ) : pdfViewerUrl ? (
+            <PdfViewer
+              url={pdfViewerUrl}
+              filename={template.pdf_name || 'curriculum.pdf'}
+              className="h-full"
+            />
+          ) : (
+            <div className="flex items-center justify-center h-full bg-gray-900">
+              <div className="text-center">
+                <FileText className="h-16 w-16 text-white/20 mx-auto mb-4" />
+                <p className="text-white/60 mb-2">Unable to load PDF</p>
+                <button
+                  onClick={() => {
+                    setLoadingPdf(true)
+                    fetch(`/api/curriculum/document?type=template&id=${template.id}`)
+                      .then(res => res.json())
+                      .then(data => {
+                        if (data.url) {
+                          setPdfViewerUrl(data.url)
+                        }
+                      })
+                      .finally(() => setLoadingPdf(false))
+                  }}
+                  className="px-4 py-2 bg-neon text-black font-bold uppercase tracking-wider text-sm hover:bg-neon/90 transition-colors"
+                >
+                  Retry
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       )}
 
       {/* Add Day Modal */}

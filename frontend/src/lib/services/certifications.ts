@@ -2,7 +2,6 @@
  * Certifications Service
  *
  * Prisma-based service for volunteer certifications.
- * Replaces Supabase queries for certification management.
  */
 
 import prisma from '@/lib/db/client'

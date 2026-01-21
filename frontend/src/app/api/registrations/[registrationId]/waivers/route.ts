@@ -103,11 +103,45 @@ export async function POST(
     }
 
     const body = await request.json()
-    const { waiverTemplateId, signerName, signerEmail, signaturePayload } = body
+    const { waiverTemplateId, signerName, signerEmail, signaturePayload, signatureTyped, signatureDateEntered } = body
 
     if (!waiverTemplateId || !signerName || !signerEmail) {
       return NextResponse.json(
         { error: 'Missing required fields: waiverTemplateId, signerName, signerEmail' },
+        { status: 400 }
+      )
+    }
+
+    // Validate typed signature
+    if (!signatureTyped || signatureTyped.trim().length < 2) {
+      return NextResponse.json(
+        { error: 'Typed signature is required and must be at least 2 characters' },
+        { status: 400 }
+      )
+    }
+
+    // Validate date
+    if (!signatureDateEntered) {
+      return NextResponse.json(
+        { error: 'Signature date is required' },
+        { status: 400 }
+      )
+    }
+
+    const parsedDate = new Date(signatureDateEntered)
+    if (isNaN(parsedDate.getTime())) {
+      return NextResponse.json(
+        { error: 'Invalid signature date format' },
+        { status: 400 }
+      )
+    }
+
+    // Date cannot be in the future
+    const today = new Date()
+    today.setHours(23, 59, 59, 999)
+    if (parsedDate > today) {
+      return NextResponse.json(
+        { error: 'Signature date cannot be in the future' },
         { status: 400 }
       )
     }
@@ -129,6 +163,8 @@ export async function POST(
         signerEmail,
         signerIpAddress,
         signaturePayloadJson: signaturePayload || null,
+        signatureTyped: signatureTyped.trim(),
+        signatureDateEntered: parsedDate,
       },
       registration.camp.tenantId
     )
