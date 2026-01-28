@@ -474,8 +474,16 @@ export async function updateCamp(id: string, formData: Partial<CampFormData>): P
     if (formData.slug !== undefined) updateData.slug = formData.slug
     if (formData.description !== undefined) updateData.description = formData.description || null
     if (formData.sport !== undefined) updateData.sportsOffered = formData.sport ? [formData.sport] : []
-    if (formData.location_id !== undefined) updateData.locationId = formData.location_id || null
-    if (formData.venue_id !== undefined) updateData.venueId = formData.venue_id || null
+    if (formData.location_id !== undefined) {
+      updateData.location = formData.location_id
+        ? { connect: { id: formData.location_id } }
+        : { disconnect: true }
+    }
+    if (formData.venue_id !== undefined) {
+      updateData.venue = formData.venue_id
+        ? { connect: { id: formData.venue_id } }
+        : { disconnect: true }
+    }
     if (formData.start_date !== undefined) updateData.startDate = new Date(formData.start_date)
     if (formData.end_date !== undefined) updateData.endDate = new Date(formData.end_date)
     if (formData.start_time !== undefined) {
@@ -506,10 +514,7 @@ export async function updateCamp(id: string, formData: Partial<CampFormData>): P
 
     if (formData.status !== undefined) {
       updateData.status = mapStatusToDb(formData.status)
-      updateData.registrationOpen = formData.status === 'open'
-      if (formData.status !== 'draft') {
-        updateData.publishedAt = new Date()
-      }
+      updateData.registrationOpen = formData.status === 'open' ? new Date() : null
     }
 
     const camp = await prisma.camp.update({
