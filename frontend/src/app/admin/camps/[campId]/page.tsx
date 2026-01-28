@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useEffect, use } from 'react'
+import { useState, useEffect, use, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import Image from 'next/image'
 import { AdminLayout, PageHeader, ContentCard } from '@/components/admin/admin-layout'
 import { useAuth } from '@/lib/auth/context'
 import {
@@ -18,8 +19,15 @@ import {
   Loader2,
   ExternalLink,
   Shield,
+  ImagePlus,
+  Search,
+  ChevronDown,
+  X,
+  Building2,
+  Check,
 } from 'lucide-react'
 import { CampWaiverSelector } from '@/components/waivers/CampWaiverSelector'
+import { useUpload, STORAGE_FOLDERS } from '@/lib/storage/use-upload'
 
 // Types (defined locally to avoid Prisma imports in client component)
 interface AdminCamp {
@@ -51,6 +59,7 @@ interface CampFormData {
   description: string
   sport: string
   location_id: string | null
+  venue_id: string | null
   start_date: string
   end_date: string
   start_time: string
@@ -64,6 +73,18 @@ interface CampFormData {
   status: 'draft' | 'published' | 'open' | 'closed'
   featured: boolean
   image_url: string | null
+}
+
+interface Venue {
+  id: string
+  name: string
+  short_name: string | null
+  city: string
+  state: string
+  facility_type: string | null
+  indoor_outdoor: string | null
+  tenant_id: string | null
+  is_global: boolean
 }
 
 interface Location {
@@ -108,6 +129,17 @@ export default function AdminEditCampPage({ params }: { params: Promise<{ campId
   const [camp, setCamp] = useState<AdminCamp | null>(null)
   const [userRole, setUserRole] = useState<string | null>(null)
   const [locations, setLocations] = useState<Location[]>([])
+  const [venues, setVenues] = useState<Venue[]>([])
+
+  // Venue search dropdown state
+  const [venueSearchQuery, setVenueSearchQuery] = useState('')
+  const [venueDropdownOpen, setVenueDropdownOpen] = useState(false)
+  const venueDropdownRef = useRef<HTMLDivElement>(null)
+
+  // Image upload state
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const { upload, uploading, progress, error: uploadError } = useUpload()
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
 
   const [formData, setFormData] = useState<CampFormData>({
     name: '',
@@ -115,6 +147,7 @@ export default function AdminEditCampPage({ params }: { params: Promise<{ campId
     description: '',
     sport: 'Multi-Sport',
     location_id: null,
+    venue_id: null,
     start_date: '',
     end_date: '',
     start_time: '09:00',
@@ -129,6 +162,51 @@ export default function AdminEditCampPage({ params }: { params: Promise<{ campId
     featured: false,
     image_url: null,
   })
+
+  // Close venue dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (venueDropdownRef.current && !venueDropdownRef.current.contains(event.target as Node)) {
+        setVenueDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  // Filter venues based on search query
+  const filteredVenues = venues.filter(venue => {
+    if (!venueSearchQuery) return true
+    const query = venueSearchQuery.toLowerCase()
+    return (
+      venue.name.toLowerCase().includes(query) ||
+      venue.city.toLowerCase().includes(query) ||
+      venue.state.toLowerCase().includes(query) ||
+      (venue.short_name && venue.short_name.toLowerCase().includes(query))
+    )
+  })
+
+  const selectedVenue = venues.find(v => v.id === formData.venue_id)
+
+  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith('image/')) { setError('Please select an image file'); return }
+    if (file.size > 5 * 1024 * 1024) { setError('Image must be less than 5MB'); return }
+    const reader = new FileReader()
+    reader.onloadend = () => setImagePreview(reader.result as string)
+    reader.readAsDataURL(file)
+    const result = await upload(file, { folder: STORAGE_FOLDERS.CAMP_IMAGES })
+    if (result) {
+      setFormData(prev => ({ ...prev, image_url: result.fileUrl }))
+    }
+  }
+
+  const handleRemoveImage = () => {
+    setImagePreview(null)
+    setFormData(prev => ({ ...prev, image_url: null }))
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
 
   useEffect(() => {
     if (user) {
@@ -170,6 +248,7 @@ export default function AdminEditCampPage({ params }: { params: Promise<{ campId
         description: campData.description || '',
         sport: campData.sport || 'Multi-Sport',
         location_id: campData.location_id,
+        venue_id: campData.venue_id || null,
         start_date: campData.start_date,
         end_date: campData.end_date,
         start_time: campData.start_time || '09:00',
@@ -185,11 +264,28 @@ export default function AdminEditCampPage({ params }: { params: Promise<{ campId
         image_url: campData.image_url,
       })
 
+      // Set image preview if camp has an image
+      if (campData.image_url) {
+        setImagePreview(campData.image_url)
+      }
+
       // Fetch locations from API
-      const locationsResponse = await fetch(`/api/admin/camps/locations?tenantId=${campData.tenant_id}`)
-      if (locationsResponse.ok) {
-        const locationsData = await locationsResponse.json()
-        setLocations(locationsData.locations || [])
+      if (campData.tenant_id) {
+        const locationsResponse = await fetch(`/api/admin/camps/locations?tenantId=${campData.tenant_id}`)
+        if (locationsResponse.ok) {
+          const locationsData = await locationsResponse.json()
+          setLocations(locationsData.locations || [])
+        }
+      }
+
+      // Fetch venues
+      const venueUrl = campData.tenant_id
+        ? `/api/admin/camps/venues?tenantId=${campData.tenant_id}`
+        : '/api/admin/camps/venues'
+      const venuesResponse = await fetch(venueUrl)
+      if (venuesResponse.ok) {
+        const venuesData = await venuesResponse.json()
+        setVenues(venuesData.venues || [])
       }
     } catch (err) {
       console.error('Failed to load camp:', err)
@@ -372,24 +468,199 @@ export default function AdminEditCampPage({ params }: { params: Promise<{ campId
               </div>
             </ContentCard>
 
-            <ContentCard title="Location" accent="magenta">
+            {/* Camp Photo */}
+            <ContentCard title="Camp Photo" accent="purple">
+              <div className="space-y-4">
+                <p className="text-sm text-white/60">
+                  <ImagePlus className="h-4 w-4 inline mr-2" />
+                  Upload a main photo for this camp. This will be displayed on the camp listing page.
+                </p>
+
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageSelect}
+                  className="hidden"
+                />
+
+                {imagePreview || formData.image_url ? (
+                  <div className="relative aspect-video w-full max-w-md overflow-hidden border border-white/20">
+                    <Image
+                      src={imagePreview || formData.image_url || ''}
+                      alt="Camp preview"
+                      fill
+                      className="object-cover"
+                    />
+                    {uploading && (
+                      <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center">
+                        <Loader2 className="h-8 w-8 text-neon animate-spin mb-2" />
+                        <span className="text-white text-sm">{progress}%</span>
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleRemoveImage}
+                      disabled={uploading}
+                      className="absolute top-2 right-2 p-2 bg-black/80 text-white hover:bg-magenta/80 transition-colors"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploading}
+                    className="w-full max-w-md aspect-video flex flex-col items-center justify-center border-2 border-dashed border-white/20 hover:border-purple/50 transition-colors bg-white/5 cursor-pointer"
+                  >
+                    {uploading ? (
+                      <>
+                        <Loader2 className="h-10 w-10 text-purple animate-spin mb-3" />
+                        <span className="text-white/50">Uploading... {progress}%</span>
+                      </>
+                    ) : (
+                      <>
+                        <ImagePlus className="h-10 w-10 text-white/30 mb-3" />
+                        <span className="text-white/50 text-sm font-medium">Click to upload camp photo</span>
+                        <span className="text-white/30 text-xs mt-1">PNG, JPG up to 5MB</span>
+                      </>
+                    )}
+                  </button>
+                )}
+
+                {uploadError && (
+                  <p className="text-sm text-magenta">{uploadError}</p>
+                )}
+              </div>
+            </ContentCard>
+
+            {/* Venue */}
+            <ContentCard title="Venue" accent="magenta">
               <div>
                 <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
                   <MapPin className="h-4 w-4 inline mr-2" />
-                  Venue
+                  Select Venue
                 </label>
-                <select
-                  value={formData.location_id || ''}
-                  onChange={(e) => setFormData(prev => ({ ...prev, location_id: e.target.value || null }))}
-                  className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-magenta focus:outline-none"
-                >
-                  <option value="">Select a location...</option>
-                  {locations.map(loc => (
-                    <option key={loc.id} value={loc.id}>
-                      {loc.name} - {loc.city}, {loc.state}
-                    </option>
-                  ))}
-                </select>
+
+                <div className="relative" ref={venueDropdownRef}>
+                  <button
+                    type="button"
+                    onClick={() => setVenueDropdownOpen(!venueDropdownOpen)}
+                    className={`w-full px-4 py-3 bg-black border text-left flex items-center justify-between transition-colors ${
+                      venueDropdownOpen ? 'border-magenta' : 'border-white/20'
+                    } hover:border-white/40`}
+                  >
+                    {selectedVenue ? (
+                      <div className="flex items-center gap-3 min-w-0">
+                        <Building2 className="h-4 w-4 text-magenta flex-shrink-0" />
+                        <div className="min-w-0">
+                          <span className="text-white truncate block">{selectedVenue.name}</span>
+                          <span className="text-white/50 text-sm">{selectedVenue.city}, {selectedVenue.state}</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <span className="text-white/40">Search and select a venue...</span>
+                    )}
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {selectedVenue && (
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setFormData(prev => ({ ...prev, venue_id: null }))
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.stopPropagation()
+                              setFormData(prev => ({ ...prev, venue_id: null }))
+                            }
+                          }}
+                          className="p-1 hover:bg-white/10 rounded cursor-pointer"
+                        >
+                          <X className="h-4 w-4 text-white/40 hover:text-white" />
+                        </span>
+                      )}
+                      <ChevronDown className={`h-4 w-4 text-white/40 transition-transform ${venueDropdownOpen ? 'rotate-180' : ''}`} />
+                    </div>
+                  </button>
+
+                  {venueDropdownOpen && (
+                    <>
+                      <div className="fixed inset-0 z-[60]" onClick={() => setVenueDropdownOpen(false)} />
+                      <div className="absolute z-[70] w-full mt-1 bg-dark-100 border border-white/20 shadow-2xl">
+                        <div className="p-3 border-b border-white/10">
+                          <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
+                            <input
+                              type="text"
+                              value={venueSearchQuery}
+                              onChange={(e) => setVenueSearchQuery(e.target.value)}
+                              placeholder="Search venues..."
+                              className="w-full pl-10 pr-4 py-2 bg-black border border-white/20 text-white placeholder:text-white/30 focus:border-magenta focus:outline-none text-sm"
+                              autoFocus
+                            />
+                          </div>
+                        </div>
+
+                        <div className="max-h-[60vh] overflow-y-auto">
+                          {filteredVenues.length === 0 ? (
+                            <div className="p-4 text-center text-white/40 text-sm">
+                              {venueSearchQuery ? 'No venues match your search' : 'No venues available'}
+                            </div>
+                          ) : (
+                            filteredVenues.map(venue => (
+                              <button
+                                key={venue.id}
+                                type="button"
+                                onClick={() => {
+                                  setFormData(prev => ({ ...prev, venue_id: venue.id }))
+                                  setVenueDropdownOpen(false)
+                                  setVenueSearchQuery('')
+                                }}
+                                className={`w-full px-4 py-3 flex items-center gap-3 text-left hover:bg-white/5 transition-colors ${
+                                  formData.venue_id === venue.id ? 'bg-magenta/10' : ''
+                                }`}
+                              >
+                                <Building2 className={`h-4 w-4 flex-shrink-0 ${formData.venue_id === venue.id ? 'text-magenta' : 'text-white/40'}`} />
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <span className={`font-medium ${formData.venue_id === venue.id ? 'text-magenta' : 'text-white'}`}>
+                                      {venue.name}
+                                    </span>
+                                    {venue.is_global && (
+                                      <span className="px-1.5 py-0.5 text-xs bg-purple/20 text-purple uppercase tracking-wider">Global</span>
+                                    )}
+                                  </div>
+                                  <div className="text-sm text-white/50 flex items-center gap-2">
+                                    <span>{venue.city}, {venue.state}</span>
+                                    {venue.facility_type && (
+                                      <>
+                                        <span className="text-white/20">·</span>
+                                        <span className="capitalize">{venue.facility_type.replace(/_/g, ' ')}</span>
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+                                {formData.venue_id === venue.id && (
+                                  <Check className="h-4 w-4 text-magenta flex-shrink-0" />
+                                )}
+                              </button>
+                            ))
+                          )}
+                        </div>
+
+                        <div className="p-3 border-t border-white/10">
+                          <Link href="/admin/venues/new" className="flex items-center gap-2 text-sm text-neon hover:underline">
+                            <MapPin className="h-4 w-4" />
+                            Add a new venue
+                          </Link>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
             </ContentCard>
 
