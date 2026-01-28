@@ -35,8 +35,8 @@ export const metadata: Metadata = {
   ],
   authors: [{ name: "Empowered Sports Camp" }],
   icons: {
-    icon: "/images/logo.png",
-    apple: "/images/logo.png",
+    icon: "/images/logo-small.png",
+    apple: "/images/logo-small.png",
   },
   openGraph: {
     type: "website",
