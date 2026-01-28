@@ -81,7 +81,8 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ camp })
   } catch (error) {
     console.error('[API] PUT /api/admin/camps/[campId] error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    const message = error instanceof Error ? error.message : 'Internal server error'
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }
 

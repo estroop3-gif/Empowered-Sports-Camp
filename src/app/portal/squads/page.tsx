@@ -330,11 +330,11 @@ export default function SquadsPage() {
                     >
                       <div className="flex items-center gap-3">
                         <div className="h-8 w-8 bg-neon/20 text-neon flex items-center justify-center text-sm font-bold">
-                          {member.athleteName.charAt(0)}
+                          {member.athleteName?.charAt(0) || '?'}
                         </div>
                         <div>
-                          <p className="text-white font-medium text-sm">{member.athleteName}</p>
-                          <p className="text-xs text-white/40">{member.parentName}</p>
+                          <p className="text-white font-medium text-sm">{member.athleteName || 'Unknown'}</p>
+                          <p className="text-xs text-white/40">{member.parentName || 'Unknown'}</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">

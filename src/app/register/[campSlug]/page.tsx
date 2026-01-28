@@ -199,8 +199,28 @@ const DEFAULT_ADDONS: AddOn[] = [
 ]
 
 function RegistrationContent({ camp, addons }: { camp: CampSession; addons: AddOn[] }) {
+  const router = useRouter()
   const { state, setStep, setCamp, setSquad, nextStep, prevStep } = useCheckout()
   const [confirmationNumber, setConfirmationNumber] = useState<string | null>(null)
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
+
+  // Check authentication status on mount
+  useEffect(() => {
+    async function checkAuth() {
+      try {
+        const response = await fetch('/api/auth/me')
+        setIsAuthenticated(response.ok)
+      } catch {
+        setIsAuthenticated(false)
+      }
+    }
+    checkAuth()
+  }, [])
+
+  // Go back to camps page from camper form
+  const handleBackToCamps = () => {
+    router.push('/camps')
+  }
 
   // Set camp on mount
   useEffect(() => {
@@ -214,6 +234,13 @@ function RegistrationContent({ camp, addons }: { camp: CampSession; addons: AddO
     }
   }, [state.step, state.campSession, setStep])
 
+  // Auto-skip account step if user is already logged in
+  useEffect(() => {
+    if (state.step === 'account' && isAuthenticated === true) {
+      nextStep() // Skip to payment
+    }
+  }, [state.step, isAuthenticated, nextStep])
+
   const handlePaymentComplete = async (sessionId: string) => {
     // This callback is called in demo mode when Stripe isn't configured
     // In production, users are redirected to Stripe and return to /register/confirmation
@@ -223,6 +250,15 @@ function RegistrationContent({ camp, addons }: { camp: CampSession; addons: AddO
 
     // Move to confirmation step
     setStep('confirmation')
+  }
+
+  // Custom back handler for payment step - skip account if authenticated
+  const handlePaymentBack = () => {
+    if (isAuthenticated) {
+      setStep('waivers') // Skip account step, go directly to waivers
+    } else {
+      prevStep()
+    }
   }
 
   // Build registered athletes from campers for squad feature
@@ -247,6 +283,7 @@ function RegistrationContent({ camp, addons }: { camp: CampSession; addons: AddO
           <CamperForm
             campSession={camp}
             onContinue={nextStep}
+            onBack={handleBackToCamps}
           />
         )
 
@@ -295,7 +332,7 @@ function RegistrationContent({ camp, addons }: { camp: CampSession; addons: AddO
         return (
           <PaymentStep
             onComplete={handlePaymentComplete}
-            onBack={prevStep}
+            onBack={handlePaymentBack}
           />
         )
 
@@ -452,7 +489,7 @@ export default function RegisterPage() {
   }
 
   return (
-    <CheckoutProvider>
+    <CheckoutProvider campSlug={params.campSlug as string}>
       <RegistrationContent camp={camp} addons={addons} />
     </CheckoutProvider>
   )

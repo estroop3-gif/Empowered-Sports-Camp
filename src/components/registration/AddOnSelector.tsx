@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Image from 'next/image'
 import { Flame, Shirt, Package, Sparkles, Plus, Minus, Check, AlertTriangle } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -45,9 +45,74 @@ interface AddOnCardProps {
 
 function AddOnCard({ addon, campers }: AddOnCardProps) {
   const { addAddOn, removeAddOn, getAddOnQuantity, updateAddOnQuantity } = useCheckout()
+
+  // For per_order items or single variant, use simple variant selection
   const [selectedVariant, setSelectedVariant] = useState<AddOnVariant | null>(
     addon.variants.length === 1 ? addon.variants[0] : null
   )
+
+  // Per-camper variant selection (camper ID -> variant ID)
+  const [variantsPerCamper, setVariantsPerCamper] = useState<Record<string, string>>({})
+
+  // Auto-fill variants from camper's tshirtSize when camper data changes
+  useEffect(() => {
+    // Map t-shirt size codes to possible variant name patterns
+    const sizePatterns: Record<string, string[]> = {
+      'YXS': ['YXS', 'Youth XS', 'Youth Extra Small', 'Youth Extra-Small', 'XS Youth'],
+      'YS': ['YS', 'Youth S', 'Youth Small', 'S Youth', 'Youth SM'],
+      'YM': ['YM', 'Youth M', 'Youth Medium', 'M Youth', 'Youth MED'],
+      'YL': ['YL', 'Youth L', 'Youth Large', 'L Youth', 'Youth LG'],
+      'AS': ['AS', 'Adult S', 'Adult Small', 'S Adult', 'Adult SM', 'Small', 'S'],
+      'AM': ['AM', 'Adult M', 'Adult Medium', 'M Adult', 'Adult MED', 'Medium', 'M'],
+      'AL': ['AL', 'Adult L', 'Adult Large', 'L Adult', 'Adult LG', 'Large', 'L'],
+      'AXL': ['AXL', 'Adult XL', 'Adult Extra Large', 'Adult Extra-Large', 'XL Adult', 'XL', 'Extra Large'],
+    }
+
+    // Find a variant that matches a t-shirt size
+    const findMatchingVariant = (tshirtSize: string) => {
+      const patterns = sizePatterns[tshirtSize.toUpperCase()] || []
+      return addon.variants.find(v => {
+        const variantName = v.name.toUpperCase()
+        // Check exact matches from patterns
+        for (const pattern of patterns) {
+          if (variantName === pattern.toUpperCase()) return true
+          // Also check if variant starts with or contains the pattern
+          if (variantName.startsWith(pattern.toUpperCase())) return true
+        }
+        // Fallback: direct match with tshirtSize
+        if (variantName === tshirtSize.toUpperCase()) return true
+        if (variantName.startsWith(tshirtSize.toUpperCase())) return true
+        return false
+      })
+    }
+
+    setVariantsPerCamper(prev => {
+      const newVariants: Record<string, string> = { ...prev }
+      let hasChanges = false
+
+      campers.forEach(c => {
+        // Skip if already has a variant selected for this camper
+        if (newVariants[c.id]) return
+
+        // If only one variant, pre-select it
+        if (addon.variants.length === 1) {
+          newVariants[c.id] = addon.variants[0].id
+          hasChanges = true
+        }
+        // If camper has a t-shirt size and this is apparel with size variants, try to match
+        else if (c.tshirtSize && addon.addonType === 'apparel' && addon.variants.length > 0) {
+          const matchingVariant = findMatchingVariant(c.tshirtSize)
+          if (matchingVariant) {
+            newVariants[c.id] = matchingVariant.id
+            hasChanges = true
+          }
+        }
+      })
+
+      return hasChanges ? newVariants : prev
+    })
+  }, [campers, addon.variants, addon.addonType])
+
   // Support multiple camper selection
   const [selectedCampers, setSelectedCampers] = useState<string[]>(
     addon.scope === 'per_order' || campers.length === 1
@@ -58,17 +123,41 @@ function AddOnCard({ addon, campers }: AddOnCardProps) {
   const hasVariants = addon.variants.length > 0
   const needsVariant = hasVariants && addon.variants.length > 1
   const needsCamperSelection = addon.scope === 'per_camper' && campers.length > 1
+  const isPerCamperWithVariants = addon.scope === 'per_camper' && needsVariant
 
-  const currentPrice = selectedVariant?.priceOverride ?? addon.price
+  // Get variant by ID
+  const getVariantById = (variantId: string) => addon.variants.find(v => v.id === variantId)
 
-  // Get total quantity across all selected campers
+  // Get price for display (use first selected camper's variant or base price)
+  const getDisplayPrice = () => {
+    if (isPerCamperWithVariants && selectedCampers.length > 0) {
+      const firstCamperVariantId = variantsPerCamper[selectedCampers[0]]
+      if (firstCamperVariantId) {
+        const variant = getVariantById(firstCamperVariantId)
+        return variant?.priceOverride ?? addon.price
+      }
+    }
+    return selectedVariant?.priceOverride ?? addon.price
+  }
+  const currentPrice = getDisplayPrice()
+
+  // Get total quantity across all selected campers (checking all variants)
   const getTotalQuantity = () => {
     if (addon.scope === 'per_order') {
       return getAddOnQuantity(addon.id, selectedVariant?.id ?? null, null)
     }
-    return selectedCampers.reduce((total, camperId) => {
-      return total + getAddOnQuantity(addon.id, selectedVariant?.id ?? null, camperId)
-    }, 0)
+    // For per_camper items, sum quantities across all campers and variants
+    let total = 0
+    campers.forEach(camper => {
+      addon.variants.forEach(variant => {
+        total += getAddOnQuantity(addon.id, variant.id, camper.id)
+      })
+      // Also check for null variant (non-variant items)
+      if (addon.variants.length === 0) {
+        total += getAddOnQuantity(addon.id, null, camper.id)
+      }
+    })
+    return total
   }
 
   const currentQuantity = getTotalQuantity()
@@ -89,28 +178,48 @@ function AddOnCard({ addon, campers }: AddOnCardProps) {
     setSelectedCampers(campers.map(c => c.id))
   }
 
+  // Set variant for a specific camper
+  const setVariantForCamper = (camperId: string, variantId: string) => {
+    setVariantsPerCamper(prev => ({
+      ...prev,
+      [camperId]: variantId
+    }))
+  }
+
+  // Check if all selected campers have variants selected
+  const allCampersHaveVariants = () => {
+    if (!isPerCamperWithVariants) return true
+    return selectedCampers.every(camperId => variantsPerCamper[camperId])
+  }
+
   const handleAdd = () => {
-    if (needsVariant && !selectedVariant) return
     if (needsCamperSelection && selectedCampers.length === 0) return
 
     // For per_order items, add once with null camperId
     if (addon.scope === 'per_order') {
+      if (needsVariant && !selectedVariant) return
       addAddOn({
         addonId: addon.id,
         variantId: selectedVariant?.id ?? null,
         camperId: null,
         quantity: 1,
-        unitPrice: currentPrice,
+        unitPrice: selectedVariant?.priceOverride ?? addon.price,
       })
     } else {
-      // For per_camper items, add for each selected camper
+      // For per_camper items, add for each selected camper with their specific variant
       selectedCampers.forEach(camperId => {
+        const variantId = isPerCamperWithVariants ? variantsPerCamper[camperId] : (selectedVariant?.id ?? null)
+        if (isPerCamperWithVariants && !variantId) return // Skip if no variant selected for this camper
+
+        const variant = variantId ? getVariantById(variantId) : null
+        const price = variant?.priceOverride ?? addon.price
+
         addAddOn({
           addonId: addon.id,
-          variantId: selectedVariant?.id ?? null,
+          variantId: variantId,
           camperId: camperId,
           quantity: 1,
-          unitPrice: currentPrice,
+          unitPrice: price,
         })
       })
     }
@@ -121,11 +230,22 @@ function AddOnCard({ addon, campers }: AddOnCardProps) {
       const newQuantity = getAddOnQuantity(addon.id, selectedVariant?.id ?? null, null) + delta
       updateAddOnQuantity(addon.id, selectedVariant?.id ?? null, null, newQuantity)
     } else {
-      // Update quantity for each selected camper
-      selectedCampers.forEach(camperId => {
-        const camperQuantity = getAddOnQuantity(addon.id, selectedVariant?.id ?? null, camperId)
-        const newQuantity = camperQuantity + delta
-        updateAddOnQuantity(addon.id, selectedVariant?.id ?? null, camperId, newQuantity)
+      // Update quantity for each camper with their specific variant
+      campers.forEach(camper => {
+        // Find if this camper has any addon with any variant
+        addon.variants.forEach(variant => {
+          const qty = getAddOnQuantity(addon.id, variant.id, camper.id)
+          if (qty > 0) {
+            updateAddOnQuantity(addon.id, variant.id, camper.id, qty + delta)
+          }
+        })
+        // Also handle non-variant items
+        if (addon.variants.length === 0) {
+          const qty = getAddOnQuantity(addon.id, null, camper.id)
+          if (qty > 0) {
+            updateAddOnQuantity(addon.id, null, camper.id, qty + delta)
+          }
+        }
       })
     }
   }
@@ -195,8 +315,8 @@ function AddOnCard({ addon, campers }: AddOnCardProps) {
           </div>
         </div>
 
-        {/* Variant Selection */}
-        {needsVariant && (
+        {/* Variant Selection - for per_order items only */}
+        {needsVariant && addon.scope === 'per_order' && (
           <div className="mt-4">
             <label className="text-xs font-semibold uppercase tracking-wider text-white/40 block mb-2">
               Select Size
@@ -223,12 +343,12 @@ function AddOnCard({ addon, campers }: AddOnCardProps) {
           </div>
         )}
 
-        {/* Camper Selection (for per-camper items) - Multi-select */}
+        {/* Camper Selection (for per-camper items) - Multi-select with per-camper size */}
         {needsCamperSelection && (
           <div className="mt-4">
             <div className="flex items-center justify-between mb-2">
               <label className="text-xs font-semibold uppercase tracking-wider text-white/40">
-                Select Campers
+                Select Campers {isPerCamperWithVariants && '& Sizes'}
               </label>
               <button
                 onClick={selectAllCampers}
@@ -237,28 +357,119 @@ function AddOnCard({ addon, campers }: AddOnCardProps) {
                 Select All
               </button>
             </div>
-            <div className="flex flex-wrap gap-2">
+
+            {/* Per-camper selection with individual size dropdowns */}
+            <div className="space-y-3">
               {campers.map((camper) => (
-                <button
+                <div
                   key={camper.id}
-                  onClick={() => toggleCamperSelection(camper.id)}
                   className={cn(
-                    'px-3 py-1.5 text-xs font-semibold uppercase tracking-wider transition-all flex items-center gap-2',
+                    'border p-3 transition-all',
                     selectedCampers.includes(camper.id)
-                      ? 'bg-neon text-black'
-                      : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white'
+                      ? 'border-neon/50 bg-neon/5'
+                      : 'border-white/10 bg-white/[0.02]'
                   )}
                 >
-                  {selectedCampers.includes(camper.id) && <Check className="h-3 w-3" />}
-                  {camper.firstName || 'Camper'}
-                </button>
+                  <div className="flex items-center justify-between">
+                    <button
+                      onClick={() => toggleCamperSelection(camper.id)}
+                      className="flex items-center gap-2 text-left"
+                    >
+                      <div
+                        className={cn(
+                          'w-5 h-5 border flex items-center justify-center transition-all',
+                          selectedCampers.includes(camper.id)
+                            ? 'border-neon bg-neon'
+                            : 'border-white/30'
+                        )}
+                      >
+                        {selectedCampers.includes(camper.id) && (
+                          <Check className="h-3 w-3 text-black" />
+                        )}
+                      </div>
+                      <span
+                        className={cn(
+                          'text-sm font-semibold uppercase tracking-wider',
+                          selectedCampers.includes(camper.id) ? 'text-white' : 'text-white/60'
+                        )}
+                      >
+                        {camper.firstName || 'Camper'}
+                      </span>
+                    </button>
+
+                    {/* Size selector for this camper */}
+                    {isPerCamperWithVariants && selectedCampers.includes(camper.id) && (
+                      <div className="flex gap-1.5">
+                        {addon.variants.map((variant) => (
+                          <button
+                            key={variant.id}
+                            onClick={() => setVariantForCamper(camper.id, variant.id)}
+                            disabled={variant.isSoldOut}
+                            className={cn(
+                              'px-2 py-1 text-xs font-semibold uppercase tracking-wider transition-all',
+                              variantsPerCamper[camper.id] === variant.id
+                                ? 'bg-neon text-black'
+                                : variant.isSoldOut
+                                ? 'bg-white/5 text-white/20 cursor-not-allowed line-through'
+                                : 'bg-white/10 text-white/60 hover:bg-white/20 hover:text-white'
+                            )}
+                          >
+                            {variant.name}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Warning if camper selected but no size */}
+                  {isPerCamperWithVariants &&
+                    selectedCampers.includes(camper.id) &&
+                    !variantsPerCamper[camper.id] && (
+                      <p className="mt-2 text-xs text-yellow-500 flex items-center gap-1">
+                        <AlertTriangle className="h-3 w-3" />
+                        Select a size
+                      </p>
+                    )}
+                </div>
               ))}
             </div>
+
             {selectedCampers.length > 0 && (
               <p className="mt-2 text-xs text-white/40">
                 {selectedCampers.length} camper{selectedCampers.length > 1 ? 's' : ''} selected
               </p>
             )}
+          </div>
+        )}
+
+        {/* Simple variant selection for single camper with variants */}
+        {needsVariant && addon.scope === 'per_camper' && campers.length === 1 && (
+          <div className="mt-4">
+            <label className="text-xs font-semibold uppercase tracking-wider text-white/40 block mb-2">
+              Select Size for {campers[0].firstName || 'Camper'}
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {addon.variants.map((variant) => (
+                <button
+                  key={variant.id}
+                  onClick={() => {
+                    setSelectedVariant(variant)
+                    setVariantForCamper(campers[0].id, variant.id)
+                  }}
+                  disabled={variant.isSoldOut}
+                  className={cn(
+                    'px-3 py-1.5 text-xs font-semibold uppercase tracking-wider transition-all',
+                    variantsPerCamper[campers[0].id] === variant.id
+                      ? 'bg-neon text-black'
+                      : variant.isSoldOut
+                      ? 'bg-white/5 text-white/20 cursor-not-allowed line-through'
+                      : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white'
+                  )}
+                >
+                  {variant.name}
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
@@ -280,8 +491,9 @@ function AddOnCard({ addon, campers }: AddOnCardProps) {
               onClick={handleAdd}
               disabled={
                 isSoldOut ||
-                (needsVariant && !selectedVariant) ||
-                (needsCamperSelection && selectedCampers.length === 0)
+                (needsVariant && addon.scope === 'per_order' && !selectedVariant) ||
+                (needsCamperSelection && selectedCampers.length === 0) ||
+                (isPerCamperWithVariants && !allCampersHaveVariants())
               }
             >
               {isSoldOut ? 'Sold Out' : 'Add to Order'}

@@ -68,14 +68,34 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const body = await request.json()
+    const { action } = body
+
+    // The 'confirm' action doesn't require authentication
+    // because the sessionId itself validates the request
+    // (users may not be logged in when returning from Stripe checkout)
+    if (action === 'confirm') {
+      const { sessionId } = body
+
+      if (!sessionId) {
+        return NextResponse.json({ error: 'sessionId required' }, { status: 400 })
+      }
+
+      const { data, error } = await confirmRegistrationsFromPayment({ sessionId })
+
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 500 })
+      }
+
+      return NextResponse.json({ data })
+    }
+
+    // All other actions require authentication
     const user = await getAuthUserFromRequest(request)
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-
-    const body = await request.json()
-    const { action } = body
 
     switch (action) {
       case 'createDraft': {
@@ -113,22 +133,6 @@ export async function POST(request: NextRequest) {
           successUrl: successUrl || `${process.env.NEXT_PUBLIC_APP_URL}/register/success`,
           cancelUrl: cancelUrl || `${process.env.NEXT_PUBLIC_APP_URL}/register`,
         })
-
-        if (error) {
-          return NextResponse.json({ error: error.message }, { status: 500 })
-        }
-
-        return NextResponse.json({ data })
-      }
-
-      case 'confirm': {
-        const { sessionId } = body
-
-        if (!sessionId) {
-          return NextResponse.json({ error: 'sessionId required' }, { status: 400 })
-        }
-
-        const { data, error } = await confirmRegistrationsFromPayment({ sessionId })
 
         if (error) {
           return NextResponse.json({ error: error.message }, { status: 500 })

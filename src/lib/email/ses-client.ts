@@ -21,8 +21,8 @@ import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses'
 // Initialize SES client
 // Uses default credential provider chain (env vars, IAM role, etc.)
 const region = process.env.AWS_REGION || process.env.APP_AWS_REGION || 'us-east-1'
-const accessKeyId = process.env.AWS_ACCESS_KEY_ID || process.env.APP_ACCESS_KEY_ID
-const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY || process.env.APP_SECRET_ACCESS_KEY
+const accessKeyId = process.env.AWS_ACCESS_KEY_ID || process.env.APP_AWS_ACCESS_KEY_ID
+const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY || process.env.APP_AWS_SECRET_ACCESS_KEY
 
 const sesClient = new SESClient({
   region,
@@ -131,7 +131,7 @@ export async function sendEmail(options: SendEmailOptions): Promise<EmailResult>
  */
 export function isEmailConfigured(): boolean {
   // Check if AWS credentials are available
-  return !!(process.env.AWS_ACCESS_KEY_ID || process.env.APP_ACCESS_KEY_ID || process.env.AWS_ROLE_ARN)
+  return !!(process.env.AWS_ACCESS_KEY_ID || process.env.APP_AWS_ACCESS_KEY_ID || process.env.AWS_ROLE_ARN)
 }
 
 export { sesClient, DEFAULT_FROM }

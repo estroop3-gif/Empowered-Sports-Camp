@@ -26,8 +26,8 @@ let s3Client: S3Client | null = null
 function getS3Client(): S3Client {
   if (!s3Client) {
     const region = process.env.AWS_REGION || process.env.APP_AWS_REGION || 'us-east-2'
-    const accessKeyId = process.env.AWS_ACCESS_KEY_ID || process.env.APP_ACCESS_KEY_ID
-    const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY || process.env.APP_SECRET_ACCESS_KEY
+    const accessKeyId = process.env.AWS_ACCESS_KEY_ID || process.env.APP_AWS_ACCESS_KEY_ID
+    const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY || process.env.APP_AWS_SECRET_ACCESS_KEY
 
     s3Client = new S3Client({
       region,

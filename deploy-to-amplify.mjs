@@ -1,23 +1,83 @@
 import archiver from 'archiver';
-import { createWriteStream, createReadStream, statSync } from 'fs';
+import { createWriteStream, createReadStream, statSync, existsSync, cpSync, mkdirSync, rmSync } from 'fs';
 import { pipeline } from 'stream/promises';
 import https from 'https';
 import http from 'http';
+import { execSync } from 'child_process';
+import path from 'path';
 
 const UPLOAD_URL = process.argv[2];
+const SKIP_BUILD = process.argv.includes('--skip-build');
 
 if (!UPLOAD_URL) {
-  console.error('Usage: node deploy-to-amplify.mjs <upload-url>');
+  console.error('Usage: node deploy-to-amplify.mjs <upload-url> [--skip-build]');
   process.exit(1);
 }
 
+const PROJECT_DIR = '/home/estro/Empowered-sports-camp/frontend';
 const ZIP_PATH = '/tmp/amplify-deploy.zip';
+const DEPLOY_DIR = '/tmp/amplify-deploy-staging';
+
+async function buildProject() {
+  if (SKIP_BUILD) {
+    console.log('Skipping build (--skip-build flag)...');
+    return;
+  }
+
+  console.log('Building Next.js project...');
+  try {
+    execSync('npm run build', {
+      cwd: PROJECT_DIR,
+      stdio: 'inherit',
+      env: { ...process.env, NODE_ENV: 'production' }
+    });
+    console.log('Build completed successfully!');
+  } catch (error) {
+    console.error('Build failed!');
+    process.exit(1);
+  }
+}
+
+async function prepareStagingDir() {
+  console.log('Preparing deployment package...');
+
+  // Clean up staging dir if it exists
+  if (existsSync(DEPLOY_DIR)) {
+    rmSync(DEPLOY_DIR, { recursive: true });
+  }
+  mkdirSync(DEPLOY_DIR, { recursive: true });
+
+  // Copy standalone output
+  const standalonePath = path.join(PROJECT_DIR, '.next', 'standalone');
+  if (!existsSync(standalonePath)) {
+    console.error('Error: .next/standalone not found. Run npm run build first.');
+    process.exit(1);
+  }
+  cpSync(standalonePath, DEPLOY_DIR, { recursive: true });
+
+  // Copy static assets into standalone
+  const staticSrc = path.join(PROJECT_DIR, '.next', 'static');
+  const staticDest = path.join(DEPLOY_DIR, '.next', 'static');
+  if (existsSync(staticSrc)) {
+    mkdirSync(path.dirname(staticDest), { recursive: true });
+    cpSync(staticSrc, staticDest, { recursive: true });
+  }
+
+  // Copy public folder
+  const publicSrc = path.join(PROJECT_DIR, 'public');
+  const publicDest = path.join(DEPLOY_DIR, 'public');
+  if (existsSync(publicSrc)) {
+    cpSync(publicSrc, publicDest, { recursive: true });
+  }
+
+  console.log('Deployment package prepared.');
+}
 
 async function createZip() {
   console.log('Creating ZIP file...');
 
   const output = createWriteStream(ZIP_PATH);
-  const archive = archiver('zip', { zlib: { level: 9 } });
+  const archive = archiver('zip', { zlib: { level: 6 } });
 
   archive.on('warning', (err) => {
     if (err.code === 'ENOENT') {
@@ -33,18 +93,9 @@ async function createZip() {
 
   archive.pipe(output);
 
-  // Add all files except excluded ones
+  // Add built standalone output
   archive.glob('**/*', {
-    cwd: '/home/estro/Empowered-sports-camp/frontend',
-    ignore: [
-      'node_modules/**',
-      '.git/**',
-      '.next/**',
-      '*.log',
-      '.env.old-aws',
-      '.env.new-aws',
-      'deploy-to-amplify.mjs'
-    ],
+    cwd: DEPLOY_DIR,
     dot: true
   });
 
@@ -97,10 +148,13 @@ async function uploadZip(url) {
 
 async function main() {
   try {
+    await buildProject();
+    await prepareStagingDir();
     await createZip();
     await uploadZip(UPLOAD_URL);
     console.log('\nDeployment initiated successfully!');
-    console.log('Check the Amplify console for build progress.');
+    console.log('Site will be live at: https://main.dlqgoanojaxo4.amplifyapp.com');
+    console.log('And at: https://empoweredsportscamp.com (once DNS is verified)');
   } catch (error) {
     console.error('Error:', error.message);
     process.exit(1);

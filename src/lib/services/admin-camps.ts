@@ -472,19 +472,31 @@ export async function updateCamp(id: string, formData: Partial<CampFormData>): P
 
     if (formData.name !== undefined) updateData.name = formData.name
     if (formData.slug !== undefined) updateData.slug = formData.slug
-    if (formData.description !== undefined) updateData.description = formData.description
-    if (formData.sport !== undefined) updateData.sport = formData.sport
-    if (formData.location_id !== undefined) updateData.locationId = formData.location_id
-    if (formData.venue_id !== undefined) updateData.venueId = formData.venue_id
+    if (formData.description !== undefined) updateData.description = formData.description || null
+    if (formData.sport !== undefined) updateData.sportsOffered = formData.sport ? [formData.sport] : []
+    if (formData.location_id !== undefined) {
+      updateData.location = formData.location_id
+        ? { connect: { id: formData.location_id } }
+        : { disconnect: true }
+    }
+    if (formData.venue_id !== undefined) {
+      updateData.venue = formData.venue_id
+        ? { connect: { id: formData.venue_id } }
+        : { disconnect: true }
+    }
     if (formData.start_date !== undefined) updateData.startDate = new Date(formData.start_date)
     if (formData.end_date !== undefined) updateData.endDate = new Date(formData.end_date)
-    if (formData.start_time !== undefined) updateData.startTime = formData.start_time
-    if (formData.end_time !== undefined) updateData.endTime = formData.end_time
-    if (formData.age_min !== undefined) updateData.ageMin = formData.age_min
-    if (formData.age_max !== undefined) updateData.ageMax = formData.age_max
+    if (formData.start_time !== undefined) {
+      updateData.startTime = formData.start_time ? new Date(`1970-01-01T${formData.start_time}:00Z`) : null
+    }
+    if (formData.end_time !== undefined) {
+      updateData.endTime = formData.end_time ? new Date(`1970-01-01T${formData.end_time}:00Z`) : null
+    }
+    if (formData.age_min !== undefined) updateData.minAge = formData.age_min
+    if (formData.age_max !== undefined) updateData.maxAge = formData.age_max
     if (formData.capacity !== undefined) updateData.capacity = formData.capacity
     if (formData.featured !== undefined) updateData.featured = formData.featured
-    if (formData.image_url !== undefined) updateData.imageUrl = formData.image_url
+    if (formData.image_url !== undefined) updateData.imageUrl = formData.image_url || null
 
     if (formData.price !== undefined) {
       updateData.priceCents = Math.round(formData.price * 100)
@@ -501,11 +513,8 @@ export async function updateCamp(id: string, formData: Partial<CampFormData>): P
     }
 
     if (formData.status !== undefined) {
-      updateData.status = formData.status
-      updateData.registrationOpen = formData.status === 'open'
-      if (formData.status !== 'draft') {
-        updateData.publishedAt = new Date()
-      }
+      updateData.status = mapStatusToDb(formData.status)
+      updateData.registrationOpen = formData.status === 'open' ? new Date() : null
     }
 
     const camp = await prisma.camp.update({

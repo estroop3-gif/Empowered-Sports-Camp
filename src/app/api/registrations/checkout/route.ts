@@ -36,30 +36,80 @@ export async function POST(request: NextRequest) {
       totals,
     } = body
 
-    if (!campId || !tenantId || !parent || !campers?.length) {
+    // Validate required fields with specific error messages
+    const missingFields: string[] = []
+    if (!campId) missingFields.push('campId')
+    if (!parent) missingFields.push('parent info')
+    if (!campers?.length) missingFields.push('campers')
+
+    if (missingFields.length > 0) {
+      console.error('[Checkout] Missing fields:', missingFields, 'Payload:', { campId, tenantId, parent: !!parent, campersCount: campers?.length })
       return NextResponse.json(
-        { error: 'Missing required fields' },
+        { error: `Missing required fields: ${missingFields.join(', ')}` },
         { status: 400 }
       )
     }
 
-    // Verify camp exists and has spots, also get tenant for tax rate
-    const [camp, tenant] = await Promise.all([
-      prisma.camp.findFirst({
-        where: { id: campId, tenantId },
-      }),
-      prisma.tenant.findUnique({
-        where: { id: tenantId },
-        select: { taxRatePercent: true },
-      }),
-    ])
+    // Verify camp exists and has spots
+    // First find the camp (tenantId might be null for legacy camps)
+    const camp = await prisma.camp.findFirst({
+      where: { id: campId },
+      include: { tenant: { select: { id: true, taxRatePercent: true } } },
+    })
 
     if (!camp) {
       return NextResponse.json({ error: 'Camp not found' }, { status: 404 })
     }
 
-    // Get tax rate (default to 0 if not set)
-    const taxRatePercent = tenant?.taxRatePercent ? Number(tenant.taxRatePercent) : 0
+    // Use camp's tenantId or get default tenant if camp has no tenant
+    let effectiveTenantId = tenantId || camp.tenantId
+    let taxRatePercent = camp.tenant?.taxRatePercent ? Number(camp.tenant.taxRatePercent) : 0
+
+    // If still no tenant, default to admin tenant
+    if (!effectiveTenantId) {
+      // Look for admin tenant by common slugs
+      const adminTenant = await prisma.tenant.findFirst({
+        where: {
+          OR: [
+            { slug: 'admin' },
+            { slug: 'empowered-athletes' },
+            { slug: 'empowered' },
+          ],
+        },
+      })
+
+      if (adminTenant) {
+        effectiveTenantId = adminTenant.id
+        taxRatePercent = adminTenant.taxRatePercent ? Number(adminTenant.taxRatePercent) : 0
+      } else {
+        // Get the first tenant if no admin tenant found
+        const firstTenant = await prisma.tenant.findFirst({
+          orderBy: { createdAt: 'asc' },
+        })
+
+        if (firstTenant) {
+          effectiveTenantId = firstTenant.id
+          taxRatePercent = firstTenant.taxRatePercent ? Number(firstTenant.taxRatePercent) : 0
+        } else {
+          // Create a default tenant if none exists
+          const newTenant = await prisma.tenant.create({
+            data: {
+              name: 'Empowered Athletes',
+              slug: 'empowered-athletes',
+            },
+          })
+          effectiveTenantId = newTenant.id
+        }
+      }
+
+      // Update the camp to have this tenant
+      await prisma.camp.update({
+        where: { id: campId },
+        data: { tenantId: effectiveTenantId },
+      })
+      console.log(`[Checkout] Assigned tenant ${effectiveTenantId} to camp ${campId}`)
+    }
+
 
     // Get current registration count
     const currentCount = await prisma.registration.count({
@@ -137,7 +187,7 @@ export async function POST(request: NextRequest) {
     if (promoCode) {
       promoCodeRecord = await prisma.promoCode.findFirst({
         where: {
-          tenantId,
+          tenantId: effectiveTenantId,
           code: promoCode.toUpperCase(),
           isActive: true,
         },
@@ -233,6 +283,19 @@ export async function POST(request: NextRequest) {
             lastName: camperData.lastName,
           },
         })
+
+        // If found by name, update with any new info
+        if (athlete) {
+          athlete = await prisma.athlete.update({
+            where: { id: athlete.id },
+            data: {
+              grade: camperData.grade || athlete.grade,
+              tShirtSize: camperData.tshirtSize || athlete.tShirtSize,
+              medicalNotes: camperData.medicalNotes || athlete.medicalNotes,
+              allergies: camperData.allergies || athlete.allergies,
+            },
+          })
+        }
       }
 
       if (!athlete) {
@@ -257,7 +320,7 @@ export async function POST(request: NextRequest) {
 
       // Create registration
       const { data: regData, error: regError } = await createRegistration({
-        tenantId,
+        tenantId: effectiveTenantId,
         campId,
         athleteId: athlete.id,
         parentId: parentProfile.id,
@@ -300,8 +363,21 @@ export async function POST(request: NextRequest) {
     // Create Stripe checkout session for ALL registrations
     // This ensures all campers' prices, add-ons, and taxes are included
     const primaryRegistrationId = registrationIds[0]
-    const successUrl = `${baseUrl}/register/confirmation?registration_id=${primaryRegistrationId}`
-    const cancelUrl = `${baseUrl}/camps/${campId}`
+    // Use /register/success which is the actual success page route
+    // The session_id will be appended by Stripe using {CHECKOUT_SESSION_ID} template
+    const successUrl = `${baseUrl}/register/success`
+    // Use camp slug for cancel URL since the route is /camps/[slug], not /camps/[id]
+    const cancelUrl = `${baseUrl}/camps/${camp.slug}`
+
+    console.log('[Checkout] Creating Stripe session:', {
+      campId,
+      campSlug: camp.slug,
+      primaryRegistrationId,
+      registrationIds,
+      effectiveTenantId,
+      successUrl,
+      cancelUrl,
+    })
 
     const { data: checkoutData, error: checkoutError } = await createStripeCheckoutSession({
       campSessionId: campId,
@@ -309,17 +385,27 @@ export async function POST(request: NextRequest) {
       registrationIds: registrationIds, // Pass all registration IDs
       successUrl,
       cancelUrl,
-      tenantId,
+      tenantId: effectiveTenantId,
     })
 
     if (checkoutError || !checkoutData) {
       // If checkout fails, mark registrations as cancelled
+      console.error('[Checkout] Stripe session creation failed:', {
+        error: checkoutError?.message,
+        registrationIds,
+        effectiveTenantId,
+      })
       await prisma.registration.updateMany({
         where: { id: { in: registrationIds } },
         data: { status: 'cancelled', cancellationReason: 'Checkout creation failed' },
       })
       throw new Error(checkoutError?.message || 'Failed to create checkout session')
     }
+
+    console.log('[Checkout] Stripe session created:', {
+      sessionId: checkoutData.sessionId,
+      checkoutUrl: checkoutData.checkoutUrl,
+    })
 
     return NextResponse.json({
       data: {

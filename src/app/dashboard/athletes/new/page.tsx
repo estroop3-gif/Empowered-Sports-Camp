@@ -84,8 +84,10 @@ function AddAthleteContent() {
     medications: '',
     dietaryRestrictions: '',
     specialNeeds: '',
-    photoConsent: false,
+    photoConsent: true, // Default to consented
+    termsAccepted: false,
   })
+  const [showAdvancedSettings, setShowAdvancedSettings] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -115,6 +117,12 @@ function AddAthleteContent() {
     // Validation
     if (!formData.firstName || !formData.lastName || !formData.dateOfBirth) {
       setError('Please fill in all required fields')
+      setSaving(false)
+      return
+    }
+
+    if (!formData.termsAccepted) {
+      setError('You must agree to the Terms of Service and Privacy Policy')
       setSaving(false)
       return
     }
@@ -442,22 +450,66 @@ function AddAthleteContent() {
               </div>
             </div>
 
-            {/* Photo Consent */}
+            {/* Photo & Media Consent - Collapsible */}
+            <div className="bg-dark-100 border border-white/10">
+              <button
+                type="button"
+                onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
+                className="w-full px-6 py-4 text-left flex items-center justify-between"
+              >
+                <div className="flex items-center gap-3">
+                  <span className={`text-white/50 transform transition-transform ${showAdvancedSettings ? 'rotate-90' : ''}`}>▶</span>
+                  <span className="text-sm font-bold text-white">Photo & Media Consent</span>
+                  <span className="text-xs text-neon bg-neon/10 px-2 py-0.5 rounded">
+                    {formData.photoConsent ? 'Granted' : 'Not Granted'}
+                  </span>
+                </div>
+              </button>
+
+              {showAdvancedSettings && (
+                <div className="px-6 pb-6 border-t border-white/10 pt-4">
+                  <label className="flex items-start gap-4 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      name="photoConsent"
+                      checked={formData.photoConsent}
+                      onChange={handleChange}
+                      className="mt-1 h-5 w-5 bg-black border-2 border-white/30 focus:ring-neon focus:ring-offset-0"
+                    />
+                    <div>
+                      <span className="text-sm font-bold text-white">I grant photo & media consent</span>
+                      <p className="text-xs text-white/50 mt-1">
+                        I consent to photos and videos of my child being taken during camp activities
+                        and potentially used for marketing purposes on social media, the website, and
+                        promotional materials.
+                      </p>
+                    </div>
+                  </label>
+                </div>
+              )}
+            </div>
+
+            {/* Terms of Service and Privacy Policy */}
             <div className="bg-dark-100 border border-white/10 p-6">
               <label className="flex items-start gap-4 cursor-pointer">
                 <input
                   type="checkbox"
-                  name="photoConsent"
-                  checked={formData.photoConsent}
+                  name="termsAccepted"
+                  checked={formData.termsAccepted}
                   onChange={handleChange}
                   className="mt-1 h-5 w-5 bg-black border-2 border-white/30 focus:ring-neon focus:ring-offset-0"
                 />
                 <div>
-                  <span className="text-sm font-bold text-white">Photo & Media Consent</span>
+                  <span className="text-sm font-bold text-white">I agree to the Terms & Privacy Policy *</span>
                   <p className="text-xs text-white/50 mt-1">
-                    I consent to photos and videos of my child being taken during camp activities
-                    and potentially used for marketing purposes on social media, the website, and
-                    promotional materials.
+                    By checking this box, I confirm that I have read and agree to the{' '}
+                    <Link href="/terms" target="_blank" className="text-neon hover:underline">
+                      Terms of Service
+                    </Link>
+                    {' '}and{' '}
+                    <Link href="/privacy" target="_blank" className="text-neon hover:underline">
+                      Privacy Policy
+                    </Link>.
                   </p>
                 </div>
               </label>

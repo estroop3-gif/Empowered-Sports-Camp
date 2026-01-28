@@ -422,6 +422,15 @@ export function PaymentStep({ onComplete, onBack }: PaymentStepProps) {
     setError(null)
 
     try {
+      // Validate required data before submission
+      if (!state.parentInfo?.email || !state.parentInfo?.firstName || !state.parentInfo?.lastName) {
+        throw new Error('Parent information is incomplete. Please go back and fill in all required fields.')
+      }
+
+      if (!state.campers?.length) {
+        throw new Error('No campers added. Please go back and add at least one camper.')
+      }
+
       // Build registration payload
       const payload = {
         campId: state.campSession.id,
@@ -432,6 +441,8 @@ export function PaymentStep({ onComplete, onBack }: PaymentStepProps) {
         promoCode: state.promoCode?.code || null,
         totals,
       }
+
+      console.log('[PaymentStep] Checkout payload:', JSON.stringify(payload, null, 2))
 
       // Call checkout API
       const response = await fetch('/api/registrations/checkout', {
@@ -448,14 +459,39 @@ export function PaymentStep({ onComplete, onBack }: PaymentStepProps) {
 
       // Redirect to Stripe Checkout
       if (result.data?.checkoutUrl) {
+        console.log('[PaymentStep] Redirecting to checkout:', result.data.checkoutUrl)
         window.location.href = result.data.checkoutUrl
       } else {
-        // Fallback for when no checkout URL (shouldn't happen in prod)
-        onComplete(result.data?.sessionId || `demo_${Date.now()}`)
+        // No checkout URL returned - this is an error state
+        console.error('[PaymentStep] No checkout URL in response:', result)
+        throw new Error('Payment system unavailable. Please try again or contact support.')
       }
     } catch (err) {
       console.error('[PaymentStep] Checkout error:', err)
-      setError(err instanceof Error ? err.message : 'Payment failed. Please try again.')
+      // Provide more specific error messages
+      let errorMessage = 'Payment failed. Please try again.'
+      if (err instanceof Error) {
+        if (err.message.includes('Missing required fields')) {
+          errorMessage = 'Some required information is missing. Please go back and fill in all fields.'
+        } else if (err.message.includes('Camp not found')) {
+          errorMessage = 'This camp is no longer available. Please select a different camp.'
+        } else if (err.message.includes('Not enough spots')) {
+          errorMessage = 'Sorry, this camp is now full. Please select a different session.'
+        } else if (err.message.includes('Parent information')) {
+          errorMessage = err.message
+        } else if (err.message.includes('No campers')) {
+          errorMessage = err.message
+        } else if (err.message.includes('Registration not found')) {
+          errorMessage = 'Could not create your registration. Please try again.'
+        } else if (err.message.includes('already registered')) {
+          errorMessage = err.message
+        } else if (err.message.includes('Stripe')) {
+          errorMessage = 'Payment system error. Please try again in a few moments.'
+        } else {
+          errorMessage = err.message
+        }
+      }
+      setError(errorMessage)
       setIsProcessing(false)
     }
   }
@@ -538,96 +574,110 @@ export function PaymentStep({ onComplete, onBack }: PaymentStepProps) {
         </div>
 
         {isDevMode ? (
-          <SimulatedCardForm
-            onPayment={handleDevModePayment}
-            isProcessing={isProcessing}
-            total={totals.total}
-          />
+          <>
+            <SimulatedCardForm
+              onPayment={handleDevModePayment}
+              isProcessing={isProcessing}
+              total={totals.total}
+            />
+            {/* Terms for Dev Mode */}
+            <label className="flex items-start gap-3 cursor-pointer group">
+              <div
+                className={cn(
+                  'h-5 w-5 border flex items-center justify-center shrink-0 mt-0.5 transition-all',
+                  acceptedTerms
+                    ? 'bg-neon border-neon'
+                    : 'border-white/30 group-hover:border-neon/50'
+                )}
+                onClick={() => setAcceptedTerms(!acceptedTerms)}
+              >
+                {acceptedTerms && <Check className="h-3 w-3 text-black" />}
+              </div>
+              <span className="text-sm text-white/70">
+                I agree to the{' '}
+                <a href="/terms" className="text-neon hover:underline">
+                  Terms of Service
+                </a>{' '}
+                and{' '}
+                <a href="/privacy" className="text-neon hover:underline">
+                  Privacy Policy
+                </a>
+                . I understand that registration is non-refundable within 14 days of camp start.
+              </span>
+            </label>
+            {/* Back button for Dev Mode */}
+            <Button
+              variant="outline-neon"
+              size="lg"
+              className="w-full"
+              onClick={onBack}
+              disabled={isProcessing}
+            >
+              Back to Account
+            </Button>
+          </>
         ) : (
           <>
             <StripeCheckoutInfo />
-            <Button
-              variant="neon"
-              size="lg"
-              className="w-full"
-              onClick={handleStripeCheckout}
-              disabled={isProcessing || !acceptedTerms}
-            >
-              {isProcessing ? (
-                <>
-                  <Loader2 className="h-5 w-5 animate-spin mr-2" />
-                  Creating Registration...
-                </>
-              ) : (
-                <>
-                  <Lock className="h-5 w-5 mr-2" />
-                  Continue to Payment ({formatCents(totals.total)})
-                </>
-              )}
-            </Button>
+            {/* Terms checkbox - above the continue button */}
+            <label className="flex items-start gap-3 cursor-pointer group">
+              <div
+                className={cn(
+                  'h-5 w-5 border flex items-center justify-center shrink-0 mt-0.5 transition-all',
+                  acceptedTerms
+                    ? 'bg-neon border-neon'
+                    : 'border-white/30 group-hover:border-neon/50'
+                )}
+                onClick={() => setAcceptedTerms(!acceptedTerms)}
+              >
+                {acceptedTerms && <Check className="h-3 w-3 text-black" />}
+              </div>
+              <span className="text-sm text-white/70">
+                I agree to the{' '}
+                <a href="/terms" className="text-neon hover:underline">
+                  Terms of Service
+                </a>{' '}
+                and{' '}
+                <a href="/privacy" className="text-neon hover:underline">
+                  Privacy Policy
+                </a>
+                . I understand that registration is non-refundable within 14 days of camp start.
+              </span>
+            </label>
+            {/* Navigation Buttons */}
+            <div className="flex gap-4">
+              <Button
+                variant="outline-neon"
+                size="lg"
+                className="flex-1"
+                onClick={onBack}
+                disabled={isProcessing}
+              >
+                Back
+              </Button>
+              <Button
+                variant="neon"
+                size="lg"
+                className="flex-1"
+                onClick={handleStripeCheckout}
+                disabled={isProcessing || !acceptedTerms}
+              >
+                {isProcessing ? (
+                  <>
+                    <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    <Lock className="h-5 w-5 mr-2" />
+                    Continue to Payment ({formatCents(totals.total)})
+                  </>
+                )}
+              </Button>
+            </div>
           </>
         )}
       </div>
-
-      {/* Terms (only show for redirect mode, dev mode has inline submit) */}
-      {!isDevMode && (
-        <div className="space-y-4">
-          <label className="flex items-start gap-3 cursor-pointer group">
-            <div
-              className={cn(
-                'h-5 w-5 border flex items-center justify-center shrink-0 mt-0.5 transition-all',
-                acceptedTerms
-                  ? 'bg-neon border-neon'
-                  : 'border-white/30 group-hover:border-neon/50'
-              )}
-              onClick={() => setAcceptedTerms(!acceptedTerms)}
-            >
-              {acceptedTerms && <Check className="h-3 w-3 text-black" />}
-            </div>
-            <span className="text-sm text-white/70">
-              I agree to the{' '}
-              <a href="/terms" className="text-neon hover:underline">
-                Terms of Service
-              </a>{' '}
-              and{' '}
-              <a href="/privacy" className="text-neon hover:underline">
-                Privacy Policy
-              </a>
-              . I understand that registration is non-refundable within 14 days of camp start.
-            </span>
-          </label>
-        </div>
-      )}
-
-      {/* Terms for Dev Mode */}
-      {isDevMode && (
-        <div className="space-y-4">
-          <label className="flex items-start gap-3 cursor-pointer group">
-            <div
-              className={cn(
-                'h-5 w-5 border flex items-center justify-center shrink-0 mt-0.5 transition-all',
-                acceptedTerms
-                  ? 'bg-neon border-neon'
-                  : 'border-white/30 group-hover:border-neon/50'
-              )}
-              onClick={() => setAcceptedTerms(!acceptedTerms)}
-            >
-              {acceptedTerms && <Check className="h-3 w-3 text-black" />}
-            </div>
-            <span className="text-sm text-white/70">
-              I agree to the{' '}
-              <a href="/terms" className="text-neon hover:underline">
-                Terms of Service
-              </a>{' '}
-              and{' '}
-              <a href="/privacy" className="text-neon hover:underline">
-                Privacy Policy
-              </a>
-              . I understand that registration is non-refundable within 14 days of camp start.
-            </span>
-          </label>
-        </div>
-      )}
 
       {/* Error Message */}
       {error && (
@@ -636,17 +686,6 @@ export function PaymentStep({ onComplete, onBack }: PaymentStepProps) {
           <span>{error}</span>
         </div>
       )}
-
-      {/* Back Button */}
-      <Button
-        variant="outline-neon"
-        size="lg"
-        className="w-full"
-        onClick={onBack}
-        disabled={isProcessing}
-      >
-        Back to Account
-      </Button>
 
       {/* Trust Badges */}
       <div className="flex items-center justify-center gap-6 pt-4">

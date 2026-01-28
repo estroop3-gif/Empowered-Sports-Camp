@@ -107,9 +107,9 @@ export default function ParentDashboard() {
         loadDashboardData()
       }
     }
-  }, [user, authLoading])
+  }, [user, authLoading, router])
 
-  const loadDashboardData = async () => {
+  const loadDashboardData = async (retryCount = 0) => {
     if (!user?.id) return
 
     try {
@@ -119,6 +119,24 @@ export default function ParentDashboard() {
         fetch(`/api/athletes?action=byParent&parentId=${user.id}`),
         fetch(`/api/registrations?action=byParent&parentId=${user.id}`),
       ])
+
+      // Check for 401 - token might be expired
+      if (profileRes.status === 401 || athletesRes.status === 401 || registrationsRes.status === 401) {
+        if (retryCount < 1) {
+          // Try to refresh the session and retry once
+          console.log('[Dashboard] Got 401, attempting session refresh...')
+          const { refreshAndSyncSession } = await import('@/lib/auth/cognito-client')
+          const refreshed = await refreshAndSyncSession()
+          if (refreshed) {
+            console.log('[Dashboard] Session refreshed, retrying...')
+            return loadDashboardData(retryCount + 1)
+          }
+        }
+        // Refresh failed or already retried - redirect to login
+        console.log('[Dashboard] Session refresh failed, redirecting to login')
+        router.push('/login')
+        return
+      }
 
       const [profileResult, athletesResult, registrationsResult] = await Promise.all([
         profileRes.json(),
