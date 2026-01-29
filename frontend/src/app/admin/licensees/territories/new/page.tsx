@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { AdminLayout, PageHeader, ContentCard } from '@/components/admin/admin-layout'
 
 // Types
@@ -69,6 +69,11 @@ interface FormErrors {
 
 export default function NewTerritoryPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const returnTo = searchParams.get('returnTo')
+  const originalReturnTo = searchParams.get('originalReturnTo')
+  const originalTenantId = searchParams.get('originalTenantId')
+  const isReturnToVenueCreate = returnTo === 'venue-create'
   const [tenants, setTenants] = useState<Array<{ id: string; name: string }>>([])
   const [saving, setSaving] = useState(false)
   const [success, setSuccess] = useState(false)
@@ -165,8 +170,9 @@ export default function NewTerritoryPage() {
         body: JSON.stringify(input),
       })
 
+      const result = await response.json()
+
       if (!response.ok) {
-        const result = await response.json()
         setError(result.error || 'Failed to create territory')
         setSaving(false)
         return
@@ -177,7 +183,16 @@ export default function NewTerritoryPage() {
 
       // Redirect after short delay
       setTimeout(() => {
-        router.push('/admin/licensees/territories')
+        if (isReturnToVenueCreate) {
+          const newTerritoryId = result.territory?.id || result.data?.id || result.id
+          const params = new URLSearchParams({ territoryCreated: 'true' })
+          if (newTerritoryId) params.set('territoryId', newTerritoryId)
+          if (originalReturnTo) params.set('returnTo', originalReturnTo)
+          if (originalTenantId) params.set('tenantId', originalTenantId)
+          router.push(`/admin/venues/new?${params.toString()}`)
+        } else {
+          router.push('/admin/licensees/territories')
+        }
       }, 1500)
     } catch {
       setError('Failed to create territory')
@@ -201,7 +216,9 @@ export default function NewTerritoryPage() {
                 ? 'The territory has been created and assigned to the selected licensee.'
                 : 'The territory is now available for assignment.'}
             </p>
-            <p className="text-sm text-white/30">Redirecting to territories list...</p>
+            <p className="text-sm text-white/30">
+              {isReturnToVenueCreate ? 'Redirecting to venue form...' : 'Redirecting to territories list...'}
+            </p>
           </div>
         </div>
       </AdminLayout>
@@ -212,11 +229,11 @@ export default function NewTerritoryPage() {
     <AdminLayout userRole="hq_admin" userName="Admin">
       <div className="mb-6">
         <Link
-          href="/admin/licensees/territories"
+          href={isReturnToVenueCreate ? '/admin/venues/new' : '/admin/licensees/territories'}
           className="inline-flex items-center gap-2 text-sm text-white/50 hover:text-neon transition-colors"
         >
           <ArrowLeft className="h-4 w-4" />
-          Back to Territories
+          {isReturnToVenueCreate ? 'Back to Venue Form' : 'Back to Territories'}
         </Link>
       </div>
 
@@ -522,7 +539,7 @@ export default function NewTerritoryPage() {
                 </button>
 
                 <Link
-                  href="/admin/licensees/territories"
+                  href={isReturnToVenueCreate ? '/admin/venues/new' : '/admin/licensees/territories'}
                   className="flex items-center justify-center gap-2 w-full py-3 border border-white/20 text-white/60 font-bold uppercase tracking-wider hover:border-white/40 hover:text-white transition-colors"
                 >
                   Cancel

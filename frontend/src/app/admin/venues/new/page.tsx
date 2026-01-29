@@ -24,6 +24,7 @@ import {
   Layers,
   Globe,
   Image,
+  Plus,
 } from 'lucide-react'
 
 // Types
@@ -108,6 +109,8 @@ const INDOOR_OUTDOOR_OPTIONS: { value: IndoorOutdoor; label: string; icon: React
   { value: 'both', label: 'Mixed (Both)', icon: Layers },
 ]
 
+const VENUE_DRAFT_KEY = 'venue-draft'
+
 export default function NewVenuePage() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -144,6 +147,37 @@ export default function NewVenuePage() {
     notes: '',
     hero_image_url: '',
   })
+
+  // Restore draft from sessionStorage on mount
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(VENUE_DRAFT_KEY)
+      if (saved) {
+        const draft = JSON.parse(saved)
+        setFormData(draft.formData)
+        if (draft.selectedTerritoryId) {
+          setSelectedTerritoryId(draft.selectedTerritoryId)
+        }
+        const territoryCreated = searchParams.get('territoryCreated')
+        const territoryId = searchParams.get('territoryId')
+        if (territoryCreated === 'true' && territoryId) {
+          setSelectedTerritoryId(territoryId)
+          // tenant_id will be resolved after territories load
+        }
+        sessionStorage.removeItem(VENUE_DRAFT_KEY)
+        // Clean URL params (preserve returnTo/tenantId if present)
+        const cleanParams = new URLSearchParams()
+        if (returnTo) cleanParams.set('returnTo', returnTo)
+        if (returnTenantId) cleanParams.set('tenantId', returnTenantId)
+        const cleanUrl = cleanParams.toString()
+          ? `/admin/venues/new?${cleanParams.toString()}`
+          : '/admin/venues/new'
+        window.history.replaceState({}, '', cleanUrl)
+      }
+    } catch {
+      // Ignore parse errors
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch tenants and territories
   useEffect(() => {
@@ -182,6 +216,27 @@ export default function NewVenuePage() {
       }
     }
   }, [returnTenantId, territories])
+
+  // When a restored territory ID matches a loaded territory, set tenant_id
+  useEffect(() => {
+    if (selectedTerritoryId && territories.length > 0) {
+      const territory = territories.find(t => t.id === selectedTerritoryId)
+      if (territory?.tenant_id) {
+        setFormData(prev => ({ ...prev, tenant_id: territory.tenant_id! }))
+      }
+    }
+  }, [selectedTerritoryId, territories])
+
+  const saveDraftAndNavigateToTerritory = () => {
+    sessionStorage.setItem(VENUE_DRAFT_KEY, JSON.stringify({
+      formData,
+      selectedTerritoryId,
+    }))
+    const params = new URLSearchParams({ returnTo: 'venue-create' })
+    if (returnTo) params.set('originalReturnTo', returnTo)
+    if (returnTenantId) params.set('originalTenantId', returnTenantId)
+    router.push(`/admin/licensees/territories/new?${params.toString()}`)
+  }
 
   // Handle territory selection - set tenant_id from territory
   const handleTerritoryChange = (territoryId: string) => {
@@ -263,6 +318,7 @@ export default function NewVenuePage() {
       setCreatedVenueName(formData.name)
       setSuccess(true)
       setSaving(false)
+      sessionStorage.removeItem(VENUE_DRAFT_KEY)
 
       // Redirect after showing success message
       setTimeout(() => {
@@ -374,11 +430,23 @@ export default function NewVenuePage() {
                   {territories.length === 0 && (
                     <p className="mt-2 text-sm text-white/40">
                       No territories found.{' '}
-                      <Link href="/admin/territories" className="text-neon hover:underline">
-                        Create a territory
-                      </Link>
+                      <button
+                        type="button"
+                        onClick={saveDraftAndNavigateToTerritory}
+                        className="text-neon hover:underline"
+                      >
+                        Create one now
+                      </button>
                     </p>
                   )}
+                  <button
+                    type="button"
+                    onClick={saveDraftAndNavigateToTerritory}
+                    className="mt-3 inline-flex items-center gap-1.5 text-sm text-neon hover:text-neon/80 transition-colors"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Create New Territory
+                  </button>
                 </div>
 
                 <div className="grid gap-6 sm:grid-cols-2">
