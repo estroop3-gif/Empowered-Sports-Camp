@@ -132,17 +132,20 @@ export default function CreateCampPage() {
   // Restore draft from sessionStorage on mount
   useEffect(() => {
     try {
+      const url = new URL(window.location.href)
+      const hasReturnParams = url.searchParams.has('venueCreated') || url.searchParams.has('territoryCreated')
       const saved = sessionStorage.getItem(CAMP_DRAFT_KEY)
       if (saved) {
         const draft = JSON.parse(saved) as CampFormData
-        const venueCreated = searchParams.get('venueCreated')
-        const venueId = searchParams.get('venueId')
-        if (venueCreated === 'true' && venueId) {
+        const venueId = url.searchParams.get('venueId')
+        if (url.searchParams.get('venueCreated') === 'true' && venueId) {
           draft.venue_id = venueId
         }
         setFormData(draft)
         sessionStorage.removeItem(CAMP_DRAFT_KEY)
-        // Clean URL params
+      }
+      // Clean URL params if we came back from a create flow
+      if (hasReturnParams) {
         window.history.replaceState({}, '', '/portal/camps/new')
       }
     } catch {
@@ -240,6 +243,11 @@ export default function CreateCampPage() {
       params.set('tenantId', formData.tenant_id)
     }
     router.push(`/admin/venues/new?${params.toString()}`)
+  }
+
+  const saveDraftAndNavigateToTerritory = () => {
+    sessionStorage.setItem(CAMP_DRAFT_KEY, JSON.stringify(formData))
+    router.push('/admin/licensees/territories/new?returnTo=camp-create')
   }
 
   const handleNameChange = (name: string) => {
@@ -351,7 +359,7 @@ export default function CreateCampPage() {
                     <select
                       required
                       value={formData.tenant_id}
-                      onChange={(e) => setFormData(prev => ({ ...prev, tenant_id: e.target.value, location_id: null }))}
+                      onChange={(e) => setFormData(prev => ({ ...prev, tenant_id: e.target.value, location_id: null, venue_id: null }))}
                       className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-neon focus:outline-none"
                     >
                       <option value="">Select a territory...</option>
@@ -359,6 +367,14 @@ export default function CreateCampPage() {
                         <option key={tenant.id} value={tenant.id}>{tenant.name}</option>
                       ))}
                     </select>
+                    <button
+                      type="button"
+                      onClick={saveDraftAndNavigateToTerritory}
+                      className="mt-3 inline-flex items-center gap-1.5 text-sm text-neon hover:text-neon/80 transition-colors"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Create New Territory
+                    </button>
                   </div>
                 )}
 

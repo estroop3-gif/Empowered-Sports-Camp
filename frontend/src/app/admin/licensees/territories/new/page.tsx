@@ -88,6 +88,8 @@ export default function NewTerritoryPage() {
     }
   })
   const isReturnToVenueCreate = returnInfo.returnTo === 'venue-create'
+  const isReturnToCampCreate = returnInfo.returnTo === 'camp-create'
+  const hasReturnTo = isReturnToVenueCreate || isReturnToCampCreate
   const [tenants, setTenants] = useState<Array<{ id: string; name: string }>>([])
   const [saving, setSaving] = useState(false)
   const [success, setSuccess] = useState(false)
@@ -204,6 +206,8 @@ export default function NewTerritoryPage() {
           if (returnInfo.originalReturnTo) params.set('returnTo', returnInfo.originalReturnTo)
           if (returnInfo.originalTenantId) params.set('tenantId', returnInfo.originalTenantId)
           router.push(`/admin/venues/new?${params.toString()}`)
+        } else if (isReturnToCampCreate) {
+          router.push('/portal/camps/new?territoryCreated=true')
         } else {
           router.push('/admin/licensees/territories')
         }
@@ -231,7 +235,11 @@ export default function NewTerritoryPage() {
                 : 'The territory is now available for assignment.'}
             </p>
             <p className="text-sm text-white/30">
-              {isReturnToVenueCreate ? 'Redirecting to venue form...' : 'Redirecting to territories list...'}
+              {isReturnToVenueCreate
+                ? 'Redirecting to venue form...'
+                : isReturnToCampCreate
+                  ? 'Redirecting to camp form...'
+                  : 'Redirecting to territories list...'}
             </p>
           </div>
         </div>
@@ -243,11 +251,11 @@ export default function NewTerritoryPage() {
     <AdminLayout userRole="hq_admin" userName="Admin">
       <div className="mb-6">
         <Link
-          href={isReturnToVenueCreate ? '/admin/venues/new' : '/admin/licensees/territories'}
+          href={hasReturnTo ? (isReturnToCampCreate ? '/portal/camps/new' : '/admin/venues/new') : '/admin/licensees/territories'}
           className="inline-flex items-center gap-2 text-sm text-white/50 hover:text-neon transition-colors"
         >
           <ArrowLeft className="h-4 w-4" />
-          {isReturnToVenueCreate ? 'Back to Venue Form' : 'Back to Territories'}
+          {isReturnToVenueCreate ? 'Back to Venue Form' : isReturnToCampCreate ? 'Back to Camp Form' : 'Back to Territories'}
         </Link>
       </div>
 
@@ -553,7 +561,7 @@ export default function NewTerritoryPage() {
                 </button>
 
                 <Link
-                  href={isReturnToVenueCreate ? '/admin/venues/new' : '/admin/licensees/territories'}
+                  href={hasReturnTo ? (isReturnToCampCreate ? '/portal/camps/new' : '/admin/venues/new') : '/admin/licensees/territories'}
                   className="flex items-center justify-center gap-2 w-full py-3 border border-white/20 text-white/60 font-bold uppercase tracking-wider hover:border-white/40 hover:text-white transition-colors"
                 >
                   Cancel
