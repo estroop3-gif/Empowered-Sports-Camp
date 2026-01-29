@@ -326,7 +326,7 @@ export default function CampsListPage() {
                               className="fixed inset-0 z-50"
                               onClick={() => setActionMenuOpen(null)}
                             />
-                            <div className="absolute right-0 top-full mt-1 z-[60] w-48 bg-dark-100 border border-white/10 shadow-xl">
+                            <div className="absolute right-0 top-full mt-1 z-[60] w-48 max-h-[calc(100vh-2rem)] overflow-y-auto bg-dark-100 border border-white/10 shadow-xl">
                               <Link
                                 href={`/portal/camps/${camp.id}`}
                                 className="flex items-center gap-3 px-4 py-3 text-sm text-white/70 hover:bg-white/5 hover:text-white transition-colors"

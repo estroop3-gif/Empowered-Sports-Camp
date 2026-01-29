@@ -304,8 +304,13 @@ export default function AdminCampsPage() {
                               const button = buttonRefs.current[camp.id]
                               if (button) {
                                 const rect = button.getBoundingClientRect()
+                                const menuHeight = 384 // approx 8 items × 48px
+                                const spaceBelow = window.innerHeight - rect.bottom - 16
+                                const top = spaceBelow < menuHeight
+                                  ? Math.max(16, rect.top - Math.min(menuHeight, rect.top - 16))
+                                  : rect.bottom + 4
                                 setMenuPosition({
-                                  top: rect.bottom + 4,
+                                  top,
                                   left: rect.right - 192, // 192px = w-48
                                 })
                               }
@@ -326,7 +331,7 @@ export default function AdminCampsPage() {
                               }}
                             />
                             <div
-                              className="fixed w-48 bg-dark-100 border border-white/10 shadow-xl z-[80]"
+                              className="fixed w-48 max-h-[calc(100vh-2rem)] overflow-y-auto bg-dark-100 border border-white/10 shadow-xl z-[80]"
                               style={{ top: menuPosition.top, left: menuPosition.left }}
                             >
                               <Link
