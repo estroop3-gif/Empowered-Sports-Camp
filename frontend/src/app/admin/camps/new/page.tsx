@@ -474,30 +474,80 @@ export default function AdminCreateCampPage() {
     image_url: null,
   })
 
-  // Auto-save draft to database whenever the user leaves the page
+  // Track saved draft ID so we update the same record instead of creating duplicates
+  const draftCampIdRef = useRef<string | null>(null)
+  const formDataRef = useRef(formData)
+  formDataRef.current = formData
+
+  // Build draft payload from current form state
+  const buildDraftPayload = () => {
+    const fd = formDataRef.current
+    const tenantId = fd.tenant_id || ''
+    if (!tenantId) return null
+
+    const today = new Date().toISOString().split('T')[0]
+    return {
+      ...fd,
+      name: fd.name.trim() || 'Untitled Draft',
+      tenant_id: tenantId,
+      start_date: fd.start_date || today,
+      end_date: fd.end_date || today,
+      status: 'draft' as const,
+    }
+  }
+
+  // Periodic auto-save every 30 seconds + save on page leave
   useEffect(() => {
-    const handleBeforeUnload = () => {
-      const fd = formData
-      const tenantId = fd.tenant_id || ''
-      if (!tenantId) return
+    const saveDraft = async () => {
+      const payload = buildDraftPayload()
+      if (!payload) return
 
-      const today = new Date().toISOString().split('T')[0]
-      const draftData = {
-        ...fd,
-        name: fd.name.trim() || 'Untitled Draft',
-        tenant_id: tenantId,
-        start_date: fd.start_date || today,
-        end_date: fd.end_date || today,
-        status: 'draft',
+      try {
+        if (draftCampIdRef.current) {
+          // Update existing draft
+          await fetch(`/api/admin/camps?action=update&id=${draftCampIdRef.current}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          })
+        } else {
+          // Create new draft
+          const response = await fetch('/api/admin/camps?action=create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          })
+          if (response.ok) {
+            const data = await response.json()
+            if (data.camp?.id) draftCampIdRef.current = data.camp.id
+          }
+        }
+      } catch {
+        // Silent fail for auto-save
       }
+    }
 
-      const blob = new Blob([JSON.stringify(draftData)], { type: 'application/json' })
-      navigator.sendBeacon('/api/admin/camps?action=create', blob)
+    const interval = setInterval(saveDraft, 30000)
+
+    const handleBeforeUnload = () => {
+      const payload = buildDraftPayload()
+      if (!payload) return
+      // Use sendBeacon for reliability during page unload
+      if (draftCampIdRef.current) {
+        const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' })
+        navigator.sendBeacon(`/api/admin/camps?action=update&id=${draftCampIdRef.current}`, blob)
+      } else {
+        const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' })
+        navigator.sendBeacon('/api/admin/camps?action=create', blob)
+      }
     }
 
     window.addEventListener('beforeunload', handleBeforeUnload)
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
-  }, [formData])
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+    }
+  }, []) // Uses refs so no deps needed
 
   useEffect(() => {
     if (user) {
