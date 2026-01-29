@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { AdminLayout, PageHeader, ContentCard } from '@/components/admin/admin-layout'
 import { CampCreateStepper, getStepsForCurrentStep } from '@/components/admin/camps/CampCreateStepper'
@@ -17,6 +17,7 @@ import {
   Zap,
   AlertCircle,
   Loader2,
+  Plus,
 } from 'lucide-react'
 
 // Types (defined locally to avoid Prisma imports in client component)
@@ -26,6 +27,7 @@ interface CampFormData {
   description: string
   sport: string
   location_id: string | null
+  venue_id: string | null
   tenant_id: string
   start_date: string
   end_date: string
@@ -60,6 +62,17 @@ interface Location {
   tenant_id: string
 }
 
+interface Venue {
+  id: string
+  name: string
+  short_name: string | null
+  city: string | null
+  state: string | null
+  tenant_id: string | null
+}
+
+const CAMP_DRAFT_KEY = 'camp-draft'
+
 const SPORTS = [
   'Multi-Sport',
   'Basketball',
@@ -81,6 +94,7 @@ const STATUS_OPTIONS = [
 
 export default function CreateCampPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { user } = useAuth()
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -90,6 +104,7 @@ export default function CreateCampPage() {
   const [userTenantId, setUserTenantId] = useState<string | null>(null)
   const [tenants, setTenants] = useState<Tenant[]>([])
   const [locations, setLocations] = useState<Location[]>([])
+  const [venues, setVenues] = useState<Venue[]>([])
 
   const [formData, setFormData] = useState<CampFormData>({
     name: '',
@@ -97,6 +112,7 @@ export default function CreateCampPage() {
     description: '',
     sport: 'Multi-Sport',
     location_id: null,
+    venue_id: null,
     tenant_id: '',
     start_date: '',
     end_date: '',
@@ -113,6 +129,27 @@ export default function CreateCampPage() {
     image_url: null,
   })
 
+  // Restore draft from sessionStorage on mount
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(CAMP_DRAFT_KEY)
+      if (saved) {
+        const draft = JSON.parse(saved) as CampFormData
+        const venueCreated = searchParams.get('venueCreated')
+        const venueId = searchParams.get('venueId')
+        if (venueCreated === 'true' && venueId) {
+          draft.venue_id = venueId
+        }
+        setFormData(draft)
+        sessionStorage.removeItem(CAMP_DRAFT_KEY)
+        // Clean URL params
+        window.history.replaceState({}, '', '/portal/camps/new')
+      }
+    } catch {
+      // Ignore parse errors
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (user) {
       loadInitialData()
@@ -122,6 +159,7 @@ export default function CreateCampPage() {
   useEffect(() => {
     if (formData.tenant_id) {
       loadLocations(formData.tenant_id)
+      loadVenues(formData.tenant_id)
     }
   }, [formData.tenant_id])
 
@@ -175,6 +213,35 @@ export default function CreateCampPage() {
     }
   }
 
+  async function loadVenues(tenantId: string) {
+    try {
+      const response = await fetch(`/api/admin/venues?tenantId=${tenantId}`)
+      if (response.ok) {
+        const json = await response.json()
+        const venueList: Record<string, unknown>[] = Array.isArray(json.data) ? json.data : []
+        setVenues(venueList.map((v) => ({
+          id: v.id as string,
+          name: v.name as string,
+          short_name: (v.short_name ?? null) as string | null,
+          city: v.city as string | null,
+          state: v.state as string | null,
+          tenant_id: (v.tenant_id ?? null) as string | null,
+        })))
+      }
+    } catch (err) {
+      console.error('Failed to load venues:', err)
+    }
+  }
+
+  const saveDraftAndNavigateToVenue = () => {
+    sessionStorage.setItem(CAMP_DRAFT_KEY, JSON.stringify(formData))
+    const params = new URLSearchParams({ returnTo: 'camp-create' })
+    if (formData.tenant_id) {
+      params.set('tenantId', formData.tenant_id)
+    }
+    router.push(`/admin/venues/new?${params.toString()}`)
+  }
+
   const handleNameChange = (name: string) => {
     const slug = name
       .toLowerCase()
@@ -220,6 +287,7 @@ export default function CreateCampPage() {
       }
 
       const data = await response.json()
+      sessionStorage.removeItem(CAMP_DRAFT_KEY)
       // Navigate to Step 2: Curriculum & Schedule
       router.replace(`/portal/camps/${data.camp.id}/schedule`)
     } catch (err) {
@@ -360,23 +428,64 @@ export default function CreateCampPage() {
                   Venue
                 </label>
                 <select
-                  value={formData.location_id || ''}
-                  onChange={(e) => setFormData(prev => ({ ...prev, location_id: e.target.value || null }))}
+                  value={formData.venue_id ? `venue:${formData.venue_id}` : formData.location_id ? `location:${formData.location_id}` : ''}
+                  onChange={(e) => {
+                    const val = e.target.value
+                    if (val.startsWith('venue:')) {
+                      setFormData(prev => ({ ...prev, venue_id: val.replace('venue:', ''), location_id: null }))
+                    } else if (val.startsWith('location:')) {
+                      setFormData(prev => ({ ...prev, location_id: val.replace('location:', ''), venue_id: null }))
+                    } else {
+                      setFormData(prev => ({ ...prev, venue_id: null, location_id: null }))
+                    }
+                  }}
                   className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-magenta focus:outline-none"
                   disabled={!formData.tenant_id}
                 >
-                  <option value="">Select a location...</option>
-                  {locations.map(loc => (
-                    <option key={loc.id} value={loc.id}>
-                      {loc.name} - {loc.city}, {loc.state}
-                    </option>
-                  ))}
+                  <option value="">Select a venue...</option>
+                  {venues.length > 0 && (
+                    <optgroup label="Venues">
+                      {venues.map(venue => (
+                        <option key={venue.id} value={`venue:${venue.id}`}>
+                          {venue.name}{venue.city ? ` - ${venue.city}, ${venue.state}` : ''}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {locations.length > 0 && (
+                    <optgroup label="Locations (Legacy)">
+                      {locations.map(loc => (
+                        <option key={loc.id} value={`location:${loc.id}`}>
+                          {loc.name} - {loc.city}, {loc.state}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
                 </select>
                 {!formData.tenant_id && (
-                  <p className="mt-2 text-sm text-white/40">Select a territory first to see locations</p>
+                  <p className="mt-2 text-sm text-white/40">Select a territory first to see venues</p>
                 )}
-                {formData.tenant_id && locations.length === 0 && (
-                  <p className="mt-2 text-sm text-white/40">No locations found for this territory</p>
+                {formData.tenant_id && venues.length === 0 && locations.length === 0 && (
+                  <p className="mt-2 text-sm text-white/40">
+                    No venues found for this territory.{' '}
+                    <button
+                      type="button"
+                      onClick={saveDraftAndNavigateToVenue}
+                      className="text-neon hover:underline"
+                    >
+                      Create one now
+                    </button>
+                  </p>
+                )}
+                {formData.tenant_id && (
+                  <button
+                    type="button"
+                    onClick={saveDraftAndNavigateToVenue}
+                    className="mt-3 inline-flex items-center gap-1.5 text-sm text-neon hover:text-neon/80 transition-colors"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Create New Venue
+                  </button>
                 )}
               </div>
             </ContentCard>

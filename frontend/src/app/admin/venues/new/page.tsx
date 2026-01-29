@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { AdminLayout, PageHeader, ContentCard } from '@/components/admin/admin-layout'
 import { cn } from '@/lib/utils'
@@ -110,6 +110,10 @@ const INDOOR_OUTDOOR_OPTIONS: { value: IndoorOutdoor; label: string; icon: React
 
 export default function NewVenuePage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const returnTo = searchParams.get('returnTo')
+  const returnTenantId = searchParams.get('tenantId')
+  const isReturnToCampCreate = returnTo === 'camp-create'
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
@@ -166,6 +170,18 @@ export default function NewVenuePage() {
     }
     fetchData()
   }, [])
+
+  // Auto-select tenant when coming from camp form with tenantId
+  useEffect(() => {
+    if (returnTenantId && territories.length > 0) {
+      // Find a territory that belongs to this tenant
+      const territory = territories.find(t => t.tenant_id === returnTenantId)
+      if (territory) {
+        setSelectedTerritoryId(territory.id)
+        setFormData(prev => ({ ...prev, tenant_id: returnTenantId }))
+      }
+    }
+  }, [returnTenantId, territories])
 
   // Handle territory selection - set tenant_id from territory
   const handleTerritoryChange = (territoryId: string) => {
@@ -248,9 +264,14 @@ export default function NewVenuePage() {
       setSuccess(true)
       setSaving(false)
 
-      // Redirect to venues list after showing success message
+      // Redirect after showing success message
       setTimeout(() => {
-        router.push('/admin/venues?created=true')
+        if (isReturnToCampCreate) {
+          const newVenueId = result.data?.id || result.data?.venue?.id
+          router.push(`/portal/camps/new?venueCreated=true&venueId=${newVenueId}`)
+        } else {
+          router.push('/admin/venues?created=true')
+        }
       }, 1500)
     } catch {
       setError('Failed to create venue')
@@ -283,7 +304,7 @@ export default function NewVenuePage() {
             </p>
             <div className="flex items-center justify-center gap-2 text-white/40">
               <Loader2 className="h-4 w-4 animate-spin" />
-              <span>Redirecting to venues list...</span>
+              <span>{isReturnToCampCreate ? 'Redirecting to camp form...' : 'Redirecting to venues list...'}</span>
             </div>
           </div>
         </div>
@@ -295,11 +316,11 @@ export default function NewVenuePage() {
     <AdminLayout userRole="hq_admin" userName="Admin">
       <div className="mb-6">
         <Link
-          href="/admin/venues"
+          href={isReturnToCampCreate ? '/portal/camps/new' : '/admin/venues'}
           className="inline-flex items-center gap-2 text-sm text-white/50 hover:text-neon transition-colors"
         >
           <ArrowLeft className="h-4 w-4" />
-          Back to Venues
+          {isReturnToCampCreate ? 'Back to Camp Form' : 'Back to Venues'}
         </Link>
       </div>
 
@@ -661,7 +682,7 @@ export default function NewVenuePage() {
                 </button>
 
                 <Link
-                  href="/admin/venues"
+                  href={isReturnToCampCreate ? '/portal/camps/new' : '/admin/venues'}
                   className="flex items-center justify-center gap-2 w-full py-3 border border-white/20 text-white/60 font-bold uppercase tracking-wider hover:border-white/40 hover:text-white transition-colors"
                 >
                   Cancel
