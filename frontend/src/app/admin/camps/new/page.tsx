@@ -24,9 +24,320 @@ import {
   Check,
   ImagePlus,
   Trash2,
+  Plus,
+  Save,
+  Globe,
+  FileText,
 } from 'lucide-react'
 import { useUpload, STORAGE_FOLDERS } from '@/lib/storage/use-upload'
 import Image from 'next/image'
+
+const US_STATES = [
+  'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA',
+  'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD',
+  'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ',
+  'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC',
+  'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY',
+]
+
+const FACILITY_TYPES = [
+  { value: 'school', label: 'School' },
+  { value: 'park', label: 'Park' },
+  { value: 'sports_complex', label: 'Sports Complex' },
+  { value: 'private_gym', label: 'Private Gym' },
+  { value: 'community_center', label: 'Community Center' },
+  { value: 'recreation_center', label: 'Recreation Center' },
+  { value: 'other', label: 'Other' },
+]
+
+const INDOOR_OUTDOOR_OPTIONS = [
+  { value: 'indoor', label: 'Indoor Only' },
+  { value: 'outdoor', label: 'Outdoor Only' },
+  { value: 'both', label: 'Mixed (Both)' },
+]
+
+// ─── Territory Modal ────────────────────────────────────────────────────────
+
+function CreateTerritoryModal({ open, onClose, onCreated, tenants }: {
+  open: boolean
+  onClose: () => void
+  onCreated: (territory: { id: string; name: string; tenant_id?: string; state_region: string; city?: string }) => void
+  tenants: Tenant[]
+}) {
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [form, setForm] = useState({
+    name: '', description: '', country: 'USA', state_region: '', city: '',
+    postal_codes: '', tenant_id: '', status: 'open', notes: '',
+  })
+
+  const update = (field: string, value: string) =>
+    setForm(prev => ({ ...prev, [field]: value }))
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(null)
+    if (!form.name.trim()) { setError('Territory name is required'); return }
+    if (!form.state_region) { setError('State/Region is required'); return }
+
+    setSaving(true)
+    try {
+      const response = await fetch('/api/admin/territories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          name: form.name.trim(),
+          description: form.description.trim() || undefined,
+          country: form.country.trim(),
+          state_region: form.state_region.trim(),
+          city: form.city.trim() || undefined,
+          postal_codes: form.postal_codes.trim() || undefined,
+          tenant_id: form.tenant_id || undefined,
+          status: form.tenant_id ? 'assigned' : form.status,
+          notes: form.notes.trim() || undefined,
+        }),
+      })
+      const result = await response.json()
+      if (!response.ok) { setError(result.error || 'Failed to create territory'); setSaving(false); return }
+      const newId = result.territory?.id || result.data?.id || result.id
+      onCreated({ id: newId, name: form.name.trim(), tenant_id: form.tenant_id || undefined, state_region: form.state_region, city: form.city.trim() || undefined })
+    } catch {
+      setError('Failed to create territory'); setSaving(false)
+    }
+  }
+
+  if (!open) return null
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-start justify-center pt-10 pb-10 overflow-y-auto">
+      <div className="fixed inset-0 bg-black/80" onClick={onClose} />
+      <div className="relative bg-dark-100 border border-white/10 w-full max-w-2xl mx-4 shadow-2xl">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
+          <h2 className="text-lg font-black uppercase tracking-wider text-white">Create New Territory</h2>
+          <button onClick={onClose} className="p-1 hover:bg-white/10 transition-colors"><X className="h-5 w-5 text-white/50" /></button>
+        </div>
+        {error && (
+          <div className="mx-6 mt-4 p-3 bg-magenta/10 border border-magenta/30 flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 text-magenta flex-shrink-0" /><p className="text-sm text-magenta">{error}</p>
+          </div>
+        )}
+        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+          <div>
+            <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">Territory Name *</label>
+            <input type="text" value={form.name} onChange={(e) => update('name', e.target.value)} placeholder="e.g., Sarasota Metro, Chicago North" className="w-full px-4 py-3 bg-black border border-white/20 text-white placeholder:text-white/30 focus:border-neon focus:outline-none" />
+          </div>
+          <div>
+            <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">Description</label>
+            <textarea value={form.description} onChange={(e) => update('description', e.target.value)} placeholder="Brief description of this territory..." rows={2} className="w-full px-4 py-3 bg-black border border-white/20 text-white placeholder:text-white/30 focus:border-neon focus:outline-none resize-none" />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div>
+              <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">Country *</label>
+              <select value={form.country} onChange={(e) => update('country', e.target.value)} className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-neon focus:outline-none">
+                <option value="USA">United States</option><option value="CAN">Canada</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">State / Region *</label>
+              <select value={form.state_region} onChange={(e) => update('state_region', e.target.value)} className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-neon focus:outline-none">
+                <option value="">Select state...</option>
+                {US_STATES.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">City</label>
+              <input type="text" value={form.city} onChange={(e) => update('city', e.target.value)} placeholder="e.g., Chicago" className="w-full px-4 py-3 bg-black border border-white/20 text-white placeholder:text-white/30 focus:border-neon focus:outline-none" />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">Postal Codes</label>
+            <input type="text" value={form.postal_codes} onChange={(e) => update('postal_codes', e.target.value)} placeholder="e.g., 34230, 34231, 34232" className="w-full px-4 py-3 bg-black border border-white/20 text-white placeholder:text-white/30 focus:border-neon focus:outline-none" />
+          </div>
+          <div>
+            <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">Assign Licensee (Optional)</label>
+            <select value={form.tenant_id} onChange={(e) => update('tenant_id', e.target.value)} className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-neon focus:outline-none">
+              <option value="">Leave unassigned</option>
+              {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <button type="button" onClick={onClose} className="px-6 py-3 border border-white/20 text-white/60 font-bold uppercase tracking-wider hover:border-white/40 hover:text-white transition-colors">Cancel</button>
+            <button type="submit" disabled={saving} className="flex items-center gap-2 px-6 py-3 bg-neon text-black font-bold uppercase tracking-wider hover:bg-neon/90 transition-colors disabled:opacity-50">
+              {saving ? (<><Loader2 className="h-4 w-4 animate-spin" />Creating...</>) : (<><Save className="h-4 w-4" />Create Territory</>)}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// ─── Venue Modal ────────────────────────────────────────────────────────────
+
+function CreateVenueModal({ open, onClose, onCreated, preselectedTenantId, territories }: {
+  open: boolean
+  onClose: () => void
+  onCreated: (venue: { id: string; name: string; city: string; state: string; tenant_id?: string; facility_type?: string; indoor_outdoor?: string; is_global: boolean }) => void
+  preselectedTenantId?: string
+  territories: Territory[]
+}) {
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [selectedTerritoryId, setSelectedTerritoryId] = useState('')
+  const [form, setForm] = useState({
+    tenant_id: preselectedTenantId || '', name: '', short_name: '', address_line_1: '',
+    city: '', state: '', postal_code: '', country: 'US', facility_type: 'other',
+    indoor_outdoor: 'both', max_daily_capacity: '', primary_contact_name: '',
+    primary_contact_email: '', primary_contact_phone: '', notes: '',
+  })
+
+  useEffect(() => {
+    if (!open) return
+    setError(null); setSaving(false)
+    setForm(prev => ({ ...prev, tenant_id: preselectedTenantId || '' }))
+  }, [open, preselectedTenantId])
+
+  const update = (field: string, value: string) =>
+    setForm(prev => ({ ...prev, [field]: value }))
+
+  const handleTerritoryChange = (territoryId: string) => {
+    setSelectedTerritoryId(territoryId)
+    if (territoryId) {
+      const t = territories.find(t => t.id === territoryId)
+      if (t?.tenant_id) setForm(prev => ({ ...prev, tenant_id: t.tenant_id! }))
+    }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(null)
+    if (!form.name.trim()) { setError('Venue name is required'); return }
+    if (!form.address_line_1.trim()) { setError('Address is required'); return }
+    if (!form.city.trim()) { setError('City is required'); return }
+    if (!form.state) { setError('State is required'); return }
+    if (!form.postal_code.trim()) { setError('Postal code is required'); return }
+
+    setSaving(true)
+    try {
+      const response = await fetch('/api/admin/venues', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ ...form, tenant_id: form.tenant_id || null, max_daily_capacity: form.max_daily_capacity ? parseInt(form.max_daily_capacity) : null }),
+      })
+      const result = await response.json()
+      if (!response.ok) { setError(result.error || 'Failed to create venue'); setSaving(false); return }
+      const newVenue = result.data
+      onCreated({
+        id: newVenue.id, name: form.name.trim(), city: form.city.trim(), state: form.state,
+        tenant_id: form.tenant_id || undefined, facility_type: form.facility_type,
+        indoor_outdoor: form.indoor_outdoor, is_global: !form.tenant_id,
+      })
+    } catch {
+      setError('Failed to create venue'); setSaving(false)
+    }
+  }
+
+  if (!open) return null
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-start justify-center pt-10 pb-10 overflow-y-auto">
+      <div className="fixed inset-0 bg-black/80" onClick={onClose} />
+      <div className="relative bg-dark-100 border border-white/10 w-full max-w-2xl mx-4 shadow-2xl">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
+          <h2 className="text-lg font-black uppercase tracking-wider text-white">Create New Venue</h2>
+          <button onClick={onClose} className="p-1 hover:bg-white/10 transition-colors"><X className="h-5 w-5 text-white/50" /></button>
+        </div>
+        {error && (
+          <div className="mx-6 mt-4 p-3 bg-magenta/10 border border-magenta/30 flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 text-magenta flex-shrink-0" /><p className="text-sm text-magenta">{error}</p>
+          </div>
+        )}
+        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+          <div>
+            <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">Territory</label>
+            <select value={selectedTerritoryId} onChange={(e) => handleTerritoryChange(e.target.value)} className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-neon focus:outline-none">
+              <option value="">Global (All territories)</option>
+              {territories.map(t => (
+                <option key={t.id} value={t.id}>{t.name} - {t.city ? `${t.city}, ` : ''}{t.state_region}{t.tenant_name ? ` (${t.tenant_name})` : ''}</option>
+              ))}
+            </select>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">Venue Name *</label>
+              <input type="text" value={form.name} onChange={(e) => update('name', e.target.value)} placeholder="e.g., Northside Sports Complex" className="w-full px-4 py-3 bg-black border border-white/20 text-white placeholder:text-white/30 focus:border-neon focus:outline-none" />
+            </div>
+            <div>
+              <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">Short Name</label>
+              <input type="text" value={form.short_name} onChange={(e) => update('short_name', e.target.value)} placeholder="e.g., Northside" className="w-full px-4 py-3 bg-black border border-white/20 text-white placeholder:text-white/30 focus:border-neon focus:outline-none" />
+            </div>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">Facility Type</label>
+              <select value={form.facility_type} onChange={(e) => update('facility_type', e.target.value)} className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-neon focus:outline-none">
+                {FACILITY_TYPES.map(ft => <option key={ft.value} value={ft.value}>{ft.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">Indoor / Outdoor</label>
+              <select value={form.indoor_outdoor} onChange={(e) => update('indoor_outdoor', e.target.value)} className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-neon focus:outline-none">
+                {INDOOR_OUTDOOR_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">Address *</label>
+            <input type="text" value={form.address_line_1} onChange={(e) => update('address_line_1', e.target.value)} placeholder="Street address" className="w-full px-4 py-3 bg-black border border-white/20 text-white placeholder:text-white/30 focus:border-neon focus:outline-none" />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div>
+              <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">City *</label>
+              <input type="text" value={form.city} onChange={(e) => update('city', e.target.value)} placeholder="City" className="w-full px-4 py-3 bg-black border border-white/20 text-white placeholder:text-white/30 focus:border-neon focus:outline-none" />
+            </div>
+            <div>
+              <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">State *</label>
+              <select value={form.state} onChange={(e) => update('state', e.target.value)} className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-neon focus:outline-none">
+                <option value="">Select...</option>
+                {US_STATES.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">ZIP Code *</label>
+              <input type="text" value={form.postal_code} onChange={(e) => update('postal_code', e.target.value)} placeholder="ZIP" className="w-full px-4 py-3 bg-black border border-white/20 text-white placeholder:text-white/30 focus:border-neon focus:outline-none" />
+            </div>
+          </div>
+          <div className="max-w-xs">
+            <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">Max Daily Capacity</label>
+            <input type="number" value={form.max_daily_capacity} onChange={(e) => update('max_daily_capacity', e.target.value)} placeholder="e.g., 100" min="0" className="w-full px-4 py-3 bg-black border border-white/20 text-white placeholder:text-white/30 focus:border-neon focus:outline-none" />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div>
+              <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">Contact Name</label>
+              <input type="text" value={form.primary_contact_name} onChange={(e) => update('primary_contact_name', e.target.value)} placeholder="Name" className="w-full px-4 py-3 bg-black border border-white/20 text-white placeholder:text-white/30 focus:border-neon focus:outline-none" />
+            </div>
+            <div>
+              <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">Contact Email</label>
+              <input type="email" value={form.primary_contact_email} onChange={(e) => update('primary_contact_email', e.target.value)} placeholder="Email" className="w-full px-4 py-3 bg-black border border-white/20 text-white placeholder:text-white/30 focus:border-neon focus:outline-none" />
+            </div>
+            <div>
+              <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">Contact Phone</label>
+              <input type="tel" value={form.primary_contact_phone} onChange={(e) => update('primary_contact_phone', e.target.value)} placeholder="Phone" className="w-full px-4 py-3 bg-black border border-white/20 text-white placeholder:text-white/30 focus:border-neon focus:outline-none" />
+            </div>
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <button type="button" onClick={onClose} className="px-6 py-3 border border-white/20 text-white/60 font-bold uppercase tracking-wider hover:border-white/40 hover:text-white transition-colors">Cancel</button>
+            <button type="submit" disabled={saving} className="flex items-center gap-2 px-6 py-3 bg-neon text-black font-bold uppercase tracking-wider hover:bg-neon/90 transition-colors disabled:opacity-50">
+              {saving ? (<><Loader2 className="h-4 w-4 animate-spin" />Creating...</>) : (<><Save className="h-4 w-4" />Create Venue</>)}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
 
 // Types (defined locally to avoid Prisma imports in client component)
 interface CampFormData {
@@ -126,6 +437,10 @@ export default function AdminCreateCampPage() {
   const [venues, setVenues] = useState<Venue[]>([])
   const [selectedTerritoryId, setSelectedTerritoryId] = useState<string>('')
 
+  // Modal state
+  const [showTerritoryModal, setShowTerritoryModal] = useState(false)
+  const [showVenueModal, setShowVenueModal] = useState(false)
+
   // Venue search dropdown state
   const [venueSearchQuery, setVenueSearchQuery] = useState('')
   const [venueDropdownOpen, setVenueDropdownOpen] = useState(false)
@@ -158,6 +473,31 @@ export default function AdminCreateCampPage() {
     featured: false,
     image_url: null,
   })
+
+  // Auto-save draft to database whenever the user leaves the page
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      const fd = formData
+      const tenantId = fd.tenant_id || ''
+      if (!tenantId) return
+
+      const today = new Date().toISOString().split('T')[0]
+      const draftData = {
+        ...fd,
+        name: fd.name.trim() || 'Untitled Draft',
+        tenant_id: tenantId,
+        start_date: fd.start_date || today,
+        end_date: fd.end_date || today,
+        status: 'draft',
+      }
+
+      const blob = new Blob([JSON.stringify(draftData)], { type: 'application/json' })
+      navigator.sendBeacon('/api/admin/camps?action=create', blob)
+    }
+
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [formData])
 
   useEffect(() => {
     if (user) {
@@ -346,6 +686,50 @@ export default function AdminCreateCampPage() {
     }
   }
 
+  const handleTerritoryCreated = (territory: { id: string; name: string; tenant_id?: string; state_region: string; city?: string }) => {
+    setShowTerritoryModal(false)
+    // Add new territory to the list and auto-select it
+    const newTerritory: Territory = {
+      id: territory.id,
+      name: territory.name,
+      country: 'USA',
+      state_region: territory.state_region,
+      city: territory.city || null,
+      status: territory.tenant_id ? 'assigned' : 'open',
+      tenant_id: territory.tenant_id || null,
+      tenant_name: territory.tenant_id ? (tenants.find(t => t.id === territory.tenant_id)?.name || null) : null,
+    }
+    setTerritories(prev => [...prev, newTerritory])
+    setSelectedTerritoryId(territory.id)
+    if (territory.tenant_id) {
+      setFormData(prev => ({ ...prev, tenant_id: territory.tenant_id!, location_id: null, venue_id: null }))
+      loadLocations(territory.tenant_id)
+      loadVenues(territory.tenant_id)
+    }
+    // Refresh tenants list in case the territory was assigned
+    fetch('/api/admin/camps/tenants', { credentials: 'include' })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data?.tenants) setTenants(data.tenants) })
+      .catch(() => {})
+  }
+
+  const handleVenueCreated = (venue: { id: string; name: string; city: string; state: string; tenant_id?: string; facility_type?: string; indoor_outdoor?: string; is_global: boolean }) => {
+    setShowVenueModal(false)
+    // Add new venue to the list and auto-select it
+    setVenues(prev => [...prev, {
+      id: venue.id,
+      name: venue.name,
+      short_name: null,
+      city: venue.city,
+      state: venue.state,
+      facility_type: venue.facility_type || null,
+      indoor_outdoor: venue.indoor_outdoor || null,
+      tenant_id: venue.tenant_id || null,
+      is_global: venue.is_global,
+    }])
+    setFormData(prev => ({ ...prev, venue_id: venue.id }))
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setSaving(true)
@@ -401,6 +785,21 @@ export default function AdminCreateCampPage() {
       userRole={userRole as 'hq_admin' | 'licensee_owner' || 'hq_admin'}
       userName="Admin"
     >
+      {/* Modals */}
+      <CreateTerritoryModal
+        open={showTerritoryModal}
+        onClose={() => setShowTerritoryModal(false)}
+        onCreated={handleTerritoryCreated}
+        tenants={tenants}
+      />
+      <CreateVenueModal
+        open={showVenueModal}
+        onClose={() => setShowVenueModal(false)}
+        onCreated={handleVenueCreated}
+        preselectedTenantId={formData.tenant_id}
+        territories={territories}
+      />
+
       <div className="mb-6">
         <Link
           href="/admin/camps"
@@ -469,13 +868,14 @@ export default function AdminCreateCampPage() {
                       ) : (
                         <span />
                       )}
-                      <Link
-                        href="/admin/licensees/territories/new"
-                        className="flex items-center gap-1.5 text-sm text-neon hover:underline"
+                      <button
+                        type="button"
+                        onClick={() => setShowTerritoryModal(true)}
+                        className="flex items-center gap-1.5 text-sm text-neon hover:text-neon/80 transition-colors"
                       >
-                        <MapPin className="h-3.5 w-3.5" />
-                        Create new territory
-                      </Link>
+                        <Plus className="h-3.5 w-3.5" />
+                        Create New Territory
+                      </button>
                     </div>
                   </div>
                 )}
@@ -738,15 +1138,16 @@ export default function AdminCreateCampPage() {
                         )}
                       </div>
 
-                        {/* Add New Venue Link */}
+                        {/* Add New Venue Button */}
                         <div className="p-3 border-t border-white/10">
-                          <Link
-                            href="/admin/venues/new"
-                            className="flex items-center gap-2 text-sm text-neon hover:underline"
+                          <button
+                            type="button"
+                            onClick={() => { setVenueDropdownOpen(false); setShowVenueModal(true) }}
+                            className="flex items-center gap-2 text-sm text-neon hover:text-neon/80 transition-colors"
                           >
-                            <MapPin className="h-4 w-4" />
-                            Add a new venue
-                          </Link>
+                            <Plus className="h-4 w-4" />
+                            Create New Venue
+                          </button>
                         </div>
                       </div>
                     </>
@@ -759,9 +1160,9 @@ export default function AdminCreateCampPage() {
                 {(isHqAdmin || formData.tenant_id) && venues.length === 0 && !venueDropdownOpen && (
                   <p className="mt-2 text-sm text-white/40">
                     No venues found.{' '}
-                    <Link href="/admin/venues/new" className="text-neon hover:underline">
-                      Add a new venue
-                    </Link>
+                    <button type="button" onClick={() => setShowVenueModal(true)} className="text-neon hover:underline">
+                      Create one now
+                    </button>
                   </p>
                 )}
               </div>
