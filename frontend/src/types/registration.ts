@@ -182,6 +182,7 @@ export interface AppliedPromoCode {
   discountType: 'percent' | 'fixed'
   discountValue: number
   discountAmount: number // Calculated
+  appliesTo: 'registration' | 'addons' | 'both'
 }
 
 export interface CheckoutTotals {

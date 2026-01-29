@@ -92,6 +92,7 @@ function PromoCodeInput({
         discountType: result.data.discountType,
         discountValue: result.data.discountValue,
         discountAmount: result.data.discountAmount,
+        appliesTo: result.data.appliesTo || 'both',
       })
       setCode('')
     } catch {

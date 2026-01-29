@@ -237,17 +237,22 @@ export async function POST(request: NextRequest) {
       const basePriceCents = campPrice
       const discountCents = siblingDiscount
 
-      // Promo discount (apply only to first camper)
-      const promoDiscountCents = isFirstCamper && promoCodeRecord
-        ? (promoCodeRecord.discountType === 'percentage'
-            ? Math.round(basePriceCents * (promoCodeRecord.discountValue / 100))
-            : Math.min(promoCodeRecord.discountValue, basePriceCents))
-        : 0
-
-      // Calculate addons for this camper
+      // Calculate addons for this camper (before promo so we can scope the discount)
       const camperAddOns = addOns.filter(a => a.camperId === camperData.id || !a.camperId)
       const relevantAddOns = i === 0 ? addOns : camperAddOns.filter(a => a.camperId === camperData.id)
       const addonsTotalCents = relevantAddOns.reduce((sum, a) => sum + a.unitPrice * a.quantity, 0)
+
+      // Promo discount (apply only to first camper, scoped by appliesTo)
+      let promoDiscountCents = 0
+      if (isFirstCamper && promoCodeRecord) {
+        const appliesTo = promoCodeRecord.appliesTo || 'both'
+        let eligible = 0
+        if (appliesTo === 'registration' || appliesTo === 'both') eligible += basePriceCents
+        if (appliesTo === 'addons' || appliesTo === 'both') eligible += addonsTotalCents
+        promoDiscountCents = promoCodeRecord.discountType === 'percentage'
+          ? Math.round(eligible * (promoCodeRecord.discountValue / 100))
+          : Math.min(promoCodeRecord.discountValue, eligible)
+      }
 
       // Calculate tax on taxable addons (physical products like t-shirts)
       // Camp registration fees are services and typically not taxed

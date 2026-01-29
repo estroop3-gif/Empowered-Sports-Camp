@@ -104,6 +104,7 @@ export async function POST(request: NextRequest) {
         discountValue: promoCode.discountValue,
         discountAmount,
         description: promoCode.description,
+        appliesTo: promoCode.appliesTo,
       },
     })
   } catch (error) {

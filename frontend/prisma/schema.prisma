@@ -435,6 +435,7 @@ model PromoCode {
   description      String?
   discountType     DiscountType   @map("discount_type")
   discountValue    Int            @map("discount_value")
+  appliesTo        PromoAppliesTo @default(both) @map("applies_to")
   maxUses          Int?           @map("max_uses")
   currentUses      Int            @default(0) @map("current_uses")
   minPurchaseCents Int?           @map("min_purchase_cents")
@@ -2681,6 +2682,12 @@ enum RegistrationStatus {
 enum DiscountType {
   percentage
   fixed
+}
+
+enum PromoAppliesTo {
+  registration
+  addons
+  both
 }
 
 enum AssignmentType {

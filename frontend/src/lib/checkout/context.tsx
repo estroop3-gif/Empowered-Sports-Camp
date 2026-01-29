@@ -547,14 +547,16 @@ export function CheckoutProvider({ children, campSlug }: CheckoutProviderProps) 
 
     const subtotalBeforePromo = campSubtotal - siblingDiscount + addOnsSubtotal
 
-    // Promo discount
+    // Promo discount (scoped by appliesTo)
     let promoDiscount = 0
     if (state.promoCode) {
-      if (state.promoCode.discountType === 'percent') {
-        promoDiscount = Math.round(subtotalBeforePromo * (state.promoCode.discountValue / 100))
-      } else {
-        promoDiscount = Math.min(state.promoCode.discountValue, subtotalBeforePromo)
-      }
+      const appliesTo = state.promoCode.appliesTo || 'both'
+      let eligible = 0
+      if (appliesTo === 'registration' || appliesTo === 'both') eligible += (campSubtotal - siblingDiscount)
+      if (appliesTo === 'addons' || appliesTo === 'both') eligible += addOnsSubtotal
+      promoDiscount = state.promoCode.discountType === 'percent'
+        ? Math.round(eligible * (state.promoCode.discountValue / 100))
+        : Math.min(state.promoCode.discountValue, eligible)
     }
 
     const subtotal = subtotalBeforePromo - promoDiscount
