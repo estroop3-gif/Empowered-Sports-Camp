@@ -198,7 +198,7 @@ export default function TerritoriesPage() {
 
   // Action handlers
   const handleClose = async (id: string) => {
-    if (!confirm('Are you sure you want to close this territory? It will be archived and no longer available for assignment.')) {
+    if (!confirm('Are you sure you want to close this territory? It will be removed from the list.')) {
       return
     }
 
@@ -211,14 +211,14 @@ export default function TerritoriesPage() {
       })
 
       if (response.ok) {
-        setTerritories((prev) =>
-          prev.map((t) => (t.id === id ? { ...t, status: 'closed' as TerritoryStatus, tenant_id: null, tenant_name: null } : t))
-        )
+        const oldStatus = territories.find((t) => t.id === id)?.status
+        // Remove from list
+        setTerritories((prev) => prev.filter((t) => t.id !== id))
         // Update stats
         if (stats) {
-          const oldStatus = territories.find((t) => t.id === id)?.status
           setStats({
             ...stats,
+            total: stats.total - 1,
             closed: stats.closed + 1,
             [oldStatus as string]: stats[oldStatus as keyof TerritoryStats] as number - 1,
           })
