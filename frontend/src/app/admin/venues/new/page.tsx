@@ -116,18 +116,27 @@ export default function NewVenuePage() {
   const searchParams = useSearchParams()
 
   // Store return-to info in state so it survives re-renders and closures
+  // Read from URL params first, fall back to sessionStorage
   const [returnInfo] = useState(() => {
+    let returnTo: string | null = null
+    let tenantId: string | null = null
+
     if (typeof window !== 'undefined') {
       const url = new URL(window.location.href)
-      return {
-        returnTo: url.searchParams.get('returnTo'),
-        tenantId: url.searchParams.get('tenantId'),
+      returnTo = url.searchParams.get('returnTo')
+      tenantId = url.searchParams.get('tenantId')
+
+      // Fallback: check sessionStorage for return route
+      if (!returnTo) {
+        const stored = sessionStorage.getItem('venue-return-to')
+        if (stored) {
+          returnTo = stored
+          sessionStorage.removeItem('venue-return-to')
+        }
       }
     }
-    return {
-      returnTo: searchParams.get('returnTo'),
-      tenantId: searchParams.get('tenantId'),
-    }
+
+    return { returnTo, tenantId }
   })
   const returnTo = returnInfo.returnTo
   const returnTenantId = returnInfo.tenantId

@@ -236,18 +236,48 @@ export default function CreateCampPage() {
     }
   }
 
-  const saveDraftAndNavigateToVenue = () => {
-    sessionStorage.setItem(CAMP_DRAFT_KEY, JSON.stringify(formData))
-    const params = new URLSearchParams({ returnTo: 'camp-create' })
-    if (formData.tenant_id) {
-      params.set('tenantId', formData.tenant_id)
+  // Save camp as a database draft and also to sessionStorage for form restore
+  const saveDraftToDatabase = async (): Promise<string | null> => {
+    // Need at minimum a name, tenant, and dates to save to database
+    const canSaveToDb = formData.name.trim() && formData.tenant_id && formData.start_date && formData.end_date
+    if (!canSaveToDb) return null
+
+    try {
+      const draftData = { ...formData, status: 'draft' as const }
+      const response = await fetch('/api/admin/camps?action=create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(draftData),
+      })
+      if (response.ok) {
+        const data = await response.json()
+        return data.camp?.id || null
+      }
+    } catch (err) {
+      console.error('Failed to save draft to database:', err)
     }
-    router.push(`/admin/venues/new?${params.toString()}`)
+    return null
   }
 
-  const saveDraftAndNavigateToTerritory = () => {
+  const saveDraftAndNavigate = async (destination: 'venue' | 'territory') => {
+    // Always save form state to sessionStorage for restore
     sessionStorage.setItem(CAMP_DRAFT_KEY, JSON.stringify(formData))
-    router.push('/admin/licensees/territories/new?returnTo=camp-create')
+
+    // Also save to database as draft so it appears in camps list
+    await saveDraftToDatabase()
+
+    if (destination === 'venue') {
+      // Store return info in sessionStorage (more reliable than query params)
+      sessionStorage.setItem('venue-return-to', 'camp-create')
+      const params = new URLSearchParams({ returnTo: 'camp-create' })
+      if (formData.tenant_id) {
+        params.set('tenantId', formData.tenant_id)
+      }
+      router.push(`/admin/venues/new?${params.toString()}`)
+    } else {
+      sessionStorage.setItem('territory-return-to', 'camp-create')
+      router.push('/admin/licensees/territories/new?returnTo=camp-create')
+    }
   }
 
   const handleNameChange = (name: string) => {
@@ -369,7 +399,7 @@ export default function CreateCampPage() {
                     </select>
                     <button
                       type="button"
-                      onClick={saveDraftAndNavigateToTerritory}
+                      onClick={() => saveDraftAndNavigate('territory')}
                       className="mt-3 inline-flex items-center gap-1.5 text-sm text-neon hover:text-neon/80 transition-colors"
                     >
                       <Plus className="h-4 w-4" />
@@ -486,7 +516,7 @@ export default function CreateCampPage() {
                     No venues found for this territory.{' '}
                     <button
                       type="button"
-                      onClick={saveDraftAndNavigateToVenue}
+                      onClick={() => saveDraftAndNavigate('venue')}
                       className="text-neon hover:underline"
                     >
                       Create one now
@@ -496,7 +526,7 @@ export default function CreateCampPage() {
                 {formData.tenant_id && (
                   <button
                     type="button"
-                    onClick={saveDraftAndNavigateToVenue}
+                    onClick={() => saveDraftAndNavigate('venue')}
                     className="mt-3 inline-flex items-center gap-1.5 text-sm text-neon hover:text-neon/80 transition-colors"
                   >
                     <Plus className="h-4 w-4" />

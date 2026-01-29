@@ -72,20 +72,29 @@ export default function NewTerritoryPage() {
   const searchParams = useSearchParams()
 
   // Store return-to info in state so it survives re-renders and closures
+  // Read from URL params first, fall back to sessionStorage
   const [returnInfo] = useState(() => {
+    let returnTo: string | null = null
+    let originalReturnTo: string | null = null
+    let originalTenantId: string | null = null
+
     if (typeof window !== 'undefined') {
       const url = new URL(window.location.href)
-      return {
-        returnTo: url.searchParams.get('returnTo'),
-        originalReturnTo: url.searchParams.get('originalReturnTo'),
-        originalTenantId: url.searchParams.get('originalTenantId'),
+      returnTo = url.searchParams.get('returnTo')
+      originalReturnTo = url.searchParams.get('originalReturnTo')
+      originalTenantId = url.searchParams.get('originalTenantId')
+
+      // Fallback: check sessionStorage for return route
+      if (!returnTo) {
+        const stored = sessionStorage.getItem('territory-return-to')
+        if (stored) {
+          returnTo = stored
+          sessionStorage.removeItem('territory-return-to')
+        }
       }
     }
-    return {
-      returnTo: searchParams.get('returnTo'),
-      originalReturnTo: searchParams.get('originalReturnTo'),
-      originalTenantId: searchParams.get('originalTenantId'),
-    }
+
+    return { returnTo, originalReturnTo, originalTenantId }
   })
   const isReturnToVenueCreate = returnInfo.returnTo === 'venue-create'
   const isReturnToCampCreate = returnInfo.returnTo === 'camp-create'
