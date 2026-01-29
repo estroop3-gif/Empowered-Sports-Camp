@@ -397,7 +397,7 @@ function CamperCard({
               disabled={!camper.isNewAthlete && !!camper.existingAthleteId}
             />
             <FormSelect
-              label="Grade (Fall 2025)"
+              label={`Grade (Fall ${new Date().getFullYear() + (new Date().getMonth() >= 6 ? 1 : 0)})`}
               required
               value={camper.grade}
               onChange={(e) => onUpdate({ grade: e.target.value })}

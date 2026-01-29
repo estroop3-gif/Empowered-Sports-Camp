@@ -22,6 +22,18 @@ import {
 } from '@/lib/services/camps'
 import { ShareCampButton } from '@/components/camps/ShareCampButton'
 
+/** Convert "HH:MM" or "HH:MM:SS" 24h time to "H:MM AM/PM" */
+function formatTime12h(time?: string | null): string {
+  if (!time) return '9:00 AM'
+  const [hStr, mStr] = time.split(':')
+  let h = parseInt(hStr, 10)
+  const m = mStr || '00'
+  const ampm = h >= 12 ? 'PM' : 'AM'
+  if (h === 0) h = 12
+  else if (h > 12) h -= 12
+  return `${h}:${m} ${ampm}`
+}
+
 interface PageProps {
   params: Promise<{ slug: string }>
 }
@@ -104,7 +116,7 @@ export default async function CampDetailPage({ params }: PageProps) {
                   {camp.name}
                 </h1>
                 {camp.description && (
-                  <p className="mt-6 text-lg text-white/60">{camp.description}</p>
+                  <p className="mt-6 text-lg text-white/60 whitespace-pre-wrap">{camp.description}</p>
                 )}
               </div>
 
@@ -135,8 +147,7 @@ export default async function CampDetailPage({ params }: PageProps) {
                   <div>
                     <div className="text-sm text-white/40 uppercase tracking-wider">Time</div>
                     <div className="text-white font-medium">
-                      {camp.daily_start_time?.slice(0, 5) || '9:00'} -{' '}
-                      {camp.daily_end_time?.slice(0, 5) || '15:00'}
+                      {formatTime12h(camp.daily_start_time)} - {formatTime12h(camp.daily_end_time)}
                     </div>
                   </div>
                 </div>
