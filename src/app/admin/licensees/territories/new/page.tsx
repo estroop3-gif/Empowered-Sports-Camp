@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { AdminLayout, PageHeader, ContentCard } from '@/components/admin/admin-layout'
 
 // Types
@@ -69,6 +69,41 @@ interface FormErrors {
 
 export default function NewTerritoryPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+
+  // Read return-to info on mount (useEffect guarantees client-side execution)
+  const [returnInfo, setReturnInfo] = useState<{
+    returnTo: string | null
+    originalReturnTo: string | null
+    originalTenantId: string | null
+  }>({ returnTo: null, originalReturnTo: null, originalTenantId: null })
+
+  useEffect(() => {
+    const url = new URL(window.location.href)
+    let returnTo = url.searchParams.get('returnTo')
+    const originalReturnTo = url.searchParams.get('originalReturnTo')
+    const originalTenantId = url.searchParams.get('originalTenantId')
+
+    // Fallback: check sessionStorage for return route
+    if (!returnTo) {
+      const stored = sessionStorage.getItem('territory-return-to')
+      if (stored) {
+        returnTo = stored
+        sessionStorage.removeItem('territory-return-to')
+      }
+    }
+
+    if (returnTo) {
+      setReturnInfo({ returnTo, originalReturnTo, originalTenantId })
+    }
+  }, [])
+
+  const returnInfoRef = useRef(returnInfo)
+  returnInfoRef.current = returnInfo
+
+  const isReturnToVenueCreate = returnInfo.returnTo === 'venue-create'
+  const isReturnToCampCreate = returnInfo.returnTo === 'camp-create'
+  const hasReturnTo = isReturnToVenueCreate || isReturnToCampCreate
   const [tenants, setTenants] = useState<Array<{ id: string; name: string }>>([])
   const [saving, setSaving] = useState(false)
   const [success, setSuccess] = useState(false)
@@ -165,8 +200,9 @@ export default function NewTerritoryPage() {
         body: JSON.stringify(input),
       })
 
+      const result = await response.json()
+
       if (!response.ok) {
-        const result = await response.json()
         setError(result.error || 'Failed to create territory')
         setSaving(false)
         return
@@ -175,9 +211,21 @@ export default function NewTerritoryPage() {
       setSuccess(true)
       setSaving(false)
 
-      // Redirect after short delay
+      // Redirect after short delay - use hard navigation for reliability
       setTimeout(() => {
-        router.push('/admin/licensees/territories')
+        const info = returnInfoRef.current
+        if (info.returnTo === 'venue-create') {
+          const newTerritoryId = result.territory?.id || result.data?.id || result.id
+          const params = new URLSearchParams({ territoryCreated: 'true' })
+          if (newTerritoryId) params.set('territoryId', newTerritoryId)
+          if (info.originalReturnTo) params.set('returnTo', info.originalReturnTo)
+          if (info.originalTenantId) params.set('tenantId', info.originalTenantId)
+          window.location.href = `/admin/venues/new?${params.toString()}`
+        } else if (info.returnTo === 'camp-create') {
+          window.location.href = '/portal/camps/new?territoryCreated=true'
+        } else {
+          window.location.href = '/admin/licensees/territories'
+        }
       }, 1500)
     } catch {
       setError('Failed to create territory')
@@ -201,7 +249,13 @@ export default function NewTerritoryPage() {
                 ? 'The territory has been created and assigned to the selected licensee.'
                 : 'The territory is now available for assignment.'}
             </p>
-            <p className="text-sm text-white/30">Redirecting to territories list...</p>
+            <p className="text-sm text-white/30">
+              {isReturnToVenueCreate
+                ? 'Redirecting to venue form...'
+                : isReturnToCampCreate
+                  ? 'Redirecting to camp form...'
+                  : 'Redirecting to territories list...'}
+            </p>
           </div>
         </div>
       </AdminLayout>
@@ -212,11 +266,11 @@ export default function NewTerritoryPage() {
     <AdminLayout userRole="hq_admin" userName="Admin">
       <div className="mb-6">
         <Link
-          href="/admin/licensees/territories"
+          href={hasReturnTo ? (isReturnToCampCreate ? '/portal/camps/new' : '/admin/venues/new') : '/admin/licensees/territories'}
           className="inline-flex items-center gap-2 text-sm text-white/50 hover:text-neon transition-colors"
         >
           <ArrowLeft className="h-4 w-4" />
-          Back to Territories
+          {isReturnToVenueCreate ? 'Back to Venue Form' : isReturnToCampCreate ? 'Back to Camp Form' : 'Back to Territories'}
         </Link>
       </div>
 
@@ -522,7 +576,7 @@ export default function NewTerritoryPage() {
                 </button>
 
                 <Link
-                  href="/admin/licensees/territories"
+                  href={hasReturnTo ? (isReturnToCampCreate ? '/portal/camps/new' : '/admin/venues/new') : '/admin/licensees/territories'}
                   className="flex items-center justify-center gap-2 w-full py-3 border border-white/20 text-white/60 font-bold uppercase tracking-wider hover:border-white/40 hover:text-white transition-colors"
                 >
                   Cancel

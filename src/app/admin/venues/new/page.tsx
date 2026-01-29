@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, useRef } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { AdminLayout, PageHeader, ContentCard } from '@/components/admin/admin-layout'
 import { cn } from '@/lib/utils'
@@ -24,6 +24,7 @@ import {
   Layers,
   Globe,
   Image,
+  Plus,
 } from 'lucide-react'
 
 // Types
@@ -108,8 +109,43 @@ const INDOOR_OUTDOOR_OPTIONS: { value: IndoorOutdoor; label: string; icon: React
   { value: 'both', label: 'Mixed (Both)', icon: Layers },
 ]
 
+const VENUE_DRAFT_KEY = 'venue-draft'
+
 export default function NewVenuePage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+
+  // Read return-to info on mount (useEffect guarantees client-side execution)
+  const [returnInfo, setReturnInfo] = useState<{
+    returnTo: string | null
+    tenantId: string | null
+  }>({ returnTo: null, tenantId: null })
+
+  useEffect(() => {
+    const url = new URL(window.location.href)
+    let returnTo = url.searchParams.get('returnTo')
+    const tenantId = url.searchParams.get('tenantId')
+
+    // Fallback: check sessionStorage for return route
+    if (!returnTo) {
+      const stored = sessionStorage.getItem('venue-return-to')
+      if (stored) {
+        returnTo = stored
+        sessionStorage.removeItem('venue-return-to')
+      }
+    }
+
+    if (returnTo || tenantId) {
+      setReturnInfo({ returnTo, tenantId })
+    }
+  }, [])
+
+  const returnInfoRef = useRef(returnInfo)
+  returnInfoRef.current = returnInfo
+
+  const returnTo = returnInfo.returnTo
+  const returnTenantId = returnInfo.tenantId
+  const isReturnToCampCreate = returnTo === 'camp-create'
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
@@ -141,6 +177,37 @@ export default function NewVenuePage() {
     hero_image_url: '',
   })
 
+  // Restore draft from sessionStorage on mount
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(VENUE_DRAFT_KEY)
+      if (saved) {
+        const draft = JSON.parse(saved)
+        setFormData(draft.formData)
+        if (draft.selectedTerritoryId) {
+          setSelectedTerritoryId(draft.selectedTerritoryId)
+        }
+        const territoryCreated = searchParams.get('territoryCreated')
+        const territoryId = searchParams.get('territoryId')
+        if (territoryCreated === 'true' && territoryId) {
+          setSelectedTerritoryId(territoryId)
+          // tenant_id will be resolved after territories load
+        }
+        sessionStorage.removeItem(VENUE_DRAFT_KEY)
+        // Clean URL params (preserve returnTo/tenantId if present)
+        const cleanParams = new URLSearchParams()
+        if (returnTo) cleanParams.set('returnTo', returnTo)
+        if (returnTenantId) cleanParams.set('tenantId', returnTenantId)
+        const cleanUrl = cleanParams.toString()
+          ? `/admin/venues/new?${cleanParams.toString()}`
+          : '/admin/venues/new'
+        window.history.replaceState({}, '', cleanUrl)
+      }
+    } catch {
+      // Ignore parse errors
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   // Fetch tenants and territories
   useEffect(() => {
     async function fetchData() {
@@ -166,6 +233,39 @@ export default function NewVenuePage() {
     }
     fetchData()
   }, [])
+
+  // Auto-select tenant when coming from camp form with tenantId
+  useEffect(() => {
+    if (returnTenantId && territories.length > 0) {
+      // Find a territory that belongs to this tenant
+      const territory = territories.find(t => t.tenant_id === returnTenantId)
+      if (territory) {
+        setSelectedTerritoryId(territory.id)
+        setFormData(prev => ({ ...prev, tenant_id: returnTenantId }))
+      }
+    }
+  }, [returnTenantId, territories])
+
+  // When a restored territory ID matches a loaded territory, set tenant_id
+  useEffect(() => {
+    if (selectedTerritoryId && territories.length > 0) {
+      const territory = territories.find(t => t.id === selectedTerritoryId)
+      if (territory?.tenant_id) {
+        setFormData(prev => ({ ...prev, tenant_id: territory.tenant_id! }))
+      }
+    }
+  }, [selectedTerritoryId, territories])
+
+  const saveDraftAndNavigateToTerritory = () => {
+    sessionStorage.setItem(VENUE_DRAFT_KEY, JSON.stringify({
+      formData,
+      selectedTerritoryId,
+    }))
+    const params = new URLSearchParams({ returnTo: 'venue-create' })
+    if (returnTo) params.set('originalReturnTo', returnTo)
+    if (returnTenantId) params.set('originalTenantId', returnTenantId)
+    router.push(`/admin/licensees/territories/new?${params.toString()}`)
+  }
 
   // Handle territory selection - set tenant_id from territory
   const handleTerritoryChange = (territoryId: string) => {
@@ -247,10 +347,17 @@ export default function NewVenuePage() {
       setCreatedVenueName(formData.name)
       setSuccess(true)
       setSaving(false)
+      sessionStorage.removeItem(VENUE_DRAFT_KEY)
 
-      // Redirect to venues list after showing success message
+      // Redirect after showing success message - use hard navigation for reliability
       setTimeout(() => {
-        router.push('/admin/venues?created=true')
+        const info = returnInfoRef.current
+        if (info.returnTo === 'camp-create') {
+          const newVenueId = result.data?.id || result.data?.venue?.id
+          window.location.href = `/portal/camps/new?venueCreated=true&venueId=${newVenueId}`
+        } else {
+          window.location.href = '/admin/venues?created=true'
+        }
       }, 1500)
     } catch {
       setError('Failed to create venue')
@@ -283,7 +390,7 @@ export default function NewVenuePage() {
             </p>
             <div className="flex items-center justify-center gap-2 text-white/40">
               <Loader2 className="h-4 w-4 animate-spin" />
-              <span>Redirecting to venues list...</span>
+              <span>{isReturnToCampCreate ? 'Redirecting to camp form...' : 'Redirecting to venues list...'}</span>
             </div>
           </div>
         </div>
@@ -295,11 +402,11 @@ export default function NewVenuePage() {
     <AdminLayout userRole="hq_admin" userName="Admin">
       <div className="mb-6">
         <Link
-          href="/admin/venues"
+          href={isReturnToCampCreate ? '/portal/camps/new' : '/admin/venues'}
           className="inline-flex items-center gap-2 text-sm text-white/50 hover:text-neon transition-colors"
         >
           <ArrowLeft className="h-4 w-4" />
-          Back to Venues
+          {isReturnToCampCreate ? 'Back to Camp Form' : 'Back to Venues'}
         </Link>
       </div>
 
@@ -353,11 +460,23 @@ export default function NewVenuePage() {
                   {territories.length === 0 && (
                     <p className="mt-2 text-sm text-white/40">
                       No territories found.{' '}
-                      <Link href="/admin/territories" className="text-neon hover:underline">
-                        Create a territory
-                      </Link>
+                      <button
+                        type="button"
+                        onClick={saveDraftAndNavigateToTerritory}
+                        className="text-neon hover:underline"
+                      >
+                        Create one now
+                      </button>
                     </p>
                   )}
+                  <button
+                    type="button"
+                    onClick={saveDraftAndNavigateToTerritory}
+                    className="mt-3 inline-flex items-center gap-1.5 text-sm text-neon hover:text-neon/80 transition-colors"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Create New Territory
+                  </button>
                 </div>
 
                 <div className="grid gap-6 sm:grid-cols-2">
@@ -661,7 +780,7 @@ export default function NewVenuePage() {
                 </button>
 
                 <Link
-                  href="/admin/venues"
+                  href={isReturnToCampCreate ? '/portal/camps/new' : '/admin/venues'}
                   className="flex items-center justify-center gap-2 w-full py-3 border border-white/20 text-white/60 font-bold uppercase tracking-wider hover:border-white/40 hover:text-white transition-colors"
                 >
                   Cancel
