@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { AdminLayout, PageHeader, ContentCard } from '@/components/admin/admin-layout'
@@ -115,29 +115,34 @@ export default function NewVenuePage() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
-  // Store return-to info in state so it survives re-renders and closures
-  // Read from URL params first, fall back to sessionStorage
-  const [returnInfo] = useState(() => {
-    let returnTo: string | null = null
-    let tenantId: string | null = null
+  // Read return-to info on mount (useEffect guarantees client-side execution)
+  const [returnInfo, setReturnInfo] = useState<{
+    returnTo: string | null
+    tenantId: string | null
+  }>({ returnTo: null, tenantId: null })
 
-    if (typeof window !== 'undefined') {
-      const url = new URL(window.location.href)
-      returnTo = url.searchParams.get('returnTo')
-      tenantId = url.searchParams.get('tenantId')
+  useEffect(() => {
+    const url = new URL(window.location.href)
+    let returnTo = url.searchParams.get('returnTo')
+    const tenantId = url.searchParams.get('tenantId')
 
-      // Fallback: check sessionStorage for return route
-      if (!returnTo) {
-        const stored = sessionStorage.getItem('venue-return-to')
-        if (stored) {
-          returnTo = stored
-          sessionStorage.removeItem('venue-return-to')
-        }
+    // Fallback: check sessionStorage for return route
+    if (!returnTo) {
+      const stored = sessionStorage.getItem('venue-return-to')
+      if (stored) {
+        returnTo = stored
+        sessionStorage.removeItem('venue-return-to')
       }
     }
 
-    return { returnTo, tenantId }
-  })
+    if (returnTo || tenantId) {
+      setReturnInfo({ returnTo, tenantId })
+    }
+  }, [])
+
+  const returnInfoRef = useRef(returnInfo)
+  returnInfoRef.current = returnInfo
+
   const returnTo = returnInfo.returnTo
   const returnTenantId = returnInfo.tenantId
   const isReturnToCampCreate = returnTo === 'camp-create'
@@ -344,9 +349,10 @@ export default function NewVenuePage() {
       setSaving(false)
       sessionStorage.removeItem(VENUE_DRAFT_KEY)
 
-      // Redirect after showing success message
+      // Redirect after showing success message - use ref for latest returnInfo
       setTimeout(() => {
-        if (isReturnToCampCreate) {
+        const info = returnInfoRef.current
+        if (info.returnTo === 'camp-create') {
           const newVenueId = result.data?.id || result.data?.venue?.id
           router.push(`/portal/camps/new?venueCreated=true&venueId=${newVenueId}`)
         } else {

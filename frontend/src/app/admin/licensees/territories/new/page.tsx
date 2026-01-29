@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { AdminLayout, PageHeader, ContentCard } from '@/components/admin/admin-layout'
@@ -71,31 +71,36 @@ export default function NewTerritoryPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
-  // Store return-to info in state so it survives re-renders and closures
-  // Read from URL params first, fall back to sessionStorage
-  const [returnInfo] = useState(() => {
-    let returnTo: string | null = null
-    let originalReturnTo: string | null = null
-    let originalTenantId: string | null = null
+  // Read return-to info on mount (useEffect guarantees client-side execution)
+  const [returnInfo, setReturnInfo] = useState<{
+    returnTo: string | null
+    originalReturnTo: string | null
+    originalTenantId: string | null
+  }>({ returnTo: null, originalReturnTo: null, originalTenantId: null })
 
-    if (typeof window !== 'undefined') {
-      const url = new URL(window.location.href)
-      returnTo = url.searchParams.get('returnTo')
-      originalReturnTo = url.searchParams.get('originalReturnTo')
-      originalTenantId = url.searchParams.get('originalTenantId')
+  useEffect(() => {
+    const url = new URL(window.location.href)
+    let returnTo = url.searchParams.get('returnTo')
+    const originalReturnTo = url.searchParams.get('originalReturnTo')
+    const originalTenantId = url.searchParams.get('originalTenantId')
 
-      // Fallback: check sessionStorage for return route
-      if (!returnTo) {
-        const stored = sessionStorage.getItem('territory-return-to')
-        if (stored) {
-          returnTo = stored
-          sessionStorage.removeItem('territory-return-to')
-        }
+    // Fallback: check sessionStorage for return route
+    if (!returnTo) {
+      const stored = sessionStorage.getItem('territory-return-to')
+      if (stored) {
+        returnTo = stored
+        sessionStorage.removeItem('territory-return-to')
       }
     }
 
-    return { returnTo, originalReturnTo, originalTenantId }
-  })
+    if (returnTo) {
+      setReturnInfo({ returnTo, originalReturnTo, originalTenantId })
+    }
+  }, [])
+
+  const returnInfoRef = useRef(returnInfo)
+  returnInfoRef.current = returnInfo
+
   const isReturnToVenueCreate = returnInfo.returnTo === 'venue-create'
   const isReturnToCampCreate = returnInfo.returnTo === 'camp-create'
   const hasReturnTo = isReturnToVenueCreate || isReturnToCampCreate
@@ -206,16 +211,17 @@ export default function NewTerritoryPage() {
       setSuccess(true)
       setSaving(false)
 
-      // Redirect after short delay
+      // Redirect after short delay - use ref for latest returnInfo
       setTimeout(() => {
-        if (isReturnToVenueCreate) {
+        const info = returnInfoRef.current
+        if (info.returnTo === 'venue-create') {
           const newTerritoryId = result.territory?.id || result.data?.id || result.id
           const params = new URLSearchParams({ territoryCreated: 'true' })
           if (newTerritoryId) params.set('territoryId', newTerritoryId)
-          if (returnInfo.originalReturnTo) params.set('returnTo', returnInfo.originalReturnTo)
-          if (returnInfo.originalTenantId) params.set('tenantId', returnInfo.originalTenantId)
+          if (info.originalReturnTo) params.set('returnTo', info.originalReturnTo)
+          if (info.originalTenantId) params.set('tenantId', info.originalTenantId)
           router.push(`/admin/venues/new?${params.toString()}`)
-        } else if (isReturnToCampCreate) {
+        } else if (info.returnTo === 'camp-create') {
           router.push('/portal/camps/new?territoryCreated=true')
         } else {
           router.push('/admin/licensees/territories')
