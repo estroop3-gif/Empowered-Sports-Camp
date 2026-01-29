@@ -114,8 +114,23 @@ const VENUE_DRAFT_KEY = 'venue-draft'
 export default function NewVenuePage() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const returnTo = searchParams.get('returnTo')
-  const returnTenantId = searchParams.get('tenantId')
+
+  // Store return-to info in state so it survives re-renders and closures
+  const [returnInfo] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href)
+      return {
+        returnTo: url.searchParams.get('returnTo'),
+        tenantId: url.searchParams.get('tenantId'),
+      }
+    }
+    return {
+      returnTo: searchParams.get('returnTo'),
+      tenantId: searchParams.get('tenantId'),
+    }
+  })
+  const returnTo = returnInfo.returnTo
+  const returnTenantId = returnInfo.tenantId
   const isReturnToCampCreate = returnTo === 'camp-create'
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)

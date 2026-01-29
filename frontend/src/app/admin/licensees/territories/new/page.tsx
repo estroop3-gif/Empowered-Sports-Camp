@@ -70,10 +70,24 @@ interface FormErrors {
 export default function NewTerritoryPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const returnTo = searchParams.get('returnTo')
-  const originalReturnTo = searchParams.get('originalReturnTo')
-  const originalTenantId = searchParams.get('originalTenantId')
-  const isReturnToVenueCreate = returnTo === 'venue-create'
+
+  // Store return-to info in state so it survives re-renders and closures
+  const [returnInfo] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href)
+      return {
+        returnTo: url.searchParams.get('returnTo'),
+        originalReturnTo: url.searchParams.get('originalReturnTo'),
+        originalTenantId: url.searchParams.get('originalTenantId'),
+      }
+    }
+    return {
+      returnTo: searchParams.get('returnTo'),
+      originalReturnTo: searchParams.get('originalReturnTo'),
+      originalTenantId: searchParams.get('originalTenantId'),
+    }
+  })
+  const isReturnToVenueCreate = returnInfo.returnTo === 'venue-create'
   const [tenants, setTenants] = useState<Array<{ id: string; name: string }>>([])
   const [saving, setSaving] = useState(false)
   const [success, setSuccess] = useState(false)
@@ -187,8 +201,8 @@ export default function NewTerritoryPage() {
           const newTerritoryId = result.territory?.id || result.data?.id || result.id
           const params = new URLSearchParams({ territoryCreated: 'true' })
           if (newTerritoryId) params.set('territoryId', newTerritoryId)
-          if (originalReturnTo) params.set('returnTo', originalReturnTo)
-          if (originalTenantId) params.set('tenantId', originalTenantId)
+          if (returnInfo.originalReturnTo) params.set('returnTo', returnInfo.originalReturnTo)
+          if (returnInfo.originalTenantId) params.set('tenantId', returnInfo.originalTenantId)
           router.push(`/admin/venues/new?${params.toString()}`)
         } else {
           router.push('/admin/licensees/territories')
