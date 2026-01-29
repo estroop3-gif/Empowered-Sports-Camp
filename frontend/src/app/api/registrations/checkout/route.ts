@@ -125,12 +125,20 @@ export async function POST(request: NextRequest) {
 
     // Find or create parent profile
     // Profile is linked to auth, so we look up by email first
-    // If user is authenticated, we also check by their Cognito sub (user ID)
+    // If user is authenticated, we also check by their profile ID
     let parentProfile = await prisma.profile.findFirst({
       where: {
         email: parent.email.toLowerCase(),
       },
     })
+
+    // If not found by email but user is authenticated, look up by their profile ID
+    // This handles cases where the registration form email differs from the account email
+    if (!parentProfile && authUser?.id) {
+      parentProfile = await prisma.profile.findUnique({
+        where: { id: authUser.id },
+      })
+    }
 
     // Get the profile ID to use - prefer authUser.id (Cognito sub) for consistency with dashboard
     // The auth helper may have already mapped the ID to profile.id, but we want the original Cognito sub

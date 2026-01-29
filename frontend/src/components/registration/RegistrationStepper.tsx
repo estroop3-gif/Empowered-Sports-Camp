@@ -18,6 +18,7 @@ import type { CheckoutStep } from '@/types/registration'
 interface RegistrationStepperProps {
   currentStep: CheckoutStep
   variant?: 'vertical' | 'horizontal'
+  hideAccountStep?: boolean
 }
 
 interface StepConfig {
@@ -40,12 +41,17 @@ const STEPS: StepConfig[] = [
 export function RegistrationStepper({
   currentStep,
   variant = 'vertical',
+  hideAccountStep = false,
 }: RegistrationStepperProps) {
-  const currentIndex = STEPS.findIndex((s) => s.id === currentStep)
+  // Filter out the account step when user is authenticated and renumber
+  const steps = hideAccountStep
+    ? STEPS.filter((s) => s.id !== 'account').map((s, i) => ({ ...s, number: i + 1 }))
+    : STEPS
+  const currentIndex = steps.findIndex((s) => s.id === currentStep)
 
   if (variant === 'horizontal') {
-    // Show first 7 steps in horizontal mode (exclude confirmation)
-    const visibleSteps = STEPS.slice(0, 7)
+    // Show steps in horizontal mode (exclude confirmation)
+    const visibleSteps = steps.slice(0, steps.length - 1)
     return (
       <div className="flex items-center justify-between">
         {visibleSteps.map((step, index) => {
@@ -105,7 +111,7 @@ export function RegistrationStepper({
   // Vertical layout (desktop sidebar)
   return (
     <nav className="space-y-1">
-      {STEPS.map((step, index) => {
+      {steps.map((step, index) => {
         const isCompleted = index < currentIndex
         const isCurrent = step.id === currentStep
         const isUpcoming = index > currentIndex
@@ -113,7 +119,7 @@ export function RegistrationStepper({
         return (
           <div key={step.id} className="relative">
             {/* Connector line */}
-            {index < STEPS.length - 1 && (
+            {index < steps.length - 1 && (
               <div
                 className={cn(
                   'absolute left-4 top-10 w-[2px] h-8',

@@ -146,10 +146,14 @@ function checkoutReducer(state: CheckoutState, action: CheckoutAction): Checkout
       return { ...state, step: action.step }
 
     case 'SET_CAMP':
+      // Only reset add-ons when the camp actually changes (different ID)
+      // Re-setting the same camp (e.g., after auth refresh) should preserve add-ons
+      if (state.campSession?.id === action.camp.id) {
+        return { ...state, campSession: action.camp }
+      }
       return {
         ...state,
         campSession: action.camp,
-        // Reset add-ons when camp changes
         selectedAddOns: [],
       }
 

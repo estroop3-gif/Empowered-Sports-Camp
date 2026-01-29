@@ -315,12 +315,25 @@ export async function createRegistration(params: {
     })
 
     if (existingRegistration) {
-      const athleteName = existingRegistration.athlete
-        ? `${existingRegistration.athlete.firstName} ${existingRegistration.athlete.lastName}`
-        : 'This athlete'
-      return {
-        data: null,
-        error: new Error(`${athleteName} is already registered for this camp.`),
+      // If the existing registration is pending (unpaid), clean it up and allow re-registration
+      if (existingRegistration.status === 'pending' && existingRegistration.paymentStatus === 'pending') {
+        // Delete associated add-ons and the stale pending registration
+        await prisma.registrationAddon.deleteMany({
+          where: { registrationId: existingRegistration.id },
+        })
+        await prisma.registration.delete({
+          where: { id: existingRegistration.id },
+        })
+        console.log(`[Registrations] Cleaned up stale pending registration ${existingRegistration.id} for athlete ${athleteId}`)
+      } else {
+        // Confirmed or paid registration — block duplicate
+        const athleteName = existingRegistration.athlete
+          ? `${existingRegistration.athlete.firstName} ${existingRegistration.athlete.lastName}`
+          : 'This athlete'
+        return {
+          data: null,
+          error: new Error(`${athleteName} is already registered for this camp.`),
+        }
       }
     }
 
