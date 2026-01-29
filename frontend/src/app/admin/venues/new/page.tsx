@@ -349,14 +349,14 @@ export default function NewVenuePage() {
       setSaving(false)
       sessionStorage.removeItem(VENUE_DRAFT_KEY)
 
-      // Redirect after showing success message - use ref for latest returnInfo
+      // Redirect after showing success message - use hard navigation for reliability
       setTimeout(() => {
         const info = returnInfoRef.current
         if (info.returnTo === 'camp-create') {
           const newVenueId = result.data?.id || result.data?.venue?.id
-          router.push(`/portal/camps/new?venueCreated=true&venueId=${newVenueId}`)
+          window.location.href = `/portal/camps/new?venueCreated=true&venueId=${newVenueId}`
         } else {
-          router.push('/admin/venues?created=true')
+          window.location.href = '/admin/venues?created=true'
         }
       }, 1500)
     } catch {

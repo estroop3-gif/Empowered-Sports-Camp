@@ -211,7 +211,7 @@ export default function NewTerritoryPage() {
       setSuccess(true)
       setSaving(false)
 
-      // Redirect after short delay - use ref for latest returnInfo
+      // Redirect after short delay - use hard navigation for reliability
       setTimeout(() => {
         const info = returnInfoRef.current
         if (info.returnTo === 'venue-create') {
@@ -220,11 +220,11 @@ export default function NewTerritoryPage() {
           if (newTerritoryId) params.set('territoryId', newTerritoryId)
           if (info.originalReturnTo) params.set('returnTo', info.originalReturnTo)
           if (info.originalTenantId) params.set('tenantId', info.originalTenantId)
-          router.push(`/admin/venues/new?${params.toString()}`)
+          window.location.href = `/admin/venues/new?${params.toString()}`
         } else if (info.returnTo === 'camp-create') {
-          router.push('/portal/camps/new?territoryCreated=true')
+          window.location.href = '/portal/camps/new?territoryCreated=true'
         } else {
-          router.push('/admin/licensees/territories')
+          window.location.href = '/admin/licensees/territories'
         }
       }, 1500)
     } catch {

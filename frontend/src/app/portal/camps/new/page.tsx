@@ -153,6 +153,32 @@ export default function CreateCampPage() {
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Auto-save draft to database whenever the user leaves the page
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      const fd = formData
+      const tenantId = fd.tenant_id || userTenantId || ''
+      if (!tenantId) return
+
+      const today = new Date().toISOString().split('T')[0]
+      const draftData = {
+        ...fd,
+        name: fd.name.trim() || 'Untitled Draft',
+        tenant_id: tenantId,
+        start_date: fd.start_date || today,
+        end_date: fd.end_date || today,
+        status: 'draft',
+      }
+
+      // Use sendBeacon for reliability during page unload
+      const blob = new Blob([JSON.stringify(draftData)], { type: 'application/json' })
+      navigator.sendBeacon('/api/admin/camps?action=create', blob)
+    }
+
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [formData, userTenantId])
+
   useEffect(() => {
     if (user) {
       loadInitialData()
@@ -236,14 +262,22 @@ export default function CreateCampPage() {
     }
   }
 
-  // Save camp as a database draft and also to sessionStorage for form restore
+  // Save camp as a database draft so it appears in camps list
   const saveDraftToDatabase = async (): Promise<string | null> => {
-    // Need at minimum a name, tenant, and dates to save to database
-    const canSaveToDb = formData.name.trim() && formData.tenant_id && formData.start_date && formData.end_date
-    if (!canSaveToDb) return null
-
     try {
-      const draftData = { ...formData, status: 'draft' as const }
+      // Fill in placeholder values for required fields if not yet provided
+      const today = new Date().toISOString().split('T')[0]
+      const draftData = {
+        ...formData,
+        name: formData.name.trim() || 'Untitled Draft',
+        tenant_id: formData.tenant_id || userTenantId || '',
+        start_date: formData.start_date || today,
+        end_date: formData.end_date || today,
+        status: 'draft' as const,
+      }
+      // Still need a tenant_id to save
+      if (!draftData.tenant_id) return null
+
       const response = await fetch('/api/admin/camps?action=create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -260,23 +294,22 @@ export default function CreateCampPage() {
   }
 
   const saveDraftAndNavigate = async (destination: 'venue' | 'territory') => {
-    // Always save form state to sessionStorage for restore
+    // Save form state to sessionStorage for restore
     sessionStorage.setItem(CAMP_DRAFT_KEY, JSON.stringify(formData))
 
-    // Also save to database as draft so it appears in camps list
+    // Save to database as draft so it appears in camps list
     await saveDraftToDatabase()
 
     if (destination === 'venue') {
-      // Store return info in sessionStorage (more reliable than query params)
       sessionStorage.setItem('venue-return-to', 'camp-create')
       const params = new URLSearchParams({ returnTo: 'camp-create' })
-      if (formData.tenant_id) {
-        params.set('tenantId', formData.tenant_id)
-      }
-      router.push(`/admin/venues/new?${params.toString()}`)
+      if (formData.tenant_id) params.set('tenantId', formData.tenant_id)
+      // Use hard navigation to guarantee query params are in the URL
+      window.location.href = `/admin/venues/new?${params.toString()}`
     } else {
       sessionStorage.setItem('territory-return-to', 'camp-create')
-      router.push('/admin/licensees/territories/new?returnTo=camp-create')
+      // Use hard navigation to guarantee query params are in the URL
+      window.location.href = '/admin/licensees/territories/new?returnTo=camp-create'
     }
   }
 
