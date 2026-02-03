@@ -6,6 +6,8 @@ import Link from 'next/link'
 import { AdminLayout, PageHeader, ContentCard } from '@/components/admin/admin-layout'
 import ContractList from '@/components/admin/venues/ContractList'
 import { cn } from '@/lib/utils'
+import { COUNTRIES, getRegionLabelForCountry, countryHasRegions } from '@/lib/constants/locations'
+import { RegionInput } from '@/components/ui/RegionInput'
 import {
   ArrowLeft,
   MapPin,
@@ -104,14 +106,6 @@ interface FormData {
   notes: string
   hero_image_url: string
 }
-
-const US_STATES = [
-  'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA',
-  'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD',
-  'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ',
-  'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC',
-  'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY',
-]
 
 const SPORTS = [
   'Multi-Sport',
@@ -304,8 +298,8 @@ export default function VenueDetailPage({ params }: { params: Promise<{ id: stri
       setError('City is required')
       return
     }
-    if (!formData.state) {
-      setError('State is required')
+    if (countryHasRegions(formData.country) && !formData.state) {
+      setError(`${getRegionLabelForCountry(formData.country)} is required`)
       return
     }
     if (!formData.postal_code.trim()) {
@@ -728,7 +722,25 @@ export default function VenueDetailPage({ params }: { params: Promise<{ id: stri
                     />
                   </div>
 
-                  <div className="grid gap-6 sm:grid-cols-3">
+                  <div className="grid gap-6 sm:grid-cols-2">
+                    <div>
+                      <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
+                        <Globe className="h-4 w-4 inline mr-2" />
+                        Country *
+                      </label>
+                      <select
+                        value={formData.country}
+                        onChange={(e) => {
+                          updateField('country', e.target.value)
+                          updateField('state', '') // Clear state when country changes
+                        }}
+                        className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-magenta focus:outline-none"
+                      >
+                        {COUNTRIES.map((country) => (
+                          <option key={country.code} value={country.code}>{country.name}</option>
+                        ))}
+                      </select>
+                    </div>
                     <div>
                       <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
                         City *
@@ -740,20 +752,19 @@ export default function VenueDetailPage({ params }: { params: Promise<{ id: stri
                         className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-magenta focus:outline-none"
                       />
                     </div>
+                  </div>
+
+                  <div className="grid gap-6 sm:grid-cols-2">
                     <div>
                       <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
-                        State *
+                        {getRegionLabelForCountry(formData.country)} {countryHasRegions(formData.country) ? '*' : ''}
                       </label>
-                      <select
+                      <RegionInput
+                        countryCode={formData.country}
                         value={formData.state}
-                        onChange={(e) => updateField('state', e.target.value)}
+                        onChange={(value) => updateField('state', value)}
                         className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-magenta focus:outline-none"
-                      >
-                        <option value="">Select...</option>
-                        {US_STATES.map((state) => (
-                          <option key={state} value={state}>{state}</option>
-                        ))}
-                      </select>
+                      />
                     </div>
                     <div>
                       <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
@@ -763,6 +774,7 @@ export default function VenueDetailPage({ params }: { params: Promise<{ id: stri
                         type="text"
                         value={formData.postal_code}
                         onChange={(e) => updateField('postal_code', e.target.value)}
+                        placeholder={formData.country === 'US' ? 'ZIP' : 'Postal Code'}
                         className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-magenta focus:outline-none"
                       />
                     </div>

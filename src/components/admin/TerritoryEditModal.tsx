@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { X, Loader2, AlertTriangle, MapPin, Globe, FileText } from 'lucide-react'
+import { COUNTRIES, getRegionLabelForCountry, countryHasRegions } from '@/lib/constants/locations'
+import { RegionInput } from '@/components/ui/RegionInput'
 
 type TerritoryStatus = 'open' | 'reserved' | 'assigned' | 'closed'
 
@@ -27,59 +29,6 @@ interface TerritoryEditModalProps {
   onClose: () => void
   onSave: (updatedTerritory: Territory) => void
 }
-
-const US_STATES = [
-  { value: 'AL', label: 'Alabama' },
-  { value: 'AK', label: 'Alaska' },
-  { value: 'AZ', label: 'Arizona' },
-  { value: 'AR', label: 'Arkansas' },
-  { value: 'CA', label: 'California' },
-  { value: 'CO', label: 'Colorado' },
-  { value: 'CT', label: 'Connecticut' },
-  { value: 'DE', label: 'Delaware' },
-  { value: 'FL', label: 'Florida' },
-  { value: 'GA', label: 'Georgia' },
-  { value: 'HI', label: 'Hawaii' },
-  { value: 'ID', label: 'Idaho' },
-  { value: 'IL', label: 'Illinois' },
-  { value: 'IN', label: 'Indiana' },
-  { value: 'IA', label: 'Iowa' },
-  { value: 'KS', label: 'Kansas' },
-  { value: 'KY', label: 'Kentucky' },
-  { value: 'LA', label: 'Louisiana' },
-  { value: 'ME', label: 'Maine' },
-  { value: 'MD', label: 'Maryland' },
-  { value: 'MA', label: 'Massachusetts' },
-  { value: 'MI', label: 'Michigan' },
-  { value: 'MN', label: 'Minnesota' },
-  { value: 'MS', label: 'Mississippi' },
-  { value: 'MO', label: 'Missouri' },
-  { value: 'MT', label: 'Montana' },
-  { value: 'NE', label: 'Nebraska' },
-  { value: 'NV', label: 'Nevada' },
-  { value: 'NH', label: 'New Hampshire' },
-  { value: 'NJ', label: 'New Jersey' },
-  { value: 'NM', label: 'New Mexico' },
-  { value: 'NY', label: 'New York' },
-  { value: 'NC', label: 'North Carolina' },
-  { value: 'ND', label: 'North Dakota' },
-  { value: 'OH', label: 'Ohio' },
-  { value: 'OK', label: 'Oklahoma' },
-  { value: 'OR', label: 'Oregon' },
-  { value: 'PA', label: 'Pennsylvania' },
-  { value: 'RI', label: 'Rhode Island' },
-  { value: 'SC', label: 'South Carolina' },
-  { value: 'SD', label: 'South Dakota' },
-  { value: 'TN', label: 'Tennessee' },
-  { value: 'TX', label: 'Texas' },
-  { value: 'UT', label: 'Utah' },
-  { value: 'VT', label: 'Vermont' },
-  { value: 'VA', label: 'Virginia' },
-  { value: 'WA', label: 'Washington' },
-  { value: 'WV', label: 'West Virginia' },
-  { value: 'WI', label: 'Wisconsin' },
-  { value: 'WY', label: 'Wyoming' },
-]
 
 export function TerritoryEditModal({ territory, onClose, onSave }: TerritoryEditModalProps) {
   const [name, setName] = useState(territory.name)
@@ -122,8 +71,8 @@ export function TerritoryEditModal({ territory, onClose, onSave }: TerritoryEdit
       return
     }
 
-    if (!stateRegion.trim()) {
-      setError('State/Region is required')
+    if (countryHasRegions(country) && !stateRegion.trim()) {
+      setError(`${getRegionLabelForCountry(country)} is required`)
       return
     }
 
@@ -282,7 +231,44 @@ export function TerritoryEditModal({ territory, onClose, onSave }: TerritoryEdit
               </div>
             </div>
 
-            {/* Location */}
+            {/* Country & State */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-white/60 mb-2">
+                  <Globe className="h-3 w-3 inline mr-1" />
+                  Country *
+                </label>
+                <select
+                  value={country}
+                  onChange={(e) => {
+                    setCountry(e.target.value)
+                    setStateRegion('') // Clear state when country changes
+                  }}
+                  className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-neon focus:outline-none appearance-none"
+                  required
+                >
+                  {COUNTRIES.map((c) => (
+                    <option key={c.code} value={c.code}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-white/60 mb-2">
+                  {getRegionLabelForCountry(country)} {countryHasRegions(country) ? '*' : ''}
+                </label>
+                <RegionInput
+                  countryCode={country}
+                  value={stateRegion}
+                  onChange={(value) => setStateRegion(value)}
+                  required={countryHasRegions(country)}
+                  className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-neon focus:outline-none appearance-none"
+                />
+              </div>
+            </div>
+
+            {/* City & Postal Codes */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-white/60 mb-2">
@@ -295,43 +281,6 @@ export function TerritoryEditModal({ territory, onClose, onSave }: TerritoryEdit
                   placeholder="City"
                   className="w-full px-4 py-3 bg-black border border-white/20 text-white placeholder:text-white/40 focus:border-neon focus:outline-none"
                 />
-              </div>
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-white/60 mb-2">
-                  State/Region *
-                </label>
-                <select
-                  value={stateRegion}
-                  onChange={(e) => setStateRegion(e.target.value)}
-                  className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-neon focus:outline-none appearance-none"
-                  required
-                >
-                  <option value="">Select state</option>
-                  {US_STATES.map((s) => (
-                    <option key={s.value} value={s.value}>
-                      {s.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Country & Postal Codes */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-white/60 mb-2">
-                  Country
-                </label>
-                <div className="relative">
-                  <Globe className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
-                  <input
-                    type="text"
-                    value={country}
-                    onChange={(e) => setCountry(e.target.value)}
-                    placeholder="USA"
-                    className="w-full pl-10 pr-4 py-3 bg-black border border-white/20 text-white placeholder:text-white/40 focus:border-neon focus:outline-none"
-                  />
-                </div>
               </div>
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-white/60 mb-2">

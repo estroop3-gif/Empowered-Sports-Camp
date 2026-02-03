@@ -20,6 +20,8 @@ interface CreateTerritoryInput {
   notes?: string
 }
 import { cn } from '@/lib/utils'
+import { COUNTRIES, getRegionLabelForCountry, countryHasRegions } from '@/lib/constants/locations'
+import { RegionInput } from '@/components/ui/RegionInput'
 import {
   ArrowLeft,
   MapPin,
@@ -38,15 +40,6 @@ import {
  *
  * Form to create a new territory that can be assigned to licensees.
  */
-
-// US States for dropdown
-const US_STATES = [
-  'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA',
-  'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD',
-  'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ',
-  'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC',
-  'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY',
-]
 
 interface FormData {
   name: string
@@ -114,7 +107,7 @@ export default function NewTerritoryPage() {
   const [formData, setFormData] = useState<FormData>({
     name: '',
     description: '',
-    country: 'USA',
+    country: 'US',
     state_region: '',
     city: '',
     postal_codes: '',
@@ -162,8 +155,8 @@ export default function NewTerritoryPage() {
     if (!formData.country.trim()) {
       errors.country = 'Country is required'
     }
-    if (!formData.state_region.trim()) {
-      errors.state_region = 'State/Region is required'
+    if (countryHasRegions(formData.country) && !formData.state_region.trim()) {
+      errors.state_region = `${getRegionLabelForCountry(formData.country)} is required`
     }
 
     setFormErrors(errors)
@@ -359,7 +352,10 @@ export default function NewTerritoryPage() {
                     </label>
                     <select
                       value={formData.country}
-                      onChange={(e) => updateField('country', e.target.value)}
+                      onChange={(e) => {
+                        updateField('country', e.target.value)
+                        updateField('state_region', '') // Clear state when country changes
+                      }}
                       className={cn(
                         'w-full px-4 py-3 bg-black border text-white focus:outline-none appearance-none',
                         formErrors.country
@@ -367,8 +363,11 @@ export default function NewTerritoryPage() {
                           : 'border-white/20 focus:border-purple'
                       )}
                     >
-                      <option value="USA">United States</option>
-                      <option value="CAN">Canada</option>
+                      {COUNTRIES.map((country) => (
+                        <option key={country.code} value={country.code}>
+                          {country.name}
+                        </option>
+                      ))}
                     </select>
                     {formErrors.country && (
                       <p className="mt-1 text-xs text-red-400">{formErrors.country}</p>
@@ -377,25 +376,19 @@ export default function NewTerritoryPage() {
 
                   <div>
                     <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
-                      State / Region *
+                      {getRegionLabelForCountry(formData.country)} {countryHasRegions(formData.country) ? '*' : ''}
                     </label>
-                    <select
+                    <RegionInput
+                      countryCode={formData.country}
                       value={formData.state_region}
-                      onChange={(e) => updateField('state_region', e.target.value)}
+                      onChange={(value) => updateField('state_region', value)}
                       className={cn(
                         'w-full px-4 py-3 bg-black border text-white focus:outline-none appearance-none',
                         formErrors.state_region
                           ? 'border-red-500 focus:border-red-500'
                           : 'border-white/20 focus:border-purple'
                       )}
-                    >
-                      <option value="">Select state...</option>
-                      {US_STATES.map((state) => (
-                        <option key={state} value={state}>
-                          {state}
-                        </option>
-                      ))}
-                    </select>
+                    />
                     {formErrors.state_region && (
                       <p className="mt-1 text-xs text-red-400">{formErrors.state_region}</p>
                     )}

@@ -12,6 +12,8 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { useAuth } from '@/lib/auth/context'
 import { PortalPageHeader, PortalCard } from '@/components/portal'
+import { COUNTRIES, getRegionLabelForCountry, countryHasRegions } from '@/lib/constants/locations'
+import { RegionInput } from '@/components/ui/RegionInput'
 import {
   ArrowLeft,
   Save,
@@ -60,14 +62,6 @@ const AVAILABLE_SPORTS = [
   'Gymnastics',
   'Cheerleading',
   'Multi-Sport',
-]
-
-const US_STATES = [
-  'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA',
-  'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD',
-  'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ',
-  'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC',
-  'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY',
 ]
 
 interface Venue {
@@ -454,6 +448,29 @@ export default function LicenseeVenueDetailPage() {
                 </div>
                 <div>
                   <label className="block text-xs text-white/40 uppercase tracking-wider mb-2">
+                    <Globe className="h-3 w-3 inline mr-1" />
+                    Country *
+                  </label>
+                  <select
+                    name="country"
+                    value={formData.country}
+                    onChange={(e) => {
+                      handleChange(e)
+                      setFormData((prev) => ({ ...prev, country: e.target.value, state: '' }))
+                    }}
+                    required
+                    disabled={!canEdit}
+                    className="w-full h-10 bg-dark-100 border border-white/10 px-4 text-white focus:border-neon focus:outline-none disabled:opacity-50"
+                  >
+                    {COUNTRIES.map((country) => (
+                      <option key={country.code} value={country.code}>
+                        {country.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-white/40 uppercase tracking-wider mb-2">
                     City *
                   </label>
                   <input
@@ -468,27 +485,21 @@ export default function LicenseeVenueDetailPage() {
                 </div>
                 <div>
                   <label className="block text-xs text-white/40 uppercase tracking-wider mb-2">
-                    State *
+                    {getRegionLabelForCountry(formData.country)} {countryHasRegions(formData.country) ? '*' : ''}
                   </label>
-                  <select
-                    name="state"
+                  <RegionInput
+                    countryCode={formData.country}
                     value={formData.state}
-                    onChange={handleChange}
-                    required
+                    onChange={(value) => setFormData((prev) => ({ ...prev, state: value }))}
+                    name="state"
+                    required={countryHasRegions(formData.country)}
                     disabled={!canEdit}
                     className="w-full h-10 bg-dark-100 border border-white/10 px-4 text-white focus:border-neon focus:outline-none disabled:opacity-50"
-                  >
-                    <option value="">Select State</option>
-                    {US_STATES.map((state) => (
-                      <option key={state} value={state}>
-                        {state}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 </div>
                 <div>
                   <label className="block text-xs text-white/40 uppercase tracking-wider mb-2">
-                    ZIP Code *
+                    {formData.country === 'US' ? 'ZIP Code' : 'Postal Code'} *
                   </label>
                   <input
                     type="text"
@@ -497,6 +508,7 @@ export default function LicenseeVenueDetailPage() {
                     onChange={handleChange}
                     required
                     disabled={!canEdit}
+                    placeholder={formData.country === 'US' ? 'ZIP' : 'Postal Code'}
                     className="w-full h-10 bg-dark-100 border border-white/10 px-4 text-white placeholder:text-white/30 focus:border-neon focus:outline-none disabled:opacity-50"
                   />
                 </div>
