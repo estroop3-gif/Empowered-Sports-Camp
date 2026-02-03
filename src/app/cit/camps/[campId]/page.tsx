@@ -21,6 +21,18 @@ import {
   ChevronUp,
 } from 'lucide-react'
 
+/** Convert "HH:MM" or "HH:MM:SS" 24h time to "H:MM AM/PM" */
+function formatTime12h(time?: string | null): string {
+  if (!time) return ''
+  const [hStr, mStr] = time.split(':')
+  let h = parseInt(hStr, 10)
+  const m = mStr || '00'
+  const ampm = h >= 12 ? 'PM' : 'AM'
+  if (h === 0) h = 12
+  else if (h > 12) h -= 12
+  return `${h}:${m} ${ampm}`
+}
+
 interface ScheduleBlock {
   id: string
   start_time: string
@@ -191,7 +203,7 @@ export default function CitCampSchedulePage({
           {data.camp.start_time && data.camp.end_time && (
             <span className="flex items-center gap-2 text-white">
               <Clock className="h-4 w-4 text-orange-400" />
-              {data.camp.start_time} - {data.camp.end_time}
+              {formatTime12h(data.camp.start_time)} - {formatTime12h(data.camp.end_time)}
             </span>
           )}
         </div>
@@ -279,19 +291,19 @@ export default function CitCampSchedulePage({
                           block.block_type === 'break' && 'opacity-60'
                         )}
                       >
-                        <div className="w-24 flex-shrink-0">
+                        <div className="w-28 flex-shrink-0">
                           <span className="text-sm font-mono text-orange-400">
-                            {block.start_time}
+                            {formatTime12h(block.start_time)}
                           </span>
                           <span className="text-white/30 mx-1">-</span>
                           <span className="text-sm font-mono text-white/50">
-                            {block.end_time}
+                            {formatTime12h(block.end_time)}
                           </span>
                         </div>
                         <div className="flex-1">
                           <h4 className="font-bold text-white">{block.title}</h4>
                           {block.description && (
-                            <p className="text-sm text-white/50 mt-1">{block.description}</p>
+                            <p className="text-sm text-white/50 mt-1 whitespace-pre-wrap">{block.description}</p>
                           )}
                           {block.location_notes && (
                             <p className="text-xs text-purple mt-1">

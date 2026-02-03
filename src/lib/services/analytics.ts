@@ -144,6 +144,8 @@ export interface AdminRevenueOverview {
   totalSystemGrossRevenue: number
   totalUpsellRevenue: number
   totalBaseRegistrationRevenue: number
+  totalDiscounts: number
+  netRevenue: number
   sessionsHeld: number
   totalCampers: number
   averageEnrollmentPerSession: number
@@ -159,6 +161,8 @@ export interface AdminRevenueTrendPoint {
   grossRevenue: number
   upsellRevenue: number
   baseRevenue: number
+  totalDiscounts: number
+  netRevenue: number
   royaltyIncome: number
   sessionsHeld: number
   campers: number
@@ -172,6 +176,8 @@ export interface AdminRevenueByLicenseeItem {
   grossRevenue: number
   upsellRevenue: number
   baseRevenue: number
+  totalDiscounts: number
+  netRevenue: number
   sessionsHeld: number
   campers: number
   arpc: number
@@ -185,6 +191,8 @@ export interface AdminRevenueByProgramItem {
   grossRevenue: number
   upsellRevenue: number
   baseRevenue: number
+  totalDiscounts: number
+  netRevenue: number
   sessionsHeld: number
   campers: number
   arpc: number
@@ -204,6 +212,8 @@ export interface AdminRevenueSessionItem {
   grossRevenue: number
   baseRevenue: number
   upsellRevenue: number
+  totalDiscounts: number
+  netRevenue: number
   royaltyExpected: number
   royaltyPaid: number
 }
@@ -1312,23 +1322,29 @@ export async function getAdminRevenueOverview(
         basePriceCents: true,
         addonsTotalCents: true,
         totalPriceCents: true,
+        discountCents: true,
+        promoDiscountCents: true,
         campId: true,
       },
     })
 
-    const totalSystemGrossRevenue = formatCurrency(
-      registrations.reduce((sum, r) => sum + (r.totalPriceCents || 0), 0)
-    )
     const totalBaseRegistrationRevenue = formatCurrency(
       registrations.reduce((sum, r) => sum + (r.basePriceCents || 0), 0)
     )
     const totalUpsellRevenue = formatCurrency(
       registrations.reduce((sum, r) => sum + (r.addonsTotalCents || 0), 0)
     )
+    const totalSystemGrossRevenue = totalBaseRegistrationRevenue + totalUpsellRevenue
+    const totalDiscounts = formatCurrency(
+      registrations.reduce((sum, r) => sum + (r.discountCents || 0) + (r.promoDiscountCents || 0), 0)
+    )
+    const netRevenue = formatCurrency(
+      registrations.reduce((sum, r) => sum + (r.totalPriceCents || 0), 0)
+    )
 
     const totalCampers = registrations.length
     const averageRevenuePerCamper = totalCampers > 0
-      ? totalSystemGrossRevenue / totalCampers
+      ? netRevenue / totalCampers
       : 0
 
     // Get sessions held
@@ -1376,6 +1392,8 @@ export async function getAdminRevenueOverview(
         totalSystemGrossRevenue,
         totalUpsellRevenue,
         totalBaseRegistrationRevenue,
+        totalDiscounts,
+        netRevenue,
         sessionsHeld,
         totalCampers,
         averageEnrollmentPerSession,
@@ -1415,6 +1433,8 @@ export async function getAdminRevenueTrends(
         basePriceCents: true,
         addonsTotalCents: true,
         totalPriceCents: true,
+        discountCents: true,
+        promoDiscountCents: true,
         createdAt: true,
         campId: true,
       },
@@ -1477,6 +1497,8 @@ export async function getAdminRevenueTrends(
           grossRevenue: 0,
           upsellRevenue: 0,
           baseRevenue: 0,
+          totalDiscounts: 0,
+          netRevenue: 0,
           royaltyIncome: 0,
           sessionsHeld: 0,
           campers: 0,
@@ -1498,9 +1520,13 @@ export async function getAdminRevenueTrends(
       const key = getPeriodKey(reg.createdAt)
       const period = periodMap.get(key)
       if (period) {
-        period.grossRevenue += formatCurrency(reg.totalPriceCents || 0)
-        period.baseRevenue += formatCurrency(reg.basePriceCents || 0)
-        period.upsellRevenue += formatCurrency(reg.addonsTotalCents || 0)
+        const base = formatCurrency(reg.basePriceCents || 0)
+        const upsell = formatCurrency(reg.addonsTotalCents || 0)
+        period.grossRevenue += base + upsell
+        period.baseRevenue += base
+        period.upsellRevenue += upsell
+        period.totalDiscounts += formatCurrency((reg.discountCents || 0) + (reg.promoDiscountCents || 0))
+        period.netRevenue += formatCurrency(reg.totalPriceCents || 0)
         period.campers += 1
       }
     }
@@ -1582,20 +1608,26 @@ export async function getAdminRevenueByLicensee(
           basePriceCents: true,
           addonsTotalCents: true,
           totalPriceCents: true,
+          discountCents: true,
+          promoDiscountCents: true,
         },
       })
 
-      const grossRevenue = formatCurrency(
-        registrations.reduce((sum, r) => sum + (r.totalPriceCents || 0), 0)
-      )
       const baseRevenue = formatCurrency(
         registrations.reduce((sum, r) => sum + (r.basePriceCents || 0), 0)
       )
       const upsellRevenue = formatCurrency(
         registrations.reduce((sum, r) => sum + (r.addonsTotalCents || 0), 0)
       )
+      const grossRevenue = baseRevenue + upsellRevenue
+      const totalDiscounts = formatCurrency(
+        registrations.reduce((sum, r) => sum + (r.discountCents || 0) + (r.promoDiscountCents || 0), 0)
+      )
+      const netRevenue = formatCurrency(
+        registrations.reduce((sum, r) => sum + (r.totalPriceCents || 0), 0)
+      )
       const campers = registrations.length
-      const arpc = campers > 0 ? grossRevenue / campers : 0
+      const arpc = campers > 0 ? netRevenue / campers : 0
 
       // Get sessions
       const sessions = await prisma.camp.count({
@@ -1637,6 +1669,8 @@ export async function getAdminRevenueByLicensee(
         grossRevenue,
         upsellRevenue,
         baseRevenue,
+        totalDiscounts,
+        netRevenue,
         sessionsHeld: sessions,
         campers,
         arpc,
@@ -1679,6 +1713,8 @@ export async function getAdminRevenueByProgram(
             basePriceCents: true,
             addonsTotalCents: true,
             totalPriceCents: true,
+            discountCents: true,
+            promoDiscountCents: true,
           },
         },
       },
@@ -1689,6 +1725,8 @@ export async function getAdminRevenueByProgram(
       grossRevenue: number
       baseRevenue: number
       upsellRevenue: number
+      totalDiscounts: number
+      netRevenue: number
       sessionsHeld: number
       campers: number
     }>()
@@ -1701,6 +1739,8 @@ export async function getAdminRevenueByProgram(
           grossRevenue: 0,
           baseRevenue: 0,
           upsellRevenue: 0,
+          totalDiscounts: 0,
+          netRevenue: 0,
           sessionsHeld: 0,
           campers: 0,
         })
@@ -1709,14 +1749,20 @@ export async function getAdminRevenueByProgram(
       const data = programMap.get(programType)!
       data.sessionsHeld += 1
       data.campers += camp.registrations.length
-      data.grossRevenue += formatCurrency(
-        camp.registrations.reduce((sum, r) => sum + (r.totalPriceCents || 0), 0)
-      )
-      data.baseRevenue += formatCurrency(
+      const campBase = formatCurrency(
         camp.registrations.reduce((sum, r) => sum + (r.basePriceCents || 0), 0)
       )
-      data.upsellRevenue += formatCurrency(
+      const campUpsell = formatCurrency(
         camp.registrations.reduce((sum, r) => sum + (r.addonsTotalCents || 0), 0)
+      )
+      data.grossRevenue += campBase + campUpsell
+      data.baseRevenue += campBase
+      data.upsellRevenue += campUpsell
+      data.totalDiscounts += formatCurrency(
+        camp.registrations.reduce((sum, r) => sum + (r.discountCents || 0) + (r.promoDiscountCents || 0), 0)
+      )
+      data.netRevenue += formatCurrency(
+        camp.registrations.reduce((sum, r) => sum + (r.totalPriceCents || 0), 0)
       )
     }
 
@@ -1728,9 +1774,11 @@ export async function getAdminRevenueByProgram(
         grossRevenue: data.grossRevenue,
         upsellRevenue: data.upsellRevenue,
         baseRevenue: data.baseRevenue,
+        totalDiscounts: data.totalDiscounts,
+        netRevenue: data.netRevenue,
         sessionsHeld: data.sessionsHeld,
         campers: data.campers,
-        arpc: data.campers > 0 ? data.grossRevenue / data.campers : 0,
+        arpc: data.campers > 0 ? data.netRevenue / data.campers : 0,
       })
     }
 
@@ -1775,6 +1823,8 @@ export async function getAdminRevenueSessions(
             basePriceCents: true,
             addonsTotalCents: true,
             totalPriceCents: true,
+            discountCents: true,
+            promoDiscountCents: true,
           },
         },
         royaltyInvoices: {
@@ -1789,14 +1839,18 @@ export async function getAdminRevenueSessions(
     })
 
     const items: AdminRevenueSessionItem[] = camps.map(camp => {
-      const grossRevenue = formatCurrency(
-        camp.registrations.reduce((sum, r) => sum + (r.totalPriceCents || 0), 0)
-      )
       const baseRevenue = formatCurrency(
         camp.registrations.reduce((sum, r) => sum + (r.basePriceCents || 0), 0)
       )
       const upsellRevenue = formatCurrency(
         camp.registrations.reduce((sum, r) => sum + (r.addonsTotalCents || 0), 0)
+      )
+      const grossRevenue = baseRevenue + upsellRevenue
+      const totalDiscounts = formatCurrency(
+        camp.registrations.reduce((sum, r) => sum + (r.discountCents || 0) + (r.promoDiscountCents || 0), 0)
+      )
+      const netRevenue = formatCurrency(
+        camp.registrations.reduce((sum, r) => sum + (r.totalPriceCents || 0), 0)
       )
       const royaltyExpected = formatCurrency(
         camp.royaltyInvoices.reduce((sum, r) => sum + (r.royaltyDueCents || 0), 0)
@@ -1821,6 +1875,8 @@ export async function getAdminRevenueSessions(
         grossRevenue,
         baseRevenue,
         upsellRevenue,
+        totalDiscounts,
+        netRevenue,
         royaltyExpected,
         royaltyPaid,
       }

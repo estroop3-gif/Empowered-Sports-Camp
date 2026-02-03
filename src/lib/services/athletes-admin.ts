@@ -1008,6 +1008,40 @@ export async function reactivateAthlete(params: {
   }
 }
 
+/**
+ * Permanently delete an athlete and all associated records (cascade)
+ * Only hq_admin can perform this action
+ */
+export async function deleteAthletePermanently(params: {
+  athleteId: string
+  role: string
+}): Promise<{ data: { success: boolean } | null; error: Error | null }> {
+  try {
+    const { athleteId, role } = params
+
+    if (role !== 'hq_admin') {
+      return { data: null, error: new Error('Only HQ admins can permanently delete athletes') }
+    }
+
+    const existing = await prisma.athlete.findUnique({
+      where: { id: athleteId },
+    })
+
+    if (!existing) {
+      return { data: null, error: new Error('Athlete not found') }
+    }
+
+    await prisma.athlete.delete({
+      where: { id: athleteId },
+    })
+
+    return { data: { success: true }, error: null }
+  } catch (error) {
+    console.error('[Athletes Admin] Failed to delete athlete:', error)
+    return { data: null, error: error as Error }
+  }
+}
+
 // =============================================================================
 // Stats Functions
 // =============================================================================

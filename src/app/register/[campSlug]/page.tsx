@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
 import { CheckoutProvider, useCheckout } from '@/lib/checkout/context'
+import { useAuth } from '@/lib/auth/context'
 import {
   RegistrationLayout,
   CamperForm,
@@ -201,21 +202,23 @@ const DEFAULT_ADDONS: AddOn[] = [
 function RegistrationContent({ camp, addons }: { camp: CampSession; addons: AddOn[] }) {
   const router = useRouter()
   const { state, setStep, setCamp, setSquad, nextStep, prevStep } = useCheckout()
+  const { user: authUser, loading: authLoading } = useAuth()
   const [confirmationNumber, setConfirmationNumber] = useState<string | null>(null)
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
 
-  // Check authentication status on mount
+  // Reactive authentication check — updates when user logs in via modal
+  const isAuthenticated = authLoading ? null : !!authUser
+  // Track if the user logged in mid-session (via modal) so we don't auto-skip the account step
+  // The AccountCreationStep handles its own advancement after modal login
+  const loggedInViaModalRef = useRef(false)
   useEffect(() => {
-    async function checkAuth() {
-      try {
-        const response = await fetch('/api/auth/me')
-        setIsAuthenticated(response.ok)
-      } catch {
-        setIsAuthenticated(false)
+    // If auth was loading and now the user is present, but they weren't before, they logged in mid-flow
+    if (!authLoading && authUser && isAuthenticated === true) {
+      // Only set this if we're currently on the account step (meaning they used the modal)
+      if (state.step === 'account') {
+        loggedInViaModalRef.current = true
       }
     }
-    checkAuth()
-  }, [])
+  }, [authLoading, authUser, isAuthenticated, state.step])
 
   // Go back to camps page from camper form
   const handleBackToCamps = () => {
@@ -234,9 +237,10 @@ function RegistrationContent({ camp, addons }: { camp: CampSession; addons: AddO
     }
   }, [state.step, state.campSession, setStep])
 
-  // Auto-skip account step if user is already logged in
+  // Auto-skip account step if user was already logged in before reaching registration
+  // If they log in via the login modal in AccountCreationStep, that component handles advancement itself
   useEffect(() => {
-    if (state.step === 'account' && isAuthenticated === true) {
+    if (state.step === 'account' && isAuthenticated === true && !loggedInViaModalRef.current) {
       nextStep() // Skip to payment
     }
   }, [state.step, isAuthenticated, nextStep])
@@ -354,6 +358,7 @@ function RegistrationContent({ camp, addons }: { camp: CampSession; addons: AddO
       currentStep={state.step}
       campSession={camp}
       availableAddOns={addons}
+      hideAccountStep={isAuthenticated === true}
     >
       {renderStep()}
     </RegistrationLayout>

@@ -12,17 +12,28 @@ export function formatPrice(cents: number): string {
   }).format(cents / 100)
 }
 
+// Parse a date string safely: YYYY-MM-DD strings are treated as noon local time
+// to avoid UTC midnight rolling back a day in US timezones
+function parseDateSafe(date: string | Date): Date {
+  if (date instanceof Date) return date
+  // If it's a date-only string (YYYY-MM-DD), append noon to avoid timezone shift
+  if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return new Date(`${date}T12:00:00`)
+  }
+  return new Date(date)
+}
+
 export function formatDate(date: string | Date): string {
   return new Intl.DateTimeFormat('en-US', {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
-  }).format(new Date(date))
+  }).format(parseDateSafe(date))
 }
 
 export function formatDateRange(start: string | Date, end: string | Date): string {
-  const startDate = new Date(start)
-  const endDate = new Date(end)
+  const startDate = parseDateSafe(start)
+  const endDate = parseDateSafe(end)
 
   const startMonth = startDate.toLocaleDateString('en-US', { month: 'short' })
   const endMonth = endDate.toLocaleDateString('en-US', { month: 'short' })

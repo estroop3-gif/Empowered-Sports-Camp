@@ -17,6 +17,7 @@ import {
   ChevronDown,
   ExternalLink,
   Package,
+  PercentCircle,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -38,6 +39,8 @@ interface AdminRevenueOverview {
   totalSystemGrossRevenue: number
   totalUpsellRevenue: number
   totalBaseRegistrationRevenue: number
+  totalDiscounts: number
+  netRevenue: number
   sessionsHeld: number
   totalCampers: number
   averageEnrollmentPerSession: number
@@ -53,6 +56,8 @@ interface AdminRevenueTrendPoint {
   grossRevenue: number
   upsellRevenue: number
   baseRevenue: number
+  totalDiscounts: number
+  netRevenue: number
   royaltyIncome: number
   sessionsHeld: number
   campers: number
@@ -66,6 +71,8 @@ interface AdminRevenueByLicenseeItem {
   grossRevenue: number
   upsellRevenue: number
   baseRevenue: number
+  totalDiscounts: number
+  netRevenue: number
   sessionsHeld: number
   campers: number
   arpc: number
@@ -79,6 +86,8 @@ interface AdminRevenueByProgramItem {
   grossRevenue: number
   upsellRevenue: number
   baseRevenue: number
+  totalDiscounts: number
+  netRevenue: number
   sessionsHeld: number
   campers: number
   arpc: number
@@ -98,6 +107,8 @@ interface AdminRevenueSessionItem {
   grossRevenue: number
   baseRevenue: number
   upsellRevenue: number
+  totalDiscounts: number
+  netRevenue: number
   royaltyExpected: number
   royaltyPaid: number
 }
@@ -228,9 +239,13 @@ function RevenueTrendsChart({
 
               <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-black/90 border border-white/20 p-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 whitespace-nowrap">
                 <p className="text-xs font-bold text-white">{point.periodLabel}</p>
-                <p className="text-xs text-neon">Gross: {formatCurrency(point.grossRevenue)}</p>
+                <p className="text-xs text-neon">Net: {formatCurrency(point.netRevenue)}</p>
+                <p className="text-xs text-white/60">Gross: {formatCurrency(point.grossRevenue)}</p>
                 <p className="text-xs text-white/60">Base: {formatCurrency(point.baseRevenue)}</p>
                 <p className="text-xs text-white/60">Upsell: {formatCurrency(point.upsellRevenue)}</p>
+                {point.totalDiscounts > 0 && (
+                  <p className="text-xs text-magenta">Discounts: -{formatCurrency(point.totalDiscounts)}</p>
+                )}
                 <p className="text-xs text-magenta">Royalty: {formatCurrency(point.royaltyIncome)}</p>
                 <p className="text-xs text-white/40">Campers: {point.campers}</p>
               </div>
@@ -592,28 +607,28 @@ export default function AdminRevenuePage() {
         columns={4}
         items={[
           {
-            label: 'Total Gross Revenue',
-            value: overview?.totalSystemGrossRevenue ?? 0,
+            label: 'Net Revenue',
+            value: overview?.netRevenue ?? 0,
             format: 'currency',
             icon: DollarSign,
             variant: 'neon',
-            subLabel: `${overview?.sessionsHeld ?? 0} sessions`,
+            subLabel: `${overview?.sessionsHeld ?? 0} sessions • ${overview?.totalCampers ?? 0} campers`,
           },
           {
-            label: 'Upsell Revenue',
-            value: overview?.totalUpsellRevenue ?? 0,
+            label: 'Gross Revenue',
+            value: overview?.totalSystemGrossRevenue ?? 0,
             format: 'currency',
             icon: Package,
-            variant: 'magenta',
-            subLabel: `${((overview?.totalUpsellRevenue || 0) / Math.max(overview?.totalSystemGrossRevenue || 1, 1) * 100).toFixed(1)}% of total`,
+            variant: 'purple',
+            subLabel: `Base: ${formatCurrency(overview?.totalBaseRegistrationRevenue ?? 0)} + Upsell: ${formatCurrency(overview?.totalUpsellRevenue ?? 0)}`,
           },
           {
-            label: 'Base Registration',
-            value: overview?.totalBaseRegistrationRevenue ?? 0,
+            label: 'Discounts Applied',
+            value: overview?.totalDiscounts ?? 0,
             format: 'currency',
-            icon: Users,
-            variant: 'purple',
-            subLabel: `${overview?.totalCampers ?? 0} campers`,
+            icon: PercentCircle,
+            variant: 'magenta',
+            subLabel: overview?.totalSystemGrossRevenue ? `${((overview.totalDiscounts / overview.totalSystemGrossRevenue) * 100).toFixed(1)}% of gross` : '0% of gross',
           },
           {
             label: 'Avg Revenue Per Camper',

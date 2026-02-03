@@ -83,6 +83,8 @@ interface AuthContextType {
   hasCampViewAccess: boolean
   // LMS gating helpers
   hasCompletedRequiredLms: boolean
+  // Multi-role helpers
+  hasParentRole: boolean
   // Legacy compatibility
   isLicensor: boolean
   isLicensee: boolean
@@ -101,6 +103,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [actualRole, setActualRole] = useState<UserRole | null>(null)
   const [viewingAsRole, setViewingAsRoleState] = useState<UserRole | null>(null)
   const [lmsBypassEnabled, setLmsBypassEnabled] = useState(false)
+  const [hasParentRole, setHasParentRole] = useState(false)
   const [tenant, setTenant] = useState<Tenant | null>(null)
   const [loading, setLoading] = useState(true)
   const initializedRef = useRef(false)
@@ -205,6 +208,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             sessionStorage.removeItem(VIEWING_AS_ROLE_KEY)
           }
         }
+      }
+
+      // Set parent role flag
+      if (data.hasParentRole !== undefined) {
+        setHasParentRole(!!data.hasParentRole)
       }
 
       // Set LMS status
@@ -406,6 +414,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         hasCampViewAccess,
         // LMS gating
         hasCompletedRequiredLms,
+        // Multi-role
+        hasParentRole,
         // Legacy
         isLicensor,
         isLicensee,

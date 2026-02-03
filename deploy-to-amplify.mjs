@@ -1,6 +1,5 @@
 import archiver from 'archiver';
-import { createWriteStream, createReadStream, statSync, existsSync, cpSync, mkdirSync, rmSync } from 'fs';
-import { pipeline } from 'stream/promises';
+import { createWriteStream, createReadStream, writeFileSync, statSync, existsSync, cpSync, mkdirSync, rmSync, readdirSync } from 'fs';
 import https from 'https';
 import http from 'http';
 import { execSync } from 'child_process';
@@ -39,36 +38,107 @@ async function buildProject() {
 }
 
 async function prepareStagingDir() {
-  console.log('Preparing deployment package...');
+  console.log('Preparing deployment package in .amplify-hosting format...');
 
-  // Clean up staging dir if it exists
   if (existsSync(DEPLOY_DIR)) {
     rmSync(DEPLOY_DIR, { recursive: true });
   }
-  mkdirSync(DEPLOY_DIR, { recursive: true });
 
-  // Copy standalone output
+  // Create Amplify hosting structure:
+  // .amplify-hosting/
+  //   compute/default/  (SSR server files)
+  //   static/           (static assets)
+  //   deploy-manifest.json
+  const computeDir = path.join(DEPLOY_DIR, '.amplify-hosting', 'compute', 'default');
+  const staticDir = path.join(DEPLOY_DIR, '.amplify-hosting', 'static');
+  mkdirSync(computeDir, { recursive: true });
+  mkdirSync(staticDir, { recursive: true });
+
+  // Copy standalone output to compute/default
   const standalonePath = path.join(PROJECT_DIR, '.next', 'standalone');
   if (!existsSync(standalonePath)) {
     console.error('Error: .next/standalone not found. Run npm run build first.');
     process.exit(1);
   }
-  cpSync(standalonePath, DEPLOY_DIR, { recursive: true });
 
-  // Copy static assets into standalone
+  // Handle monorepo nesting
+  const nestedAppPath = path.join(standalonePath, 'frontend');
+  if (existsSync(nestedAppPath)) {
+    console.log('Monorepo detected - flattening frontend/ to compute/default...');
+    cpSync(nestedAppPath, computeDir, { recursive: true });
+    const rootNodeModules = path.join(standalonePath, 'node_modules');
+    if (existsSync(rootNodeModules)) {
+      cpSync(rootNodeModules, path.join(computeDir, 'node_modules'), { recursive: true });
+    }
+  } else {
+    cpSync(standalonePath, computeDir, { recursive: true });
+  }
+
+  // Copy .next/static to compute/default/.next/static AND to static/_next/static
   const staticSrc = path.join(PROJECT_DIR, '.next', 'static');
-  const staticDest = path.join(DEPLOY_DIR, '.next', 'static');
   if (existsSync(staticSrc)) {
-    mkdirSync(path.dirname(staticDest), { recursive: true });
-    cpSync(staticSrc, staticDest, { recursive: true });
+    const computeStaticDest = path.join(computeDir, '.next', 'static');
+    mkdirSync(path.dirname(computeStaticDest), { recursive: true });
+    cpSync(staticSrc, computeStaticDest, { recursive: true });
+
+    const hostingStaticDest = path.join(staticDir, '_next', 'static');
+    mkdirSync(path.dirname(hostingStaticDest), { recursive: true });
+    cpSync(staticSrc, hostingStaticDest, { recursive: true });
   }
 
-  // Copy public folder
+  // Copy public folder to compute/default/public AND to static/
   const publicSrc = path.join(PROJECT_DIR, 'public');
-  const publicDest = path.join(DEPLOY_DIR, 'public');
   if (existsSync(publicSrc)) {
-    cpSync(publicSrc, publicDest, { recursive: true });
+    cpSync(publicSrc, path.join(computeDir, 'public'), { recursive: true });
+    // Copy public files to static root (excluding subdirectories that start with _)
+    cpSync(publicSrc, staticDir, { recursive: true });
   }
+
+  // Create deploy-manifest.json
+  const manifest = {
+    version: 1,
+    routes: [
+      {
+        path: "/_next/static/*",
+        target: {
+          kind: "Static"
+        }
+      },
+      {
+        path: "/*.*",
+        target: {
+          kind: "Static"
+        },
+        fallback: {
+          kind: "Compute",
+          src: "default"
+        }
+      },
+      {
+        path: "/*",
+        target: {
+          kind: "Compute",
+          src: "default"
+        }
+      }
+    ],
+    computeResources: [
+      {
+        name: "default",
+        entrypoint: "server.js",
+        runtime: "nodejs18.x"
+      }
+    ],
+    framework: {
+      name: "next",
+      version: "16.0.8"
+    }
+  };
+
+  writeFileSync(
+    path.join(DEPLOY_DIR, '.amplify-hosting', 'deploy-manifest.json'),
+    JSON.stringify(manifest, null, 2)
+  );
 
   console.log('Deployment package prepared.');
 }
@@ -93,7 +163,6 @@ async function createZip() {
 
   archive.pipe(output);
 
-  // Add built standalone output
   archive.glob('**/*', {
     cwd: DEPLOY_DIR,
     dot: true

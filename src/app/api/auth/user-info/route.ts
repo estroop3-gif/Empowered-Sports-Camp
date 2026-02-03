@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
     // Use the profile ID for role lookup
     const profileId = profile.id
 
-    // Get user role (only active roles)
+    // Get user role (only active roles) - highest priority role
     const userRole = await prisma.userRoleAssignment.findFirst({
       where: {
         userId: profileId,
@@ -59,11 +59,28 @@ export async function GET(request: NextRequest) {
       },
     })
 
+    // Check if user also has a parent role (for users whose primary role is something else)
+    let hasParentRole = false
+    if (userRole && userRole.role !== 'parent') {
+      const parentRoleAssignment = await prisma.userRoleAssignment.findFirst({
+        where: {
+          userId: profileId,
+          role: 'parent',
+          isActive: true,
+        },
+        select: { id: true },
+      })
+      hasParentRole = !!parentRoleAssignment
+    } else if (userRole?.role === 'parent') {
+      hasParentRole = true
+    }
+
     if (!userRole) {
       // No role found - return default parent role
       return NextResponse.json({
         profileId: profileId, // Return profile ID so client can use it for queries
         role: 'parent',
+        hasParentRole: true,
         tenant: null,
         lmsStatus: {
           hasCompletedCore: false,
@@ -129,6 +146,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       profileId: profileId, // Return profile ID so client can use it for queries
       role: userRole.role,
+      hasParentRole,
       tenant,
       lmsStatus,
     })

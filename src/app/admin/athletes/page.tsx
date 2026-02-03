@@ -22,10 +22,11 @@ import {
   CheckCircle,
   XCircle,
   TrendingUp,
+  Trash2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { DropdownMenu } from '@/components/ui/dropdown-menu'
+import { DropdownMenu, Modal } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
 
 interface Athlete {
@@ -96,6 +97,9 @@ export default function AdminAthletesPage() {
   const [riskFilter, setRiskFilter] = useState<string>('all')
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
+  const [deleteTarget, setDeleteTarget] = useState<Athlete | null>(null)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [actionLoading, setActionLoading] = useState(false)
 
   const userName = user?.firstName || user?.email?.split('@')[0] || 'Admin'
 
@@ -202,11 +206,57 @@ export default function AdminAthletesPage() {
     router.push(`/admin/athletes/${athlete.id}`)
   }
 
+  const handleArchiveToggle = async (athlete: Athlete) => {
+    setActionLoading(true)
+    try {
+      const url = athlete.is_active
+        ? `/api/admin/athletes/${athlete.id}`
+        : `/api/admin/athletes/${athlete.id}?action=reactivate`
+      const res = await fetch(url, { method: 'DELETE' })
+      if (res.ok) {
+        loadAthletes()
+      }
+    } catch (err) {
+      console.error('Failed to archive/reactivate athlete:', err)
+    }
+    setActionLoading(false)
+  }
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return
+    setActionLoading(true)
+    try {
+      const res = await fetch(`/api/admin/athletes/${deleteTarget.id}?action=delete`, { method: 'DELETE' })
+      if (res.ok) {
+        setShowDeleteModal(false)
+        setDeleteTarget(null)
+        loadAthletes()
+      }
+    } catch (err) {
+      console.error('Failed to delete athlete:', err)
+    }
+    setActionLoading(false)
+  }
+
   const getDropdownItems = (athlete: Athlete) => [
     {
       label: 'View Details',
       icon: Eye,
       onClick: () => handleViewDetails(athlete),
+    },
+    {
+      label: athlete.is_active ? 'Archive' : 'Reactivate',
+      icon: Archive,
+      onClick: () => handleArchiveToggle(athlete),
+    },
+    {
+      label: 'Delete',
+      icon: Trash2,
+      variant: 'danger' as const,
+      onClick: () => {
+        setDeleteTarget(athlete)
+        setShowDeleteModal(true)
+      },
     },
   ]
 
@@ -573,6 +623,51 @@ export default function AdminAthletesPage() {
           </div>
         )}
       </div>
+      {/* Delete Confirmation Modal */}
+      <Modal
+        isOpen={showDeleteModal}
+        onClose={() => { setShowDeleteModal(false); setDeleteTarget(null) }}
+        title="Delete Athlete Permanently"
+        description="This action cannot be undone."
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-white/70">
+            This will permanently delete{' '}
+            <span className="font-bold text-white">
+              {deleteTarget?.first_name} {deleteTarget?.last_name}
+            </span>{' '}
+            and all associated records including registrations, health records, and incident reports.
+          </p>
+          <div className="bg-red-500/10 border border-red-500/30 p-3">
+            <p className="text-xs text-red-400 font-bold uppercase tracking-wider">
+              Warning: This cannot be reversed
+            </p>
+          </div>
+          <div className="flex gap-3 pt-2">
+            <Button
+              variant="outline-white"
+              className="flex-1"
+              onClick={() => { setShowDeleteModal(false); setDeleteTarget(null) }}
+              disabled={actionLoading}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="neon"
+              className="flex-1 !bg-red-600 hover:!bg-red-700 !text-white"
+              onClick={handleDelete}
+              disabled={actionLoading}
+            >
+              {actionLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <Trash2 className="h-4 w-4 mr-2" />
+              )}
+              Delete Permanently
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </AdminLayout>
   )
 }

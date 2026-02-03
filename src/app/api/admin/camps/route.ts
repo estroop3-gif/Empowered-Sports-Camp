@@ -4,12 +4,13 @@
  * GET /api/admin/camps - Get all camps for admin dashboard
  * POST /api/admin/camps?action=duplicate&id=xxx - Duplicate a camp
  * POST /api/admin/camps?action=create - Create a new camp (with JSON body)
+ * PUT /api/admin/camps?id=xxx - Update an existing camp
  * DELETE /api/admin/camps?id=xxx - Delete a camp
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedUserFromRequest } from '@/lib/auth/cognito-server'
-import { fetchAdminCamps, duplicateCamp, deleteCamp, createCamp, type CampFormData } from '@/lib/services/admin-camps'
+import { fetchAdminCamps, duplicateCamp, deleteCamp, createCamp, updateCamp, type CampFormData } from '@/lib/services/admin-camps'
 
 export async function GET(request: NextRequest) {
   try {
@@ -98,6 +99,36 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
   } catch (error) {
     console.error('[API] POST /api/admin/camps error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
+export async function PUT(request: NextRequest) {
+  try {
+    const user = await getAuthenticatedUserFromRequest(request)
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const allowedRoles = ['hq_admin', 'licensee_owner', 'director']
+    const userRole = user.role?.toLowerCase() || ''
+
+    if (!allowedRoles.includes(userRole)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
+    const searchParams = request.nextUrl.searchParams
+    const id = searchParams.get('id')
+
+    if (!id) {
+      return NextResponse.json({ error: 'Camp ID required' }, { status: 400 })
+    }
+
+    const body = await request.json()
+    const camp = await updateCamp(id, body)
+    return NextResponse.json({ camp })
+  } catch (error) {
+    console.error('[API] PUT /api/admin/camps error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

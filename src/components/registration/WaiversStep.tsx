@@ -301,7 +301,7 @@ export function WaiversStep({ campSession, onContinue, onBack }: WaiversStepProp
 
           return (
             <div
-              key={req.waiverTemplateId}
+              key={req.id || `waiver-${index}`}
               className={`border transition-all ${
                 isSigned
                   ? 'border-neon/30 bg-neon/5'

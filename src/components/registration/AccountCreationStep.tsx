@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from 'react'
 import { useCheckout } from '@/lib/checkout/context'
+import type { ParentProfile } from '@/lib/checkout/context'
 import { useAuth } from '@/lib/auth/context'
-import { signUp, confirmSignUp, resendConfirmationCode } from '@/lib/auth/cognito-client'
+import { signUp, confirmSignUp, resendConfirmationCode, signIn } from '@/lib/auth/cognito-client'
 import { Input } from '@/components/ui/input'
 import {
   User,
@@ -17,6 +18,8 @@ import {
   Check,
   AlertCircle,
   UserPlus,
+  LogIn,
+  X,
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -28,7 +31,7 @@ interface AccountCreationStepProps {
 type AccountStepPhase = 'check' | 'create' | 'confirm' | 'complete'
 
 export function AccountCreationStep({ onContinue, onBack }: AccountCreationStepProps) {
-  const { state } = useCheckout()
+  const { state, updateParent } = useCheckout()
   const { user, loading: authLoading, refreshAuth } = useAuth()
   const isAuthenticated = !!user
 
@@ -49,6 +52,17 @@ export function AccountCreationStep({ onContinue, onBack }: AccountCreationStepP
   // Confirmation code
   const [confirmationCode, setConfirmationCode] = useState('')
   const [resendCooldown, setResendCooldown] = useState(0)
+
+  // Login modal state
+  const [showLoginModal, setShowLoginModal] = useState(false)
+  const [loginEmail, setLoginEmail] = useState('')
+  const [loginPassword, setLoginPassword] = useState('')
+  const [loginLoading, setLoginLoading] = useState(false)
+  const [loginError, setLoginError] = useState<string | null>(null)
+
+  // Merge prompt state
+  const [showMergePrompt, setShowMergePrompt] = useState(false)
+  const [loggedInProfile, setLoggedInProfile] = useState<ParentProfile | null>(null)
 
   // Pre-fill form with parent info from registration
   useEffect(() => {
@@ -83,6 +97,13 @@ export function AccountCreationStep({ onContinue, onBack }: AccountCreationStepP
       return () => clearTimeout(timer)
     }
   }, [resendCooldown])
+
+  // Pre-fill login email from parent info
+  useEffect(() => {
+    if (showLoginModal && state.parentInfo.email && !loginEmail) {
+      setLoginEmail(state.parentInfo.email)
+    }
+  }, [showLoginModal, state.parentInfo.email, loginEmail])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData(prev => ({
@@ -211,12 +232,225 @@ export function AccountCreationStep({ onContinue, onBack }: AccountCreationStepP
     }
   }
 
+  // ---- Login Modal Handlers ----
+
+  const handleLoginSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoginLoading(true)
+    setLoginError(null)
+
+    try {
+      // 1. Sign in with Cognito
+      const session = await signIn({ email: loginEmail, password: loginPassword })
+
+      // 2. Store tokens via server cookie endpoint
+      const idToken = session.getIdToken().getJwtToken()
+      const accessToken = session.getAccessToken().getJwtToken()
+      const refreshToken = session.getRefreshToken()?.getToken()
+      const expiresIn = session.getIdToken().getExpiration() - Math.floor(Date.now() / 1000)
+
+      await fetch('/api/auth/set-tokens', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idToken, accessToken, refreshToken, expiresIn }),
+      })
+
+      // 3. Refresh auth context to pick up the logged-in user
+      await refreshAuth()
+
+      // 4. Ensure the user has a parent role (non-parent users like coaches need it added)
+      await fetch('/api/auth/ensure-parent-role', { method: 'POST' })
+
+      // 5. Fetch user profile to compare with registration data
+      //    Use withAthletes action — it resolves the profile from the authenticated session
+      const profileRes = await fetch('/api/profiles?action=withAthletes')
+      let profileData: ParentProfile | null = null
+
+      if (profileRes.ok) {
+        const json = await profileRes.json()
+        if (json.data) {
+          profileData = json.data as ParentProfile
+        }
+      }
+
+      // 6. Close login modal
+      setShowLoginModal(false)
+      setLoginEmail('')
+      setLoginPassword('')
+
+      // 7. Check if profile differs from registration parent info and show merge prompt
+      if (profileData && hasProfileDifferences(profileData)) {
+        setLoggedInProfile(profileData)
+        setShowMergePrompt(true)
+      } else {
+        // No differences or no profile — continue directly
+        onContinue()
+      }
+    } catch (err: unknown) {
+      const error = err as Error & { code?: string }
+      console.error('Login error:', error)
+
+      if (error.code === 'NotAuthorizedException') {
+        setLoginError('Incorrect email or password.')
+      } else if (error.code === 'UserNotConfirmedException') {
+        setLoginError('Your account has not been verified. Please check your email for a verification code.')
+      } else if (error.code === 'UserNotFoundException') {
+        setLoginError('No account found with this email address.')
+      } else {
+        setLoginError(error.message || 'An unexpected error occurred. Please try again.')
+      }
+    } finally {
+      setLoginLoading(false)
+    }
+  }
+
+  /** Check if the logged-in profile has any differences from registration parentInfo */
+  function hasProfileDifferences(profile: ParentProfile): boolean {
+    const p = state.parentInfo
+    const profileFirstName = profile.first_name || ''
+    const profileLastName = profile.last_name || ''
+    const profilePhone = profile.phone || ''
+
+    return (
+      (profileFirstName !== '' && profileFirstName !== p.firstName) ||
+      (profileLastName !== '' && profileLastName !== p.lastName) ||
+      (profilePhone !== '' && profilePhone !== p.phone)
+    )
+  }
+
+  /** User chose to use account profile data for parent info */
+  const handleUseAccountInfo = () => {
+    if (loggedInProfile) {
+      updateParent({
+        firstName: loggedInProfile.first_name || state.parentInfo.firstName,
+        lastName: loggedInProfile.last_name || state.parentInfo.lastName,
+        email: loggedInProfile.email || state.parentInfo.email,
+        phone: loggedInProfile.phone || state.parentInfo.phone,
+        addressLine1: loggedInProfile.address_line_1 || state.parentInfo.addressLine1,
+        addressLine2: loggedInProfile.address_line_2 || state.parentInfo.addressLine2,
+        city: loggedInProfile.city || state.parentInfo.city,
+        state: loggedInProfile.state || state.parentInfo.state,
+        zipCode: loggedInProfile.zip_code || state.parentInfo.zipCode,
+        emergencyContactName: loggedInProfile.emergency_contact_name || state.parentInfo.emergencyContactName,
+        emergencyContactPhone: loggedInProfile.emergency_contact_phone || state.parentInfo.emergencyContactPhone,
+        emergencyContactRelationship: loggedInProfile.emergency_contact_relationship || state.parentInfo.emergencyContactRelationship,
+      })
+    }
+    setShowMergePrompt(false)
+    setLoggedInProfile(null)
+    onContinue()
+  }
+
+  /** User chose to keep the data they entered during registration */
+  const handleKeepRegistrationInfo = () => {
+    setShowMergePrompt(false)
+    setLoggedInProfile(null)
+    onContinue()
+  }
+
   // Loading state while checking auth
   if (phase === 'check' || authLoading) {
     return (
       <div className="flex flex-col items-center justify-center py-16">
         <Loader2 className="h-8 w-8 text-neon animate-spin mb-4" />
         <p className="text-white/60">Checking account status...</p>
+      </div>
+    )
+  }
+
+  // Data merge prompt (shown after successful login if profile differs)
+  if (showMergePrompt && loggedInProfile) {
+    const p = state.parentInfo
+    const profile = loggedInProfile
+    const rows = [
+      {
+        label: 'First Name',
+        account: profile.first_name || '',
+        registration: p.firstName,
+      },
+      {
+        label: 'Last Name',
+        account: profile.last_name || '',
+        registration: p.lastName,
+      },
+      {
+        label: 'Email',
+        account: profile.email || '',
+        registration: p.email,
+      },
+      {
+        label: 'Phone',
+        account: profile.phone || '',
+        registration: p.phone,
+      },
+    ]
+
+    return (
+      <div className="max-w-2xl mx-auto">
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-neon/10 border border-neon/30 mb-4">
+            <User className="h-8 w-8 text-neon" />
+          </div>
+          <h2 className="text-2xl font-black uppercase tracking-wider text-white mb-2">
+            Account Info Found
+          </h2>
+          <p className="text-white/60">
+            Your account has different info than what you entered during registration.
+            Which would you like to use for the parent/guardian details?
+          </p>
+        </div>
+
+        {/* Side-by-side comparison */}
+        <div className="border border-white/10 mb-8">
+          {/* Header */}
+          <div className="grid grid-cols-3 bg-white/5 border-b border-white/10">
+            <div className="p-3 text-xs font-bold uppercase tracking-wider text-white/50">
+              Field
+            </div>
+            <div className="p-3 text-xs font-bold uppercase tracking-wider text-neon text-center">
+              Account Info
+            </div>
+            <div className="p-3 text-xs font-bold uppercase tracking-wider text-purple text-center">
+              Registration Info
+            </div>
+          </div>
+          {/* Rows */}
+          {rows.map((row) => {
+            const isDifferent = row.account !== row.registration
+            return (
+              <div
+                key={row.label}
+                className={`grid grid-cols-3 border-b border-white/5 ${isDifferent ? 'bg-yellow-500/5' : ''}`}
+              >
+                <div className="p-3 text-sm text-white/70">{row.label}</div>
+                <div className={`p-3 text-sm text-center ${isDifferent ? 'text-neon font-semibold' : 'text-white/60'}`}>
+                  {row.account || '-'}
+                </div>
+                <div className={`p-3 text-sm text-center ${isDifferent ? 'text-purple font-semibold' : 'text-white/60'}`}>
+                  {row.registration || '-'}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Action buttons */}
+        <div className="flex gap-4">
+          <button
+            onClick={handleUseAccountInfo}
+            className="flex-1 py-4 bg-neon text-black font-bold uppercase tracking-widest hover:bg-neon/90 transition-colors flex items-center justify-center gap-2"
+          >
+            <Check className="h-5 w-5" />
+            Use Account Info
+          </button>
+          <button
+            onClick={handleKeepRegistrationInfo}
+            className="flex-1 py-4 border border-purple text-purple font-bold uppercase tracking-widest hover:bg-purple/10 transition-colors flex items-center justify-center gap-2"
+          >
+            <Shield className="h-5 w-5" />
+            Keep Registration Info
+          </button>
+        </div>
       </div>
     )
   }
@@ -324,12 +558,16 @@ export function AccountCreationStep({ onContinue, onBack }: AccountCreationStepP
           <User className="h-5 w-5 text-purple" />
           <span className="text-white/80 text-sm">Already have an account?</span>
         </div>
-        <Link
-          href={`/login?redirect=/register/${state.campSession?.slug || ''}`}
+        <button
+          type="button"
+          onClick={() => {
+            setShowLoginModal(true)
+            setLoginError(null)
+          }}
           className="text-neon font-bold text-sm hover:underline"
         >
           Log In
-        </Link>
+        </button>
       </div>
 
       {error && (
@@ -509,6 +747,123 @@ export function AccountCreationStep({ onContinue, onBack }: AccountCreationStepP
         {' '}and{' '}
         <Link href="/privacy" className="text-neon hover:underline">Privacy Policy</Link>
       </p>
+
+      {/* ---- Login Modal ---- */}
+      {showLoginModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+            onClick={() => !loginLoading && setShowLoginModal(false)}
+          />
+
+          {/* Modal */}
+          <div className="relative w-full max-w-md mx-4 bg-[#0a0a0a] border border-white/10 shadow-2xl">
+            {/* Close button */}
+            <button
+              type="button"
+              onClick={() => !loginLoading && setShowLoginModal(false)}
+              className="absolute top-4 right-4 text-white/40 hover:text-white transition-colors"
+            >
+              <X className="h-5 w-5" />
+            </button>
+
+            <div className="p-8">
+              {/* Header */}
+              <div className="text-center mb-6">
+                <div className="inline-flex items-center justify-center w-12 h-12 bg-neon/10 border border-neon/30 mb-3">
+                  <LogIn className="h-6 w-6 text-neon" />
+                </div>
+                <h3 className="text-xl font-black uppercase tracking-wider text-white">
+                  Log In
+                </h3>
+                <p className="text-white/50 text-sm mt-1">
+                  Sign in to your existing account
+                </p>
+              </div>
+
+              {loginError && (
+                <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 flex items-start gap-3">
+                  <AlertCircle className="h-5 w-5 text-red-400 flex-shrink-0 mt-0.5" />
+                  <p className="text-red-400 text-sm">{loginError}</p>
+                </div>
+              )}
+
+              <form onSubmit={handleLoginSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-white/50 mb-2">
+                    Email
+                  </label>
+                  <div className="relative">
+                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-white/30" />
+                    <Input
+                      type="email"
+                      value={loginEmail}
+                      onChange={(e) => {
+                        setLoginEmail(e.target.value)
+                        setLoginError(null)
+                      }}
+                      required
+                      className="pl-12"
+                      placeholder="jane@example.com"
+                      autoFocus
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-white/50 mb-2">
+                    Password
+                  </label>
+                  <div className="relative">
+                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-white/30" />
+                    <Input
+                      type="password"
+                      value={loginPassword}
+                      onChange={(e) => {
+                        setLoginPassword(e.target.value)
+                        setLoginError(null)
+                      }}
+                      required
+                      className="pl-12"
+                      placeholder="Your password"
+                    />
+                  </div>
+                </div>
+
+                <div className="text-right">
+                  <a
+                    href="/reset-password"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-white/40 hover:text-neon transition-colors"
+                  >
+                    Forgot Password?
+                  </a>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loginLoading}
+                  className="w-full py-4 bg-neon text-black font-bold uppercase tracking-widest hover:bg-neon/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {loginLoading ? (
+                    <>
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                      Signing In...
+                    </>
+                  ) : (
+                    <>
+                      <LogIn className="h-5 w-5" />
+                      Log In
+                    </>
+                  )}
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

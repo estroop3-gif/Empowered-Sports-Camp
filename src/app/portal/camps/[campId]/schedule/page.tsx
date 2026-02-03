@@ -27,6 +27,18 @@ import {
   RefreshCw,
 } from 'lucide-react'
 
+/** Convert "HH:MM" or "HH:MM:SS" 24h time to "H:MM AM/PM" */
+function formatTime12h(time?: string | null): string {
+  if (!time) return ''
+  const [hStr, mStr] = time.split(':')
+  let h = parseInt(hStr, 10)
+  const m = mStr || '00'
+  const ampm = h >= 12 ? 'PM' : 'AM'
+  if (h === 0) h = 12
+  else if (h > 12) h -= 12
+  return `${h}:${m} ${ampm}`
+}
+
 interface PageProps {
   params: Promise<{ campId: string }>
 }
@@ -344,7 +356,7 @@ export default function CampSchedulePage({ params }: PageProps) {
                 </div>
                 <div>
                   <p className="text-xs text-white/40 uppercase tracking-wider mb-1">Daily Hours</p>
-                  <p className="text-white">{camp.start_time || '9:00 AM'} - {camp.end_time || '3:00 PM'}</p>
+                  <p className="text-white">{formatTime12h(camp.start_time) || '9:00 AM'} - {formatTime12h(camp.end_time) || '3:00 PM'}</p>
                 </div>
                 <div>
                   <p className="text-xs text-white/40 uppercase tracking-wider mb-1">Total Days</p>

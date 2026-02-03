@@ -326,6 +326,9 @@ export async function getCampWaiverRequirements(campId: string) {
     })
 
     // Combine, putting site-wide first
+    // Deduplicate: exclude camp-specific requirements that reference a site-wide waiver template
+    const siteWideTemplateIds = new Set(siteWideWaivers.map((w) => w.id))
+
     const allRequirements = [
       ...siteWideWaivers.map((w) => ({
         id: `site-wide-${w.id}`,
@@ -337,10 +340,12 @@ export async function getCampWaiverRequirements(campId: string) {
         isSiteWide: true,
         waiverTemplate: w,
       })),
-      ...campRequirements.map((r) => ({
-        ...r,
-        isSiteWide: false,
-      })),
+      ...campRequirements
+        .filter((r) => !siteWideTemplateIds.has(r.waiverTemplateId))
+        .map((r) => ({
+          ...r,
+          isSiteWide: false,
+        })),
     ]
 
     return { data: { requirements: allRequirements, tenantId: camp?.tenantId }, error: null }

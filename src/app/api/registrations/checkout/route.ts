@@ -125,12 +125,20 @@ export async function POST(request: NextRequest) {
 
     // Find or create parent profile
     // Profile is linked to auth, so we look up by email first
-    // If user is authenticated, we also check by their Cognito sub (user ID)
+    // If user is authenticated, we also check by their profile ID
     let parentProfile = await prisma.profile.findFirst({
       where: {
         email: parent.email.toLowerCase(),
       },
     })
+
+    // If not found by email but user is authenticated, look up by their profile ID
+    // This handles cases where the registration form email differs from the account email
+    if (!parentProfile && authUser?.id) {
+      parentProfile = await prisma.profile.findUnique({
+        where: { id: authUser.id },
+      })
+    }
 
     // Get the profile ID to use - prefer authUser.id (Cognito sub) for consistency with dashboard
     // The auth helper may have already mapped the ID to profile.id, but we want the original Cognito sub
@@ -229,17 +237,22 @@ export async function POST(request: NextRequest) {
       const basePriceCents = campPrice
       const discountCents = siblingDiscount
 
-      // Promo discount (apply only to first camper)
-      const promoDiscountCents = isFirstCamper && promoCodeRecord
-        ? (promoCodeRecord.discountType === 'percentage'
-            ? Math.round(basePriceCents * (promoCodeRecord.discountValue / 100))
-            : Math.min(promoCodeRecord.discountValue, basePriceCents))
-        : 0
-
-      // Calculate addons for this camper
+      // Calculate addons for this camper (before promo so we can scope the discount)
       const camperAddOns = addOns.filter(a => a.camperId === camperData.id || !a.camperId)
       const relevantAddOns = i === 0 ? addOns : camperAddOns.filter(a => a.camperId === camperData.id)
       const addonsTotalCents = relevantAddOns.reduce((sum, a) => sum + a.unitPrice * a.quantity, 0)
+
+      // Promo discount (apply only to first camper, scoped by appliesTo)
+      let promoDiscountCents = 0
+      if (isFirstCamper && promoCodeRecord) {
+        const appliesTo = promoCodeRecord.appliesTo || 'both'
+        let eligible = 0
+        if (appliesTo === 'registration' || appliesTo === 'both') eligible += basePriceCents
+        if (appliesTo === 'addons' || appliesTo === 'both') eligible += addonsTotalCents
+        promoDiscountCents = promoCodeRecord.discountType === 'percentage'
+          ? Math.round(eligible * (promoCodeRecord.discountValue / 100))
+          : Math.min(promoCodeRecord.discountValue, eligible)
+      }
 
       // Calculate tax on taxable addons (physical products like t-shirts)
       // Camp registration fees are services and typically not taxed
@@ -265,10 +278,14 @@ export async function POST(request: NextRequest) {
           athlete = await prisma.athlete.update({
             where: { id: athlete.id },
             data: {
+              gender: 'female',
               grade: camperData.grade || athlete.grade,
               tShirtSize: camperData.tshirtSize || athlete.tShirtSize,
               medicalNotes: camperData.medicalNotes || athlete.medicalNotes,
               allergies: camperData.allergies || athlete.allergies,
+              emergencyContactName: parent.emergencyContactName || athlete.emergencyContactName,
+              emergencyContactPhone: parent.emergencyContactPhone || athlete.emergencyContactPhone,
+              emergencyContactRelationship: parent.emergencyContactRelationship || athlete.emergencyContactRelationship,
             },
           })
         }
@@ -289,10 +306,14 @@ export async function POST(request: NextRequest) {
           athlete = await prisma.athlete.update({
             where: { id: athlete.id },
             data: {
+              gender: 'female',
               grade: camperData.grade || athlete.grade,
               tShirtSize: camperData.tshirtSize || athlete.tShirtSize,
               medicalNotes: camperData.medicalNotes || athlete.medicalNotes,
               allergies: camperData.allergies || athlete.allergies,
+              emergencyContactName: parent.emergencyContactName || athlete.emergencyContactName,
+              emergencyContactPhone: parent.emergencyContactPhone || athlete.emergencyContactPhone,
+              emergencyContactRelationship: parent.emergencyContactRelationship || athlete.emergencyContactRelationship,
             },
           })
         }
@@ -310,10 +331,14 @@ export async function POST(request: NextRequest) {
             firstName: camperData.firstName,
             lastName: camperData.lastName,
             dateOfBirth: dob,
+            gender: 'female',
             grade: camperData.grade || null,
             tShirtSize: camperData.tshirtSize || null,
             medicalNotes: camperData.medicalNotes || null,
             allergies: camperData.allergies || null,
+            emergencyContactName: parent.emergencyContactName || null,
+            emergencyContactPhone: parent.emergencyContactPhone || null,
+            emergencyContactRelationship: parent.emergencyContactRelationship || null,
           },
         })
       }

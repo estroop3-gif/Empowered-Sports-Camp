@@ -14,6 +14,7 @@ import {
   updateAthleteAdmin,
   archiveAthlete,
   reactivateAthlete,
+  deleteAthletePermanently,
 } from '@/lib/services/athletes-admin'
 
 interface RouteParams {
@@ -115,6 +116,19 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
     if (action === 'reactivate') {
       const { data, error } = await reactivateAthlete({
+        athleteId,
+        role: user.role,
+      })
+
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 500 })
+      }
+
+      return NextResponse.json(data)
+    }
+
+    if (action === 'delete') {
+      const { data, error } = await deleteAthletePermanently({
         athleteId,
         role: user.role,
       })

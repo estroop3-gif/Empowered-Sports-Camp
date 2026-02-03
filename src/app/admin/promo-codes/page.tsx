@@ -28,6 +28,7 @@ interface PromoCode {
   description: string | null
   discount_type: 'percentage' | 'fixed'
   discount_value: number
+  applies_to: 'registration' | 'addons' | 'both'
   max_uses: number | null
   current_uses: number
   usage_count: number
@@ -59,6 +60,7 @@ export default function AdminPromoCodesPage() {
     description: '',
     discountType: 'percentage' as 'percentage' | 'fixed',
     discountValue: 10,
+    appliesTo: 'both' as 'registration' | 'addons' | 'both',
     maxUses: '',
     minPurchaseCents: '',
     validFrom: '',
@@ -70,6 +72,7 @@ export default function AdminPromoCodesPage() {
     description: '',
     discountType: 'percentage' as 'percentage' | 'fixed',
     discountValue: 0,
+    appliesTo: 'both' as 'registration' | 'addons' | 'both',
     maxUses: '',
     minPurchaseCents: '',
     validFrom: '',
@@ -128,6 +131,7 @@ export default function AdminPromoCodesPage() {
           discountValue: newCode.discountType === 'percentage'
             ? newCode.discountValue
             : Math.round(newCode.discountValue * 100),
+          appliesTo: newCode.appliesTo,
           maxUses: newCode.maxUses ? parseInt(newCode.maxUses) : null,
           minPurchaseCents: newCode.minPurchaseCents
             ? Math.round(parseFloat(newCode.minPurchaseCents) * 100)
@@ -153,6 +157,7 @@ export default function AdminPromoCodesPage() {
         description: '',
         discountType: 'percentage',
         discountValue: 10,
+        appliesTo: 'both',
         maxUses: '',
         minPurchaseCents: '',
         validFrom: '',
@@ -180,6 +185,7 @@ export default function AdminPromoCodesPage() {
           discountValue: editForm.discountType === 'percentage'
             ? editForm.discountValue
             : Math.round(editForm.discountValue * 100),
+          appliesTo: editForm.appliesTo,
           maxUses: editForm.maxUses ? parseInt(editForm.maxUses) : null,
           minPurchaseCents: editForm.minPurchaseCents
             ? Math.round(parseFloat(editForm.minPurchaseCents) * 100)
@@ -254,6 +260,7 @@ export default function AdminPromoCodesPage() {
       description: pc.description || '',
       discountType: pc.discount_type,
       discountValue: pc.discount_type === 'percentage' ? pc.discount_value : pc.discount_value / 100,
+      appliesTo: pc.applies_to || 'both',
       maxUses: pc.max_uses?.toString() || '',
       minPurchaseCents: pc.min_purchase_cents ? (pc.min_purchase_cents / 100).toString() : '',
       validFrom: pc.valid_from || '',
@@ -343,7 +350,7 @@ export default function AdminPromoCodesPage() {
               />
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-4">
               <div>
                 <label className="block text-xs text-white/40 uppercase tracking-wider mb-2">
                   Discount Type *
@@ -378,6 +385,20 @@ export default function AdminPromoCodesPage() {
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40">%</span>
                   )}
                 </div>
+              </div>
+              <div>
+                <label className="block text-xs text-white/40 uppercase tracking-wider mb-2">
+                  Applies To
+                </label>
+                <select
+                  value={newCode.appliesTo}
+                  onChange={(e) => setNewCode({ ...newCode, appliesTo: e.target.value as 'registration' | 'addons' | 'both' })}
+                  className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-neon focus:outline-none"
+                >
+                  <option value="both">Registration & Add-ons</option>
+                  <option value="registration">Registration Only</option>
+                  <option value="addons">Add-ons Only</option>
+                </select>
               </div>
               <div>
                 <label className="block text-xs text-white/40 uppercase tracking-wider mb-2">
@@ -470,7 +491,7 @@ export default function AdminPromoCodesPage() {
                 {editingCode === pc.id ? (
                   // Edit Form
                   <div className="space-y-4">
-                    <div className="grid gap-4 sm:grid-cols-3">
+                    <div className="grid gap-4 sm:grid-cols-4">
                       <div>
                         <label className="block text-xs text-white/40 mb-1">Description</label>
                         <Input
@@ -496,6 +517,18 @@ export default function AdminPromoCodesPage() {
                           value={editForm.discountValue}
                           onChange={(e) => setEditForm({ ...editForm, discountValue: parseFloat(e.target.value) || 0 })}
                         />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-white/40 mb-1">Applies To</label>
+                        <select
+                          value={editForm.appliesTo}
+                          onChange={(e) => setEditForm({ ...editForm, appliesTo: e.target.value as 'registration' | 'addons' | 'both' })}
+                          className="w-full px-3 py-2 bg-black border border-white/20 text-white text-sm focus:border-neon focus:outline-none"
+                        >
+                          <option value="both">Reg & Add-ons</option>
+                          <option value="registration">Reg Only</option>
+                          <option value="addons">Add-ons Only</option>
+                        </select>
                       </div>
                     </div>
                     <div className="grid gap-4 sm:grid-cols-4">
@@ -558,6 +591,11 @@ export default function AdminPromoCodesPage() {
                           )}
                           <span className="text-purple font-bold">{formatDiscount(pc)}</span>
                         </span>
+                        {pc.applies_to && pc.applies_to !== 'both' && (
+                          <span className="px-2 py-0.5 text-xs font-bold uppercase bg-purple/10 text-purple border border-purple/30">
+                            {pc.applies_to === 'registration' ? 'Reg Only' : 'Add-ons Only'}
+                          </span>
+                        )}
                         {!pc.is_active && (
                           <span className="px-2 py-0.5 text-xs font-bold uppercase bg-white/10 text-white/40 border border-white/20">
                             Inactive

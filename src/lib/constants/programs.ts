@@ -46,16 +46,6 @@ export const PROGRAMS: Program[] = [
     color: 'purple',
     grades: '6th–12th grade',
   },
-  {
-    slug: 'basketball-intensive',
-    name: 'Basketball Intensive',
-    tagline: 'Position-specific skill work and reps for competitive hoopers.',
-    description:
-      'For hoopers who want to compete with confidence, this intensive blends high-rep ball-handling, shooting, decision-making, and live small-sided games in a fast-paced, supportive environment.',
-    href: '/programs/basketball-intensive',
-    color: 'neon',
-    grades: '6th–12th grade',
-  },
 ]
 
 export const SPORTS_LIST = [

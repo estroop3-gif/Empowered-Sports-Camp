@@ -43,13 +43,6 @@ export function CampCard({ camp }: CampCardProps) {
           </div>
         )}
 
-        {/* Program Type Badge */}
-        <div className="absolute left-3 top-3">
-          <Badge variant="dark" className="backdrop-blur-sm">
-            {camp.programType}
-          </Badge>
-        </div>
-
         {/* Availability Badge */}
         {isFull && (
           <div className="absolute right-3 top-3">

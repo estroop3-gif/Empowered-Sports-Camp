@@ -154,8 +154,9 @@ export default function AdminCampsPage() {
   }
 
   const formatDateRange = (start: string, end: string) => {
-    const startDate = new Date(start)
-    const endDate = new Date(end)
+    // Append T12:00:00 to avoid UTC midnight rolling back a day in US timezones
+    const startDate = new Date(start.includes('T') ? start : `${start}T12:00:00`)
+    const endDate = new Date(end.includes('T') ? end : `${end}T12:00:00`)
     const options: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' }
     return `${startDate.toLocaleDateString('en-US', options)} - ${endDate.toLocaleDateString('en-US', options)}, ${startDate.getFullYear()}`
   }
@@ -278,7 +279,9 @@ export default function AdminCampsPage() {
                     <td className="py-4 px-4">
                       <div className="flex items-center gap-2 text-white/70">
                         <MapPin className="h-4 w-4 text-white/40" />
-                        {camp.location ? `${camp.location.city}, ${camp.location.state}` : 'No location'}
+                        {camp.location
+                          ? [camp.location.name, camp.location.city, camp.location.state].filter(Boolean).join(', ') || 'Location set'
+                          : 'No location'}
                       </div>
                     </td>
                     <td className="py-4 px-4 text-right">

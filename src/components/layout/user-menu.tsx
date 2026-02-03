@@ -15,6 +15,7 @@ import {
   Shield,
   Crown,
   Eye,
+  Home,
 } from 'lucide-react'
 
 /**
@@ -52,6 +53,7 @@ export function UserMenu({ variant = 'navbar', className }: UserMenuProps) {
     isViewingAsOtherRole,
     viewingAsRole,
     setViewingAsRole,
+    hasParentRole,
   } = useAuth()
 
   const [isOpen, setIsOpen] = useState(false)
@@ -293,6 +295,18 @@ export function UserMenu({ variant = 'navbar', className }: UserMenuProps) {
               <LayoutDashboard className="h-4 w-4" />
               <span className="font-medium">Dashboard</span>
             </Link>
+
+            {/* Show parent dashboard link if user has parent role but is viewing as another role */}
+            {hasParentRole && role !== 'parent' && (
+              <Link
+                href="/dashboard"
+                onClick={() => setIsOpen(false)}
+                className="flex items-center gap-3 px-4 py-2.5 text-sm text-white/70 hover:text-white hover:bg-white/5 transition-colors"
+              >
+                <Home className="h-4 w-4" />
+                <span className="font-medium">Parent Dashboard</span>
+              </Link>
+            )}
 
             {/* Show link to actual admin dashboard when viewing as another role */}
             {isViewingAsOtherRole && (
