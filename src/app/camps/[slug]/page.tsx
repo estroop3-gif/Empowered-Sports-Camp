@@ -123,6 +123,7 @@ export default async function CampDetailPage({ params }: PageProps) {
                       {camp.location_name || 'TBD'}
                       {camp.city && `, ${camp.city}`}
                       {camp.state && `, ${camp.state}`}
+                      {camp.country && camp.country !== 'US' && `, ${camp.country}`}
                     </div>
                   </div>
                 </div>
@@ -138,9 +139,19 @@ export default async function CampDetailPage({ params }: PageProps) {
                 <div className="flex items-center gap-3 p-4 bg-dark-100 border border-white/10">
                   <Clock className="h-5 w-5 text-purple" />
                   <div>
-                    <div className="text-sm text-white/40 uppercase tracking-wider">Time</div>
+                    <div className="text-sm text-white/40 uppercase tracking-wider">
+                      {camp.is_overnight ? 'Schedule' : 'Time'}
+                    </div>
                     <div className="text-white font-medium">
-                      {formatTime12h(camp.daily_start_time)} - {formatTime12h(camp.daily_end_time)}
+                      {camp.is_overnight ? (
+                        <>
+                          Overnight
+                          {camp.dropoff_time && <> · Drop-off {formatTime12h(camp.dropoff_time)}</>}
+                          {camp.pickup_time && <> · Pick-up {formatTime12h(camp.pickup_time)}</>}
+                        </>
+                      ) : (
+                        <>{formatTime12h(camp.daily_start_time)} - {formatTime12h(camp.daily_end_time)}</>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -243,7 +254,7 @@ export default async function CampDetailPage({ params }: PageProps) {
                   campDates={formatDateRange(camp.start_date, camp.end_date)}
                   campLocation={
                     camp.location_name
-                      ? `${camp.location_name}${camp.city ? `, ${camp.city}` : ''}${camp.state ? `, ${camp.state}` : ''}`
+                      ? `${camp.location_name}${camp.city ? `, ${camp.city}` : ''}${camp.state ? `, ${camp.state}` : ''}${camp.country && camp.country !== 'US' ? `, ${camp.country}` : ''}`
                       : null
                   }
                 />
@@ -318,13 +329,14 @@ export default async function CampDetailPage({ params }: PageProps) {
                       {camp.location_address}
                       <br />
                       {camp.city}, {camp.state} {camp.zip_code}
+                      {camp.country && camp.country !== 'US' && `, ${camp.country}`}
                     </p>
                   )}
                   <a
                     href={`https://maps.google.com/?q=${encodeURIComponent(
                       `${camp.location_address || ''} ${camp.city || ''} ${camp.state || ''} ${
                         camp.zip_code || ''
-                      }`
+                      } ${camp.country && camp.country !== 'US' ? camp.country : ''}`
                     )}`}
                     target="_blank"
                     rel="noopener noreferrer"
@@ -367,6 +379,7 @@ export default async function CampDetailPage({ params }: PageProps) {
                   {camp.location_address}
                   <br />
                   {camp.city}, {camp.state} {camp.zip_code}
+                  {camp.country && camp.country !== 'US' && `, ${camp.country}`}
                 </p>
               )}
               {camp.indoor !== null && (

@@ -327,6 +327,7 @@ export interface CampListingItem {
   venueName: string
   venueCity: string | null
   venueState: string | null
+  venueCountry: string | null
   distanceMiles: number | null
   startDate: string
   endDate: string
@@ -349,6 +350,10 @@ export interface CampListingItem {
   desirabilityScore: number
   fillRate: number
   badge: CampBadge
+  flag: string | null
+  isOvernight: boolean
+  dropoffTime: string | null
+  pickupTime: string | null
 }
 
 export interface ProgramTypeSection {

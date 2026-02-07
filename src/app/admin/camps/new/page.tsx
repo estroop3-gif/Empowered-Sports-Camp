@@ -363,6 +363,10 @@ interface CampFormData {
   status: 'draft' | 'published' | 'open' | 'closed'
   featured: boolean
   image_url: string | null
+  flag: string
+  is_overnight: boolean
+  dropoff_time: string
+  pickup_time: string
 }
 
 interface ProgramTagOption {
@@ -484,6 +488,10 @@ export default function AdminCreateCampPage() {
     status: 'draft',
     featured: false,
     image_url: null,
+    flag: '',
+    is_overnight: false,
+    dropoff_time: '',
+    pickup_time: '',
   })
 
   // Track saved draft ID so we update the same record instead of creating duplicates
@@ -1041,6 +1049,21 @@ export default function AdminCreateCampPage() {
                     className="w-full px-4 py-3 bg-black border border-white/20 text-white placeholder:text-white/30 focus:border-neon focus:outline-none resize-none"
                   />
                 </div>
+
+                <div>
+                  <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
+                    Flag / Badge Text
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.flag}
+                    onChange={(e) => setFormData(prev => ({ ...prev, flag: e.target.value }))}
+                    placeholder='e.g., "Most Popular", "New", "Limited Spots"'
+                    maxLength={30}
+                    className="w-full px-4 py-3 bg-black border border-white/20 text-white placeholder:text-white/30 focus:border-neon focus:outline-none"
+                  />
+                  <p className="mt-1 text-xs text-white/30">Optional. Overrides auto-computed badge on public listing.</p>
+                </div>
               </div>
             </ContentCard>
 
@@ -1274,60 +1297,105 @@ export default function AdminCreateCampPage() {
             </ContentCard>
 
             <ContentCard title="Schedule" accent="purple">
-              <div className="grid gap-6 sm:grid-cols-2">
-                <div>
-                  <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
-                    <Calendar className="h-4 w-4 inline mr-2" />
-                    Start Date *
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={formData.start_date}
-                    onChange={(e) => setFormData(prev => ({ ...prev, start_date: e.target.value }))}
-                    className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-purple focus:outline-none"
-                  />
+              <div className="space-y-6">
+                <div className="grid gap-6 sm:grid-cols-2">
+                  <div>
+                    <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
+                      <Calendar className="h-4 w-4 inline mr-2" />
+                      Start Date *
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={formData.start_date}
+                      onChange={(e) => setFormData(prev => ({ ...prev, start_date: e.target.value }))}
+                      className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-purple focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
+                      <Calendar className="h-4 w-4 inline mr-2" />
+                      End Date *
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={formData.end_date}
+                      onChange={(e) => setFormData(prev => ({ ...prev, end_date: e.target.value }))}
+                      className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-purple focus:outline-none"
+                    />
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
-                    <Calendar className="h-4 w-4 inline mr-2" />
-                    End Date *
-                  </label>
+                <label className="flex items-center gap-3 cursor-pointer">
                   <input
-                    type="date"
-                    required
-                    value={formData.end_date}
-                    onChange={(e) => setFormData(prev => ({ ...prev, end_date: e.target.value }))}
-                    className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-purple focus:outline-none"
+                    type="checkbox"
+                    checked={formData.is_overnight}
+                    onChange={(e) => setFormData(prev => ({ ...prev, is_overnight: e.target.checked }))}
+                    className="w-5 h-5"
                   />
-                </div>
+                  <div>
+                    <div className="font-bold text-white">Overnight Program</div>
+                    <div className="text-sm text-white/50">This is an overnight/abroad camp with drop-off and pick-up times</div>
+                  </div>
+                </label>
 
-                <div>
-                  <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
-                    <Clock className="h-4 w-4 inline mr-2" />
-                    Daily Start Time
-                  </label>
-                  <input
-                    type="time"
-                    value={formData.start_time}
-                    onChange={(e) => setFormData(prev => ({ ...prev, start_time: e.target.value }))}
-                    className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-purple focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
-                    <Clock className="h-4 w-4 inline mr-2" />
-                    Daily End Time
-                  </label>
-                  <input
-                    type="time"
-                    value={formData.end_time}
-                    onChange={(e) => setFormData(prev => ({ ...prev, end_time: e.target.value }))}
-                    className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-purple focus:outline-none"
-                  />
-                </div>
+                {formData.is_overnight ? (
+                  <div className="grid gap-6 sm:grid-cols-2">
+                    <div>
+                      <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
+                        <Clock className="h-4 w-4 inline mr-2" />
+                        Drop-off Time
+                      </label>
+                      <input
+                        type="time"
+                        value={formData.dropoff_time}
+                        onChange={(e) => setFormData(prev => ({ ...prev, dropoff_time: e.target.value }))}
+                        className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-purple focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
+                        <Clock className="h-4 w-4 inline mr-2" />
+                        Pick-up Time
+                      </label>
+                      <input
+                        type="time"
+                        value={formData.pickup_time}
+                        onChange={(e) => setFormData(prev => ({ ...prev, pickup_time: e.target.value }))}
+                        className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-purple focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid gap-6 sm:grid-cols-2">
+                    <div>
+                      <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
+                        <Clock className="h-4 w-4 inline mr-2" />
+                        Daily Start Time
+                      </label>
+                      <input
+                        type="time"
+                        value={formData.start_time}
+                        onChange={(e) => setFormData(prev => ({ ...prev, start_time: e.target.value }))}
+                        className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-purple focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
+                        <Clock className="h-4 w-4 inline mr-2" />
+                        Daily End Time
+                      </label>
+                      <input
+                        type="time"
+                        value={formData.end_time}
+                        onChange={(e) => setFormData(prev => ({ ...prev, end_time: e.target.value }))}
+                        className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-purple focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             </ContentCard>
 

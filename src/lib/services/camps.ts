@@ -47,6 +47,7 @@ export interface PublicCampCard {
   city: string | null
   state: string | null
   zip_code: string | null
+  country: string | null
   latitude: number | null
   longitude: number | null
   indoor: boolean | null
@@ -59,6 +60,11 @@ export interface PublicCampCard {
   // Tenant fields
   tenant_name: string | null
   tenant_slug: string | null
+  // Flag / overnight fields
+  flag: string | null
+  is_overnight: boolean
+  dropoff_time: string | null
+  pickup_time: string | null
   // Computed fields
   spots_remaining: number
   current_price: number // in cents
@@ -118,6 +124,7 @@ function transformCampToCard(camp: Prisma.CampGetPayload<{
   const city = hasVenue ? camp.venue!.city : (hasLocation ? camp.location!.city : null)
   const state = hasVenue ? camp.venue!.state : (hasLocation ? camp.location!.state : null)
   const zipCode = hasVenue ? camp.venue!.postalCode : (hasLocation ? camp.location!.zip : null)
+  const country = hasVenue ? camp.venue!.country : 'US'
   const latitude = hasVenue && camp.venue!.latitude ? Number(camp.venue!.latitude) : (hasLocation && camp.location!.latitude ? Number(camp.location!.latitude) : null)
   const longitude = hasVenue && camp.venue!.longitude ? Number(camp.venue!.longitude) : (hasLocation && camp.location!.longitude ? Number(camp.location!.longitude) : null)
 
@@ -161,6 +168,7 @@ function transformCampToCard(camp: Prisma.CampGetPayload<{
     city: city,
     state: state,
     zip_code: zipCode,
+    country: country,
     latitude: latitude,
     longitude: longitude,
     indoor: indoor,
@@ -173,6 +181,11 @@ function transformCampToCard(camp: Prisma.CampGetPayload<{
     // Tenant fields
     tenant_name: camp.tenant?.name || null,
     tenant_slug: camp.tenant?.slug || null,
+    // Flag / overnight fields
+    flag: camp.flag || null,
+    is_overnight: camp.isOvernight,
+    dropoff_time: camp.dropoffTime?.toISOString().slice(11, 16) || null,
+    pickup_time: camp.pickupTime?.toISOString().slice(11, 16) || null,
     // Computed fields
     spots_remaining: spotsRemaining,
     current_price: currentPrice,
@@ -1156,6 +1169,7 @@ export async function fetchCampsGroupedByProgramType(
     const venueName = hasVenue ? camp.venue!.name : (hasLocation ? camp.location!.name : 'Location TBD')
     const venueCity = hasVenue ? camp.venue!.city : (hasLocation ? camp.location!.city : null)
     const venueState = hasVenue ? camp.venue!.state : (hasLocation ? camp.location!.state : null)
+    const venueCountry = hasVenue ? camp.venue!.country : 'US'
 
     const item: CampListingItem = {
       id: camp.id,
@@ -1166,6 +1180,7 @@ export async function fetchCampsGroupedByProgramType(
       venueName,
       venueCity,
       venueState,
+      venueCountry,
       distanceMiles,
       startDate: camp.startDate.toISOString(),
       endDate: camp.endDate.toISOString(),
@@ -1188,6 +1203,10 @@ export async function fetchCampsGroupedByProgramType(
       desirabilityScore,
       fillRate,
       badge,
+      flag: camp.flag || null,
+      isOvernight: camp.isOvernight,
+      dropoffTime: camp.dropoffTime?.toISOString().slice(11, 16) || null,
+      pickupTime: camp.pickupTime?.toISOString().slice(11, 16) || null,
     }
 
     const key = camp.programType

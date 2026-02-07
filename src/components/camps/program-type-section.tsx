@@ -40,10 +40,9 @@ function formatTime12h(time24: string): string {
   return m === '00' ? `${h}${ampm}` : `${h}:${m}${ampm}`
 }
 
-function BadgePill({ badge }: { badge: CampListingItem['badge'] }) {
-  if (!badge) return null
-  const variant = badge === 'MOST POPULAR' ? 'magenta' : badge === 'NEW!' ? 'neon' : 'warning'
-  return <Badge variant={variant} size="sm">{badge}</Badge>
+function BadgePill({ flag }: { badge?: CampListingItem['badge']; flag?: string | null }) {
+  if (!flag) return null
+  return <Badge variant="neon" size="sm">{flag}</Badge>
 }
 
 interface ProgramTypeSectionCardProps {
@@ -96,7 +95,7 @@ function CampRow({ camp }: { camp: CampListingItem }) {
         <div className="flex-1 min-w-0 space-y-2">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-bold text-white truncate">{camp.name}</span>
-            <BadgePill badge={camp.badge} />
+            <BadgePill badge={camp.badge} flag={camp.flag} />
           </div>
 
           {/* Venue + location row */}
@@ -107,6 +106,12 @@ function CampRow({ camp }: { camp: CampListingItem }) {
               {camp.venueCity && camp.venueState && (
                 <span className="text-white/30">
                   {' '}— {camp.venueCity}, {camp.venueState}
+                  {camp.venueCountry && camp.venueCountry !== 'US' && `, ${camp.venueCountry}`}
+                </span>
+              )}
+              {(!camp.venueCity || !camp.venueState) && camp.venueCountry && camp.venueCountry !== 'US' && (
+                <span className="text-white/30">
+                  {' '}— {camp.venueCountry}
                 </span>
               )}
             </span>
@@ -124,12 +129,19 @@ function CampRow({ camp }: { camp: CampListingItem }) {
               <Calendar className="h-3 w-3" />
               {formatDateRange(camp.startDate, camp.endDate)}
             </span>
-            {camp.dailyStartTime && camp.dailyEndTime && (
+            {camp.isOvernight ? (
+              <span className="flex items-center gap-1.5">
+                <Clock className="h-3 w-3" />
+                Overnight
+                {camp.dropoffTime && <> · Drop-off {formatTime12h(camp.dropoffTime)}</>}
+                {camp.pickupTime && <> · Pick-up {formatTime12h(camp.pickupTime)}</>}
+              </span>
+            ) : camp.dailyStartTime && camp.dailyEndTime ? (
               <span className="flex items-center gap-1.5">
                 <Clock className="h-3 w-3" />
                 {formatTime12h(camp.dailyStartTime)} – {formatTime12h(camp.dailyEndTime)}
               </span>
-            )}
+            ) : null}
             <span className="flex items-center gap-1.5">
               <Users className="h-3 w-3" />
               Ages {camp.minAge}-{camp.maxAge}
