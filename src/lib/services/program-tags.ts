@@ -99,10 +99,18 @@ export async function createProgramTag(data: {
   description?: string
   sortOrder?: number
 }): Promise<ProgramTagData> {
-  const slug = data.slug || data.name
+  const baseSlug = data.slug || data.name
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '_')
     .replace(/^_|_$/g, '')
+
+  // Find a unique slug — append _2, _3, etc. if the base already exists
+  let slug = baseSlug
+  let suffix = 1
+  while (await prisma.programTag.findUnique({ where: { slug } })) {
+    suffix++
+    slug = `${baseSlug}_${suffix}`
+  }
 
   const tag = await prisma.programTag.create({
     data: {
