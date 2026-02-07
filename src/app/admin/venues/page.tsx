@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { AdminLayout, PageHeader, ContentCard } from '@/components/admin/admin-layout'
@@ -109,6 +109,8 @@ export default function AdminVenuesPage() {
 
   // UI state
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null)
+  const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null)
+  const buttonRefs = useRef<{ [key: string]: HTMLButtonElement | null }>({})
   const [processingId, setProcessingId] = useState<string | null>(null)
 
   // Fetch data function
@@ -208,13 +210,6 @@ export default function AdminVenuesPage() {
       return true
     })
   }, [venues, statusFilter, cityFilter, stateFilter, facilityTypeFilter, searchQuery])
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = () => setActiveDropdown(null)
-    document.addEventListener('click', handleClickOutside)
-    return () => document.removeEventListener('click', handleClickOutside)
-  }, [])
 
   // Action handlers
   const handleArchive = async (id: string) => {
@@ -471,7 +466,7 @@ export default function AdminVenuesPage() {
             )}
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto overflow-y-visible">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-white/10">
@@ -569,9 +564,28 @@ export default function AdminVenuesPage() {
                       <td className="py-4 px-4 text-right">
                         <div className="relative inline-block" onClick={(e) => e.stopPropagation()}>
                           <button
+                            ref={(el) => { buttonRefs.current[venue.id] = el }}
                             onClick={(e) => {
                               e.stopPropagation()
-                              setActiveDropdown(activeDropdown === venue.id ? null : venue.id)
+                              if (activeDropdown === venue.id) {
+                                setActiveDropdown(null)
+                                setMenuPosition(null)
+                              } else {
+                                const button = buttonRefs.current[venue.id]
+                                if (button) {
+                                  const rect = button.getBoundingClientRect()
+                                  const menuHeight = 240
+                                  const spaceBelow = window.innerHeight - rect.bottom - 16
+                                  const top = spaceBelow < menuHeight
+                                    ? Math.max(16, rect.top - Math.min(menuHeight, rect.top - 16))
+                                    : rect.bottom + 4
+                                  setMenuPosition({
+                                    top,
+                                    left: rect.right - 192,
+                                  })
+                                }
+                                setActiveDropdown(venue.id)
+                              }
                             }}
                             className="p-2 hover:bg-white/10 transition-colors"
                           >
@@ -582,49 +596,62 @@ export default function AdminVenuesPage() {
                             )}
                           </button>
 
-                          {activeDropdown === venue.id && (
-                            <div className="absolute right-0 top-full mt-1 w-48 bg-dark-100 border border-white/10 shadow-lg z-10">
-                              <Link
-                                href={`/admin/venues/${venue.id}`}
-                                className="flex items-center gap-2 px-4 py-2 text-sm text-white hover:bg-white/5 transition-colors"
+                          {activeDropdown === venue.id && menuPosition && (
+                            <>
+                              <div
+                                className="fixed inset-0 z-[70]"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setActiveDropdown(null)
+                                  setMenuPosition(null)
+                                }}
+                              />
+                              <div
+                                className="fixed w-48 bg-dark-100 border border-white/10 shadow-xl z-[80]"
+                                style={{ top: menuPosition.top, left: menuPosition.left }}
                               >
-                                <Eye className="h-4 w-4" />
-                                View Details
-                              </Link>
-                              <Link
-                                href={`/admin/venues/${venue.id}`}
-                                className="flex items-center gap-2 px-4 py-2 text-sm text-white hover:bg-white/5 transition-colors"
-                              >
-                                <Edit className="h-4 w-4" />
-                                Edit Venue
-                              </Link>
-                              <div className="border-t border-white/10" />
-                              {venue.is_active ? (
-                                <button
-                                  onClick={() => handleArchive(venue.id)}
-                                  className="flex items-center gap-2 px-4 py-2 text-sm text-magenta hover:bg-white/5 transition-colors w-full text-left"
+                                <Link
+                                  href={`/admin/venues/${venue.id}`}
+                                  className="flex items-center gap-2 px-4 py-2 text-sm text-white hover:bg-white/5 transition-colors"
                                 >
-                                  <Archive className="h-4 w-4" />
-                                  Archive Venue
-                                </button>
-                              ) : (
-                                <button
-                                  onClick={() => handleReactivate(venue.id)}
-                                  className="flex items-center gap-2 px-4 py-2 text-sm text-neon hover:bg-white/5 transition-colors w-full text-left"
+                                  <Eye className="h-4 w-4" />
+                                  View Details
+                                </Link>
+                                <Link
+                                  href={`/admin/venues/${venue.id}`}
+                                  className="flex items-center gap-2 px-4 py-2 text-sm text-white hover:bg-white/5 transition-colors"
                                 >
-                                  <RotateCcw className="h-4 w-4" />
-                                  Reactivate
+                                  <Edit className="h-4 w-4" />
+                                  Edit Venue
+                                </Link>
+                                <div className="border-t border-white/10" />
+                                {venue.is_active ? (
+                                  <button
+                                    onClick={() => handleArchive(venue.id)}
+                                    className="flex items-center gap-2 px-4 py-2 text-sm text-magenta hover:bg-white/5 transition-colors w-full text-left"
+                                  >
+                                    <Archive className="h-4 w-4" />
+                                    Archive Venue
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={() => handleReactivate(venue.id)}
+                                    className="flex items-center gap-2 px-4 py-2 text-sm text-neon hover:bg-white/5 transition-colors w-full text-left"
+                                  >
+                                    <RotateCcw className="h-4 w-4" />
+                                    Reactivate
+                                  </button>
+                                )}
+                                <div className="border-t border-white/10" />
+                                <button
+                                  onClick={() => handleDelete(venue.id, venue.name)}
+                                  className="flex items-center gap-2 px-4 py-2 text-sm text-red-500 hover:bg-white/5 transition-colors w-full text-left"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                  Delete Venue
                                 </button>
-                              )}
-                              <div className="border-t border-white/10" />
-                              <button
-                                onClick={() => handleDelete(venue.id, venue.name)}
-                                className="flex items-center gap-2 px-4 py-2 text-sm text-red-500 hover:bg-white/5 transition-colors w-full text-left"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                                Delete Venue
-                              </button>
-                            </div>
+                              </div>
+                            </>
                           )}
                         </div>
                       </td>

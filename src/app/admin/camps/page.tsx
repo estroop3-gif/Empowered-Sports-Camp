@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import Link from 'next/link'
 import { AdminLayout, PageHeader, ContentCard } from '@/components/admin/admin-layout'
 import { DataTable, TableBadge } from '@/components/ui/data-table'
@@ -20,6 +20,9 @@ import {
   ClipboardList,
   UsersRound,
   LayoutDashboard,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react'
 
 // Type definition (avoid importing from Prisma-based service in client component)
@@ -64,6 +67,10 @@ interface AdminCamp {
     name: string
     slug: string
   } | null
+  program_type?: string
+  venue_id?: string | null
+  registration_count?: number
+  territory_name?: string | null
 }
 
 /**
@@ -89,6 +96,42 @@ export default function AdminCampsPage() {
   const [actionMenuOpen, setActionMenuOpen] = useState<string | null>(null)
   const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null)
   const buttonRefs = useRef<{ [key: string]: HTMLButtonElement | null }>({})
+
+  // Additional filters
+  const [programTypeFilter, setProgramTypeFilter] = useState<string>('')
+  const [venueFilter, setVenueFilter] = useState<string>('')
+  const [dateRangeFilter, setDateRangeFilter] = useState<string>('')
+  const [capacityFilter, setCapacityFilter] = useState<string>('')
+
+  // Sort state
+  const [sortColumn, setSortColumn] = useState<'start_date' | 'capacity' | null>(null)
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
+
+  // Compute unique filter options from data
+  const programTypes = useMemo(() => {
+    const types = new Set<string>()
+    camps.forEach(c => { if (c.program_type) types.add(c.program_type) })
+    return Array.from(types).sort()
+  }, [camps])
+
+  const venueOptions = useMemo(() => {
+    const map = new Map<string, string>()
+    camps.forEach(c => {
+      if (c.venue?.id && c.venue?.name) map.set(c.venue.id, c.venue.name)
+    })
+    return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1]))
+  }, [camps])
+
+  function handleSort(column: 'start_date' | 'capacity') {
+    if (sortColumn === column) {
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortColumn(column)
+      setSortDirection('asc')
+    }
+  }
+
+  const hasActiveFilters = programTypeFilter || venueFilter || dateRangeFilter || capacityFilter
 
   useEffect(() => {
     loadCamps()
@@ -168,16 +211,65 @@ export default function AdminCampsPage() {
     return `${startDate.toLocaleDateString('en-US', options)} - ${endDate.toLocaleDateString('en-US', options)}, ${startDate.getFullYear()}`
   }
 
-  const filteredCamps = camps.filter(camp => {
-    if (!searchQuery) return true
-    const q = searchQuery.toLowerCase()
-    return (
-      camp.name.toLowerCase().includes(q) ||
-      camp.venue?.name?.toLowerCase().includes(q) ||
-      camp.venue?.city?.toLowerCase().includes(q) ||
-      camp.tenant?.name?.toLowerCase().includes(q)
-    )
-  })
+  const filteredCamps = useMemo(() => {
+    const filtered = camps.filter(camp => {
+      // Search filter
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase()
+        const matchesSearch = (
+          camp.name.toLowerCase().includes(q) ||
+          camp.venue?.name?.toLowerCase().includes(q) ||
+          camp.venue?.city?.toLowerCase().includes(q) ||
+          camp.tenant?.name?.toLowerCase().includes(q)
+        )
+        if (!matchesSearch) return false
+      }
+
+      // Program type filter
+      if (programTypeFilter && camp.program_type !== programTypeFilter) return false
+
+      // Venue filter
+      if (venueFilter && camp.venue?.id !== venueFilter) return false
+
+      // Date range filter
+      if (dateRangeFilter) {
+        const now = new Date()
+        const startDate = new Date(camp.start_date.includes('T') ? camp.start_date : `${camp.start_date}T12:00:00`)
+        if (dateRangeFilter === 'upcoming') {
+          if (startDate <= now) return false
+        } else if (dateRangeFilter === 'this_month') {
+          if (startDate.getMonth() !== now.getMonth() || startDate.getFullYear() !== now.getFullYear()) return false
+        } else if (dateRangeFilter === 'past') {
+          const endDate = new Date(camp.end_date.includes('T') ? camp.end_date : `${camp.end_date}T12:00:00`)
+          if (endDate >= now) return false
+        }
+      }
+
+      // Capacity filter
+      if (capacityFilter) {
+        const regCount = camp.registration_count || 0
+        if (capacityFilter === 'has_spots') {
+          if (regCount >= camp.capacity) return false
+        } else if (capacityFilter === 'full') {
+          if (regCount < camp.capacity) return false
+        }
+      }
+
+      return true
+    })
+
+    if (sortColumn) {
+      const dir = sortDirection === 'asc' ? 1 : -1
+      filtered.sort((a, b) => {
+        if (sortColumn === 'start_date') {
+          return a.start_date.localeCompare(b.start_date) * dir
+        }
+        return (a.capacity - b.capacity) * dir
+      })
+    }
+
+    return filtered
+  }, [camps, searchQuery, programTypeFilter, venueFilter, dateRangeFilter, capacityFilter, sortColumn, sortDirection])
 
   return (
     <AdminLayout
@@ -197,30 +289,91 @@ export default function AdminCampsPage() {
         </Link>
       </PageHeader>
 
-      <div className="mb-6 flex flex-col sm:flex-row gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-white/40" />
-          <input
-            type="text"
-            placeholder="Search camps..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-12 pr-4 py-3 bg-black border border-white/20 text-white placeholder:text-white/40 focus:border-neon focus:outline-none"
-          />
+      <div className="mb-6 space-y-4">
+        <div className="flex flex-col sm:flex-row gap-4">
+          <div className="relative flex-1">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-white/40" />
+            <input
+              type="text"
+              placeholder="Search camps..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-12 pr-4 py-3 bg-black border border-white/20 text-white placeholder:text-white/40 focus:border-neon focus:outline-none"
+            />
+          </div>
+          <div className="relative">
+            <Filter className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-white/40" />
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="pl-12 pr-8 py-3 bg-black border border-white/20 text-white focus:border-neon focus:outline-none appearance-none min-w-[160px]"
+            >
+              <option value="">All Status</option>
+              <option value="draft">Draft</option>
+              <option value="published">Published</option>
+              <option value="open">Open</option>
+              <option value="closed">Closed</option>
+            </select>
+          </div>
         </div>
-        <div className="relative">
-          <Filter className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-white/40" />
+
+        <div className="flex flex-wrap gap-3">
           <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="pl-12 pr-8 py-3 bg-black border border-white/20 text-white focus:border-neon focus:outline-none appearance-none min-w-[160px]"
+            value={programTypeFilter}
+            onChange={(e) => setProgramTypeFilter(e.target.value)}
+            className="px-4 py-2 bg-black border border-white/20 text-white text-sm focus:border-neon focus:outline-none appearance-none min-w-[160px]"
           >
-            <option value="">All Status</option>
-            <option value="draft">Draft</option>
-            <option value="published">Published</option>
-            <option value="open">Open</option>
-            <option value="closed">Closed</option>
+            <option value="">All Program Types</option>
+            {programTypes.map(pt => (
+              <option key={pt} value={pt}>{pt.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</option>
+            ))}
           </select>
+
+          <select
+            value={venueFilter}
+            onChange={(e) => setVenueFilter(e.target.value)}
+            className="px-4 py-2 bg-black border border-white/20 text-white text-sm focus:border-neon focus:outline-none appearance-none min-w-[160px]"
+          >
+            <option value="">All Venues</option>
+            {venueOptions.map(([id, name]) => (
+              <option key={id} value={id}>{name}</option>
+            ))}
+          </select>
+
+          <select
+            value={dateRangeFilter}
+            onChange={(e) => setDateRangeFilter(e.target.value)}
+            className="px-4 py-2 bg-black border border-white/20 text-white text-sm focus:border-neon focus:outline-none appearance-none min-w-[140px]"
+          >
+            <option value="">All Dates</option>
+            <option value="upcoming">Upcoming</option>
+            <option value="this_month">This Month</option>
+            <option value="past">Past</option>
+          </select>
+
+          <select
+            value={capacityFilter}
+            onChange={(e) => setCapacityFilter(e.target.value)}
+            className="px-4 py-2 bg-black border border-white/20 text-white text-sm focus:border-neon focus:outline-none appearance-none min-w-[140px]"
+          >
+            <option value="">All Capacity</option>
+            <option value="has_spots">Has Spots</option>
+            <option value="full">Full</option>
+          </select>
+
+          {hasActiveFilters && (
+            <button
+              onClick={() => {
+                setProgramTypeFilter('')
+                setVenueFilter('')
+                setDateRangeFilter('')
+                setCapacityFilter('')
+              }}
+              className="px-4 py-2 text-sm text-magenta border border-magenta/30 hover:bg-magenta/10 transition-colors"
+            >
+              Clear Filters
+            </button>
+          )}
         </div>
       </div>
 
@@ -240,7 +393,7 @@ export default function AdminCampsPage() {
             <Calendar className="h-12 w-12 text-white/20 mx-auto mb-4" />
             <h3 className="text-lg font-bold text-white mb-2">No Camps Found</h3>
             <p className="text-white/50 mb-6">
-              {searchQuery || statusFilter
+              {searchQuery || statusFilter || hasActiveFilters
                 ? 'Try adjusting your filters'
                 : 'Get started by creating your first camp'}
             </p>
@@ -261,10 +414,34 @@ export default function AdminCampsPage() {
                 <tr className="border-b border-white/10">
                   <th className="text-left py-4 px-4 text-xs font-bold uppercase tracking-wider text-white/50">Camp</th>
                   <th className="text-left py-4 px-4 text-xs font-bold uppercase tracking-wider text-white/50">Territory</th>
-                  <th className="text-left py-4 px-4 text-xs font-bold uppercase tracking-wider text-white/50">Dates</th>
+                  <th className="text-left py-4 px-4 text-xs font-bold uppercase tracking-wider text-white/50">
+                    <button
+                      onClick={() => handleSort('start_date')}
+                      className={`inline-flex items-center gap-1 cursor-pointer hover:text-white transition-colors ${sortColumn === 'start_date' ? 'text-neon' : ''}`}
+                    >
+                      Dates
+                      {sortColumn === 'start_date' ? (
+                        sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+                      ) : (
+                        <ArrowUpDown className="h-3 w-3" />
+                      )}
+                    </button>
+                  </th>
                   <th className="text-left py-4 px-4 text-xs font-bold uppercase tracking-wider text-white/50">Venue</th>
                   <th className="text-right py-4 px-4 text-xs font-bold uppercase tracking-wider text-white/50">Price</th>
-                  <th className="text-center py-4 px-4 text-xs font-bold uppercase tracking-wider text-white/50">Capacity</th>
+                  <th className="text-center py-4 px-4 text-xs font-bold uppercase tracking-wider text-white/50">
+                    <button
+                      onClick={() => handleSort('capacity')}
+                      className={`inline-flex items-center gap-1 cursor-pointer hover:text-white transition-colors ${sortColumn === 'capacity' ? 'text-neon' : ''}`}
+                    >
+                      Capacity
+                      {sortColumn === 'capacity' ? (
+                        sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+                      ) : (
+                        <ArrowUpDown className="h-3 w-3" />
+                      )}
+                    </button>
+                  </th>
                   <th className="text-center py-4 px-4 text-xs font-bold uppercase tracking-wider text-white/50">Status</th>
                   <th className="text-right py-4 px-4 text-xs font-bold uppercase tracking-wider text-white/50">Actions</th>
                 </tr>
@@ -279,7 +456,7 @@ export default function AdminCampsPage() {
                       </div>
                     </td>
                     <td className="py-4 px-4">
-                      <span className="text-white/70">{camp.tenant?.name || '-'}</span>
+                      <span className="text-white/70">{camp.territory_name || camp.tenant?.name || '-'}</span>
                     </td>
                     <td className="py-4 px-4">
                       <span className="text-white/70">{formatDateRange(camp.start_date, camp.end_date)}</span>
