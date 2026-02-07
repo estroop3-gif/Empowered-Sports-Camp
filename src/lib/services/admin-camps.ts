@@ -28,6 +28,10 @@ export interface CampFormData {
   status: 'draft' | 'published' | 'open' | 'closed'
   featured: boolean
   image_url: string | null
+  flag?: string | null
+  is_overnight?: boolean
+  dropoff_time?: string | null
+  pickup_time?: string | null
 }
 
 export interface AdminCamp {
@@ -78,6 +82,11 @@ export interface AdminCamp {
     slug: string
   } | null
   registration_count?: number
+  territory_name?: string | null
+  flag?: string | null
+  is_overnight?: boolean
+  dropoff_time?: string | null
+  pickup_time?: string | null
 }
 
 export interface Tenant {
@@ -202,7 +211,7 @@ export async function fetchAdminCamps(options: {
         include: {
           location: { select: { id: true, name: true, city: true, state: true } },
           venue: { select: { id: true, name: true, shortName: true, city: true, state: true, addressLine1: true, facilityType: true, indoorOutdoor: true } },
-          tenant: { select: { id: true, name: true, slug: true } },
+          tenant: { select: { id: true, name: true, slug: true, territories: { select: { name: true }, take: 1 } } },
           _count: {
             select: {
               registrations: {
@@ -268,6 +277,11 @@ export async function fetchAdminCamps(options: {
           slug: c.tenant.slug,
         } : null,
         registration_count: c._count?.registrations || 0,
+        territory_name: c.tenant?.territories?.[0]?.name || null,
+        flag: c.flag || null,
+        is_overnight: c.isOvernight,
+        dropoff_time: c.dropoffTime ? c.dropoffTime.toISOString().slice(11, 16) : null,
+        pickup_time: c.pickupTime ? c.pickupTime.toISOString().slice(11, 16) : null,
       })),
       total,
     }
@@ -287,7 +301,7 @@ export async function fetchCampById(id: string): Promise<AdminCamp | null> {
       include: {
         location: { select: { id: true, name: true, city: true, state: true } },
         venue: { select: { id: true, name: true, shortName: true, city: true, state: true, addressLine1: true, facilityType: true, indoorOutdoor: true } },
-        tenant: { select: { id: true, name: true, slug: true } },
+        tenant: { select: { id: true, name: true, slug: true, territories: { select: { name: true }, take: 1 } } },
       },
     })
 
@@ -339,6 +353,11 @@ export async function fetchCampById(id: string): Promise<AdminCamp | null> {
         name: camp.tenant.name,
         slug: camp.tenant.slug,
       } : null,
+      territory_name: camp.tenant?.territories?.[0]?.name || null,
+      flag: camp.flag || null,
+      is_overnight: camp.isOvernight,
+      dropoff_time: camp.dropoffTime ? camp.dropoffTime.toISOString().slice(11, 16) : null,
+      pickup_time: camp.pickupTime ? camp.pickupTime.toISOString().slice(11, 16) : null,
     }
   } catch (err) {
     console.error('[fetchCampById] Error:', err)
@@ -408,6 +427,10 @@ export async function createCamp(formData: CampFormData): Promise<AdminCamp> {
         status: mapStatusToDb(formData.status),
         featured: formData.featured,
         imageUrl: formData.image_url || null,
+        flag: formData.flag || null,
+        isOvernight: formData.is_overnight || false,
+        dropoffTime: formData.dropoff_time ? new Date(`1970-01-01T${formData.dropoff_time}:00Z`) : null,
+        pickupTime: formData.pickup_time ? new Date(`1970-01-01T${formData.pickup_time}:00Z`) : null,
       },
       include: {
         location: { select: { id: true, name: true, city: true, state: true } },
@@ -415,6 +438,28 @@ export async function createCamp(formData: CampFormData): Promise<AdminCamp> {
         tenant: tenantId ? { select: { id: true, name: true, slug: true } } : false,
       },
     })
+
+    // Auto-add default template addons to the new camp
+    if (tenantId) {
+      const defaultAddons = await prisma.addon.findMany({
+        where: { tenantId, campId: null, isDefault: true, isActive: true },
+      })
+      if (defaultAddons.length > 0) {
+        await prisma.addon.createMany({
+          data: defaultAddons.map(a => ({
+            tenantId: tenantId,
+            campId: camp.id,
+            name: a.name,
+            description: a.description,
+            priceCents: a.priceCents,
+            isRequired: a.isRequired,
+            maxQuantity: a.maxQuantity,
+            isActive: true,
+            isTaxable: a.isTaxable,
+          })),
+        })
+      }
+    }
 
     return {
       id: camp.id,
@@ -462,6 +507,10 @@ export async function createCamp(formData: CampFormData): Promise<AdminCamp> {
         name: camp.tenant.name,
         slug: camp.tenant.slug,
       } : null,
+      flag: camp.flag || null,
+      is_overnight: camp.isOvernight,
+      dropoff_time: camp.dropoffTime ? camp.dropoffTime.toISOString().slice(11, 16) : null,
+      pickup_time: camp.pickupTime ? camp.pickupTime.toISOString().slice(11, 16) : null,
     }
   } catch (err) {
     console.error('[createCamp] Error:', err)
@@ -523,6 +572,14 @@ export async function updateCamp(id: string, formData: Partial<CampFormData>): P
       updateData.status = mapStatusToDb(formData.status)
       updateData.registrationOpen = formData.status === 'open' ? new Date() : null
     }
+    if (formData.flag !== undefined) updateData.flag = formData.flag || null
+    if (formData.is_overnight !== undefined) updateData.isOvernight = formData.is_overnight
+    if (formData.dropoff_time !== undefined) {
+      updateData.dropoffTime = formData.dropoff_time ? new Date(`1970-01-01T${formData.dropoff_time}:00Z`) : null
+    }
+    if (formData.pickup_time !== undefined) {
+      updateData.pickupTime = formData.pickup_time ? new Date(`1970-01-01T${formData.pickup_time}:00Z`) : null
+    }
 
     const camp = await prisma.camp.update({
       where: { id },
@@ -530,7 +587,7 @@ export async function updateCamp(id: string, formData: Partial<CampFormData>): P
       include: {
         location: { select: { id: true, name: true, city: true, state: true } },
         venue: { select: { id: true, name: true, shortName: true, city: true, state: true, addressLine1: true, facilityType: true, indoorOutdoor: true } },
-        tenant: { select: { id: true, name: true, slug: true } },
+        tenant: { select: { id: true, name: true, slug: true, territories: { select: { name: true }, take: 1 } } },
       },
     })
 
@@ -580,6 +637,11 @@ export async function updateCamp(id: string, formData: Partial<CampFormData>): P
         name: camp.tenant.name,
         slug: camp.tenant.slug,
       } : null,
+      territory_name: camp.tenant?.territories?.[0]?.name || null,
+      flag: camp.flag || null,
+      is_overnight: camp.isOvernight,
+      dropoff_time: camp.dropoffTime ? camp.dropoffTime.toISOString().slice(11, 16) : null,
+      pickup_time: camp.pickupTime ? camp.pickupTime.toISOString().slice(11, 16) : null,
     }
   } catch (err) {
     console.error('[updateCamp] Error:', err)
@@ -627,6 +689,10 @@ export async function duplicateCamp(id: string): Promise<AdminCamp> {
     status: 'draft',
     featured: false,
     image_url: existing.image_url,
+    flag: existing.flag,
+    is_overnight: existing.is_overnight,
+    dropoff_time: existing.dropoff_time,
+    pickup_time: existing.pickup_time,
   }
 
   return createCamp(newCamp)

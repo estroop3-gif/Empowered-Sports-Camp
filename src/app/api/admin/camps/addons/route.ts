@@ -2,13 +2,60 @@
  * Admin Camp Add-Ons API
  *
  * Manage add-ons for camps (create, update, delete)
+ * Supports both camp-specific add-ons and tenant-wide library templates (campId = null)
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/client'
 import { getAuthenticatedUserFromRequest } from '@/lib/auth/cognito-server'
 
-// GET - Fetch add-ons for a camp or all tenant add-ons
+function formatAddon(addon: {
+  id: string
+  tenantId: string
+  campId: string | null
+  name: string
+  description: string | null
+  priceCents: number
+  isRequired: boolean
+  maxQuantity: number
+  isActive: boolean
+  isDefault: boolean
+  isTaxable: boolean
+  createdAt: Date
+  camp?: { id: string; name: string } | null
+  variants: Array<{
+    id: string
+    name: string
+    priceAdjustmentCents: number
+    inventory: number | null
+    isActive: boolean
+  }>
+}) {
+  return {
+    id: addon.id,
+    tenant_id: addon.tenantId,
+    camp_id: addon.campId,
+    name: addon.name,
+    description: addon.description,
+    price_cents: addon.priceCents,
+    is_required: addon.isRequired,
+    max_quantity: addon.maxQuantity,
+    is_active: addon.isActive,
+    is_default: addon.isDefault,
+    is_taxable: addon.isTaxable,
+    created_at: addon.createdAt.toISOString(),
+    camp_name: addon.camp?.name || null,
+    variants: addon.variants.map((v) => ({
+      id: v.id,
+      name: v.name,
+      price_adjustment_cents: v.priceAdjustmentCents,
+      inventory: v.inventory,
+      is_active: v.isActive,
+    })),
+  }
+}
+
+// GET - Fetch add-ons for a camp or library templates
 export async function GET(request: NextRequest) {
   try {
     const user = await getAuthenticatedUserFromRequest(request)
@@ -24,15 +71,17 @@ export async function GET(request: NextRequest) {
 
     const campId = request.nextUrl.searchParams.get('campId')
     const tenantId = request.nextUrl.searchParams.get('tenantId')
+    const library = request.nextUrl.searchParams.get('library')
 
-    // If campId is provided, get add-ons for that specific camp
-    // Otherwise, get tenant-wide add-ons (campId is null)
     const whereClause: { campId?: string | null; tenantId?: string } = {}
 
-    if (campId) {
+    if (library === 'true' && tenantId) {
+      // Fetch library templates: tenant-scoped, campId = null
+      whereClause.tenantId = tenantId
+      whereClause.campId = null
+    } else if (campId) {
       whereClause.campId = campId
     } else if (tenantId) {
-      // Get tenant-wide add-ons (those without a specific camp)
       whereClause.tenantId = tenantId
       whereClause.campId = null
     }
@@ -51,26 +100,7 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: 'desc' },
     })
 
-    const formattedAddons = addons.map((addon) => ({
-      id: addon.id,
-      tenant_id: addon.tenantId,
-      camp_id: addon.campId,
-      name: addon.name,
-      description: addon.description,
-      price_cents: addon.priceCents,
-      is_required: addon.isRequired,
-      max_quantity: addon.maxQuantity,
-      is_active: addon.isActive,
-      created_at: addon.createdAt.toISOString(),
-      camp_name: addon.camp?.name || null,
-      variants: addon.variants.map((v) => ({
-        id: v.id,
-        name: v.name,
-        price_adjustment_cents: v.priceAdjustmentCents,
-        inventory: v.inventory,
-        is_active: v.isActive,
-      })),
-    }))
+    const formattedAddons = addons.map(formatAddon)
 
     return NextResponse.json({ addons: formattedAddons })
   } catch (error) {
@@ -82,7 +112,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST - Create a new add-on for a camp
+// POST - Create a new add-on for a camp or a library template
 export async function POST(request: NextRequest) {
   try {
     const user = await getAuthenticatedUserFromRequest(request)
@@ -105,6 +135,8 @@ export async function POST(request: NextRequest) {
       priceCents,
       isRequired,
       maxQuantity,
+      isDefault,
+      isTaxable,
       variants,
     } = body
 
@@ -126,6 +158,8 @@ export async function POST(request: NextRequest) {
         isRequired: isRequired || false,
         maxQuantity: maxQuantity || 1,
         isActive: true,
+        isDefault: isDefault || false,
+        isTaxable: isTaxable || false,
         variants: variants?.length
           ? {
               create: variants.map((v: { name: string; priceAdjustmentCents?: number; inventory?: number }) => ({
@@ -143,25 +177,7 @@ export async function POST(request: NextRequest) {
     })
 
     return NextResponse.json({
-      addon: {
-        id: addon.id,
-        tenant_id: addon.tenantId,
-        camp_id: addon.campId,
-        name: addon.name,
-        description: addon.description,
-        price_cents: addon.priceCents,
-        is_required: addon.isRequired,
-        max_quantity: addon.maxQuantity,
-        is_active: addon.isActive,
-        created_at: addon.createdAt.toISOString(),
-        variants: addon.variants.map((v) => ({
-          id: v.id,
-          name: v.name,
-          price_adjustment_cents: v.priceAdjustmentCents,
-          inventory: v.inventory,
-          is_active: v.isActive,
-        })),
-      },
+      addon: formatAddon({ ...addon, camp: null }),
     })
   } catch (error) {
     console.error('[API] Failed to create camp add-on:', error)
@@ -195,6 +211,8 @@ export async function PUT(request: NextRequest) {
       isRequired,
       maxQuantity,
       isActive,
+      isDefault,
+      isTaxable,
     } = body
 
     if (!addonId) {
@@ -210,6 +228,8 @@ export async function PUT(request: NextRequest) {
         ...(isRequired !== undefined && { isRequired }),
         ...(maxQuantity !== undefined && { maxQuantity }),
         ...(isActive !== undefined && { isActive }),
+        ...(isDefault !== undefined && { isDefault }),
+        ...(isTaxable !== undefined && { isTaxable }),
       },
       include: {
         variants: true,
@@ -217,25 +237,7 @@ export async function PUT(request: NextRequest) {
     })
 
     return NextResponse.json({
-      addon: {
-        id: addon.id,
-        tenant_id: addon.tenantId,
-        camp_id: addon.campId,
-        name: addon.name,
-        description: addon.description,
-        price_cents: addon.priceCents,
-        is_required: addon.isRequired,
-        max_quantity: addon.maxQuantity,
-        is_active: addon.isActive,
-        created_at: addon.createdAt.toISOString(),
-        variants: addon.variants.map((v) => ({
-          id: v.id,
-          name: v.name,
-          price_adjustment_cents: v.priceAdjustmentCents,
-          inventory: v.inventory,
-          is_active: v.isActive,
-        })),
-      },
+      addon: formatAddon({ ...addon, camp: null }),
     })
   } catch (error) {
     console.error('[API] Failed to update camp add-on:', error)

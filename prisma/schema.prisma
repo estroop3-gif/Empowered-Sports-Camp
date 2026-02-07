@@ -220,6 +220,10 @@ model Camp {
   finalEmailSentCount      Int?                          @map("final_email_sent_count")
   isLocked                 Boolean                       @default(false) @map("is_locked")
   lockReason               String?                       @map("lock_reason")
+  flag                     String?
+  isOvernight              Boolean                       @default(false) @map("is_overnight")
+  dropoffTime              DateTime?                     @map("dropoff_time") @db.Time(6)
+  pickupTime               DateTime?                     @map("pickup_time") @db.Time(6)
   addons                   Addon[]
   athleteWaiverSignings    AthleteWaiverSigning[]
   dayCompensationSnapshots CampDayCompensationSnapshot[]
@@ -463,6 +467,7 @@ model Addon {
   isActive           Boolean             @default(true) @map("is_active")
   createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
   isTaxable          Boolean             @default(false) @map("is_taxable")
+  isDefault          Boolean             @default(false) @map("is_default")
   variants           AddonVariant[]
   camp               Camp?               @relation(fields: [campId], references: [id], onDelete: Cascade)
   tenant             Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)

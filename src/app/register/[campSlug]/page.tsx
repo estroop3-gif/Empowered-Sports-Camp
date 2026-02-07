@@ -392,64 +392,81 @@ export default function RegisterPage() {
         const campSession = transformApiCampToSession(campResult.data)
         setCamp(campSession)
 
-        // Fetch shop products with category 'addons' for upsells
-        const addonsResponse = await fetch('/api/shop/products?category=addons')
-        const addonsResult = await addonsResponse.json()
+        // Fetch camp-specific add-ons from the addons table
+        let allAddons: AddOn[] = []
 
-        // API returns array directly (not wrapped in data object)
-        const shopProducts = Array.isArray(addonsResult) ? addonsResult : addonsResult.data || []
-
-        if (shopProducts.length > 0) {
-          // Transform shop products to AddOn format for the registration flow
-          const shopAddons: AddOn[] = shopProducts.map((product: {
-            id: string
-            licensee_id: string | null
-            name: string
-            slug: string
-            description: string | null
-            price_cents: number
-            image_url: string | null
-            is_featured: boolean
-            variants?: Array<{
-              id: string
-              product_id: string
-              name: string
-              sku: string | null
-              price_cents: number | null
-              inventory_quantity: number | null
-            }>
-          }, index: number) => ({
-            id: product.id,
-            tenantId: product.licensee_id || campSession.tenantId,
-            name: product.name,
-            slug: product.slug,
-            description: product.description,
-            hypeCopy: product.description,
-            addonType: 'merchandise' as const,
-            scope: 'per_camper' as const,
-            price: product.price_cents,
-            compareAtPrice: null,
-            imageUrl: product.image_url,
-            displayOrder: index + 1,
-            featured: product.is_featured,
-            variants: (product.variants || []).map((v) => ({
-              id: v.id,
-              addonId: product.id,
-              name: v.name,
-              sku: v.sku,
-              priceOverride: v.price_cents,
-              inventoryQuantity: v.inventory_quantity || 0,
-              lowStockThreshold: 5,
-              allowBackorder: false,
-              isLowStock: (v.inventory_quantity || 0) <= 5 && (v.inventory_quantity || 0) > 0,
-              isSoldOut: (v.inventory_quantity || 0) <= 0,
-            })),
-          }))
-          setAddons(shopAddons)
-        } else {
-          // Fall back to default add-ons if no shop products configured
-          setAddons(DEFAULT_ADDONS)
+        try {
+          const campAddonsRes = await fetch(`/api/camps/${campSession.id}/addons`)
+          if (campAddonsRes.ok) {
+            const campAddonsData = await campAddonsRes.json()
+            if (campAddonsData.addons?.length > 0) {
+              allAddons = campAddonsData.addons
+            }
+          }
+        } catch {
+          // Camp addons fetch failed, continue to fallbacks
         }
+
+        // If no camp-specific add-ons, try shop products
+        if (allAddons.length === 0) {
+          try {
+            const addonsResponse = await fetch('/api/shop/products?category=addons')
+            const addonsResult = await addonsResponse.json()
+            const shopProducts = Array.isArray(addonsResult) ? addonsResult : addonsResult.data || []
+
+            if (shopProducts.length > 0) {
+              allAddons = shopProducts.map((product: {
+                id: string
+                licensee_id: string | null
+                name: string
+                slug: string
+                description: string | null
+                price_cents: number
+                image_url: string | null
+                is_featured: boolean
+                variants?: Array<{
+                  id: string
+                  product_id: string
+                  name: string
+                  sku: string | null
+                  price_cents: number | null
+                  inventory_quantity: number | null
+                }>
+              }, index: number) => ({
+                id: product.id,
+                tenantId: product.licensee_id || campSession.tenantId,
+                name: product.name,
+                slug: product.slug,
+                description: product.description,
+                hypeCopy: product.description,
+                addonType: 'merchandise' as const,
+                scope: 'per_camper' as const,
+                price: product.price_cents,
+                compareAtPrice: null,
+                imageUrl: product.image_url,
+                displayOrder: index + 1,
+                featured: product.is_featured,
+                variants: (product.variants || []).map((v) => ({
+                  id: v.id,
+                  addonId: product.id,
+                  name: v.name,
+                  sku: v.sku,
+                  priceOverride: v.price_cents,
+                  inventoryQuantity: v.inventory_quantity || 0,
+                  lowStockThreshold: 5,
+                  allowBackorder: false,
+                  isLowStock: (v.inventory_quantity || 0) <= 5 && (v.inventory_quantity || 0) > 0,
+                  isSoldOut: (v.inventory_quantity || 0) <= 0,
+                })),
+              }))
+            }
+          } catch {
+            // Shop products fetch failed, continue to fallback
+          }
+        }
+
+        // Fall back to default add-ons if nothing else available
+        setAddons(allAddons.length > 0 ? allAddons : DEFAULT_ADDONS)
       } catch (err) {
         setError('Failed to load camp data')
         console.error('Error loading camp data:', err)
