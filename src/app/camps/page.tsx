@@ -2,11 +2,10 @@
 
 import { useState, useEffect, useCallback, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
-import { ZipSearchHero } from '@/components/camps/zip-search-hero'
-import { VenueCampCard } from '@/components/camps/venue-camp-card'
+import { ProgramTypeSectionCard } from '@/components/camps/program-type-section'
 import { CampSortBar } from '@/components/camps/camp-sort-bar'
-import { Crown, Loader2, MapPin, Globe } from 'lucide-react'
-import type { VenueGroupData, NearZipSearchResult } from '@/types'
+import { Crown, Loader2, MapPin } from 'lucide-react'
+import type { ProgramTypeGroupedResult, ProgramTypeSection } from '@/types'
 
 interface ProgramTypeOption {
   slug: string
@@ -19,26 +18,24 @@ function CampsContent() {
 
   // Read initial state from URL
   const urlZip = searchParams.get('zip') || ''
-  const urlSort = (searchParams.get('sort') as 'distance' | 'startDate') || 'distance'
   const urlProgram = searchParams.get('program') || ''
   const urlAge = searchParams.get('age') || ''
-  const urlAll = searchParams.get('all') === '1'
 
-  // State
+  // State: zipInput is the controlled input; zip is the submitted value that triggers fetches
+  const [zipInput, setZipInput] = useState(urlZip)
   const [zip, setZip] = useState(urlZip)
-  const [hasSearched, setHasSearched] = useState(!!urlZip || urlAll)
-  const [venues, setVenues] = useState<VenueGroupData[]>([])
-  const [total, setTotal] = useState(0)
-  const [searchedLocation, setSearchedLocation] = useState<NearZipSearchResult['searchedLocation'] | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [sortBy, setSortBy] = useState<'distance' | 'startDate'>(urlSort)
   const [programType, setProgramType] = useState(urlProgram)
   const [ageRange, setAgeRange] = useState(urlAge)
   const [programTypes, setProgramTypes] = useState<ProgramTypeOption[]>([])
-  const [showAll, setShowAll] = useState(urlAll)
 
-  // Load available program types (now returns {slug, name}[])
+  // Data state
+  const [sections, setSections] = useState<ProgramTypeSection[]>([])
+  const [totalCamps, setTotalCamps] = useState(0)
+  const [searchedLocation, setSearchedLocation] = useState<ProgramTypeGroupedResult['searchedLocation']>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  // Load available program types
   useEffect(() => {
     fetch('/api/camps?action=programTypes')
       .then((r) => r.json())
@@ -57,23 +54,21 @@ function CampsContent() {
           current.delete(key)
         }
       }
-      router.replace(`/camps?${current.toString()}`, { scroll: false })
+      const qs = current.toString()
+      router.replace(qs ? `/camps?${qs}` : '/camps', { scroll: false })
     },
     [router, searchParams]
   )
 
-  // Fetch camps near zip
-  const fetchCamps = useCallback(
-    async (zipCode: string, sort: string, program: string, age: string) => {
+  // Fetch camps grouped by program type
+  const fetchGroupedCamps = useCallback(
+    async (zipVal: string, program: string, age: string) => {
       setLoading(true)
       setError(null)
 
       try {
-        const params = new URLSearchParams({
-          action: 'nearZip',
-          zip: zipCode,
-          sortBy: sort,
-        })
+        const params = new URLSearchParams({ action: 'groupedByType' })
+        if (zipVal) params.set('zip', zipVal)
         if (program) params.set('programType', program)
         if (age) {
           const [minAge, maxAge] = age.split('-').map(Number)
@@ -88,53 +83,15 @@ function CampsContent() {
           throw new Error(json.error)
         }
 
-        const result: NearZipSearchResult = json.data
-        setVenues(result.venues)
-        setTotal(result.total)
+        const result: ProgramTypeGroupedResult = json.data
+        setSections(result.sections)
+        setTotalCamps(result.totalCamps)
         setSearchedLocation(result.searchedLocation)
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'Failed to search camps'
-        setError(message === 'Invalid zip code' ? 'We couldn\'t find that zip code. Please try another.' : message)
-        setVenues([])
-        setTotal(0)
-      } finally {
-        setLoading(false)
-      }
-    },
-    []
-  )
-
-  // Fetch all camps (no zip required)
-  const fetchAllCamps = useCallback(
-    async (program: string, age: string) => {
-      setLoading(true)
-      setError(null)
-
-      try {
-        const params = new URLSearchParams({ action: 'allCamps' })
-        if (program) params.set('programType', program)
-        if (age) {
-          const [minAge, maxAge] = age.split('-').map(Number)
-          if (!isNaN(minAge)) params.set('minAge', String(minAge))
-          if (!isNaN(maxAge)) params.set('maxAge', String(maxAge))
-        }
-
-        const res = await fetch(`/api/camps?${params.toString()}`)
-        const json = await res.json()
-
-        if (json.error) {
-          throw new Error(json.error)
-        }
-
-        const result = json.data as { venues: VenueGroupData[]; total: number }
-        setVenues(result.venues)
-        setTotal(result.total)
-        setSearchedLocation(null)
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Failed to load camps'
         setError(message)
-        setVenues([])
-        setTotal(0)
+        setSections([])
+        setTotalCamps(0)
       } finally {
         setLoading(false)
       }
@@ -142,27 +99,23 @@ function CampsContent() {
     []
   )
 
-  // Search when zip is entered or showAll changes
+  // Fetch on mount and when filters change
   useEffect(() => {
-    if (showAll) {
-      fetchAllCamps(programType, ageRange)
-    } else if (zip && zip.trim().length >= 3) {
-      fetchCamps(zip, sortBy, programType, ageRange)
-    }
-  }, [zip, sortBy, programType, ageRange, showAll, fetchCamps, fetchAllCamps])
+    fetchGroupedCamps(zip, programType, ageRange)
+  }, [zip, programType, ageRange, fetchGroupedCamps])
 
-  // Handle zip search
-  function handleSearch(newZip: string) {
-    setShowAll(false)
-    setZip(newZip)
-    setHasSearched(true)
-    updateURL({ zip: newZip, sort: sortBy, program: programType, age: ageRange, all: '' })
+  // Handle ZIP submit from sort bar
+  function handleZipSubmit() {
+    setZip(zipInput)
+    updateURL({ zip: zipInput, program: programType, age: ageRange })
   }
 
-  // Handle sort change
-  function handleSortChange(newSort: 'distance' | 'startDate') {
-    setSortBy(newSort)
-    updateURL({ sort: newSort })
+  // Handle ZIP clear
+  function handleClearZip() {
+    setZipInput('')
+    setZip('')
+    setSearchedLocation(null)
+    updateURL({ zip: '', program: programType, age: ageRange })
   }
 
   // Handle program type filter
@@ -177,89 +130,25 @@ function CampsContent() {
     updateURL({ age: newRange })
   }
 
-  // Handle "Change" zip — go back to hero
-  function handleChangeZip() {
-    setShowAll(false)
-    setHasSearched(false)
-    setVenues([])
-    setTotal(0)
-    setSearchedLocation(null)
-    setError(null)
-    router.replace('/camps', { scroll: false })
-  }
-
-  // Handle "Show All" toggle
-  function handleShowAllChange(val: boolean) {
-    setShowAll(val)
-    if (val) {
-      setHasSearched(true)
-      updateURL({ all: '1', zip: '', sort: '' })
-    } else {
-      // Toggling off: if we have a zip, search by zip; otherwise go to hero
-      if (zip && zip.trim().length >= 3) {
-        updateURL({ all: '', sort: sortBy })
-      } else {
-        setHasSearched(false)
-        setVenues([])
-        setTotal(0)
-        setSearchedLocation(null)
-        router.replace('/camps', { scroll: false })
-      }
-    }
-  }
-
-  // Handle "Browse all camps" from hero
-  function handleBrowseAll() {
-    setShowAll(true)
-    setHasSearched(true)
-    updateURL({ all: '1', zip: '', sort: '' })
-  }
-
-  // =========================================================================
-  // STATE A: No zip entered and not showing all — show hero gate
-  // =========================================================================
-  if (!hasSearched) {
-    return (
-      <div className="min-h-screen bg-black">
-        <ZipSearchHero onSearch={handleSearch} isLoading={loading} initialZip={zip} />
-        {/* "Or browse all camps" link below hero */}
-        <div className="text-center -mt-8 pb-12">
-          <button
-            onClick={handleBrowseAll}
-            className="inline-flex items-center gap-2 text-sm text-white/40 hover:text-neon transition-colors"
-          >
-            <Globe className="h-4 w-4" />
-            Or browse all camps
-          </button>
-        </div>
-      </div>
-    )
-  }
-
-  // =========================================================================
-  // STATE B: Zip entered or showing all — show results
-  // =========================================================================
   return (
     <div className="min-h-screen bg-black">
-      {/* Sort/filter bar */}
-      {(searchedLocation || showAll) && (
-        <CampSortBar
-          total={total}
-          searchedCity={searchedLocation?.city || ''}
-          searchedState={searchedLocation?.state || ''}
-          searchedZip={searchedLocation?.zip || ''}
-          sortBy={sortBy}
-          programType={programType}
-          ageRange={ageRange}
-          programTypes={programTypes}
-          showAll={showAll}
-          onSortChange={handleSortChange}
-          onProgramTypeChange={handleProgramTypeChange}
-          onAgeRangeChange={handleAgeRangeChange}
-          onChangeZip={handleChangeZip}
-          onShowAllChange={handleShowAllChange}
-        />
-      )}
+      {/* Filter bar — always visible */}
+      <CampSortBar
+        totalCamps={totalCamps}
+        sectionCount={sections.length}
+        zipValue={zipInput}
+        onZipChange={setZipInput}
+        onZipSubmit={handleZipSubmit}
+        hasZip={!!zip}
+        searchedCity={searchedLocation?.city || ''}
+        searchedState={searchedLocation?.state || ''}
+        programType={programType}
+        ageRange={ageRange}
+        programTypes={programTypes}
+        onProgramTypeChange={handleProgramTypeChange}
+        onAgeRangeChange={handleAgeRangeChange}
+        onClearZip={handleClearZip}
+      />
 
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         {/* Error State */}
@@ -268,14 +157,8 @@ function CampsContent() {
             <MapPin className="h-10 w-10 text-magenta/50 mx-auto mb-4" />
             <p className="text-magenta text-lg font-bold">{error}</p>
             <p className="text-white/40 text-sm mt-2">
-              Try a different zip code or check your entry.
+              Something went wrong loading camps. Please try again.
             </p>
-            <button
-              onClick={handleChangeZip}
-              className="mt-6 px-8 py-3 bg-magenta/20 border border-magenta/30 text-magenta hover:bg-magenta/30 transition-colors text-sm font-bold uppercase tracking-wider"
-            >
-              Try Another Zip
-            </button>
           </div>
         )}
 
@@ -291,17 +174,17 @@ function CampsContent() {
           </div>
         )}
 
-        {/* Results — venue-grouped cards */}
-        {!loading && !error && venues.length > 0 && (
-          <div className="space-y-6 mt-4">
-            {venues.map((venue) => (
-              <VenueCampCard key={venue.venueId || venue.venueName} venue={venue} />
+        {/* Results — program-type sections */}
+        {!loading && !error && sections.length > 0 && (
+          <div className="space-y-8 mt-4">
+            {sections.map((section, i) => (
+              <ProgramTypeSectionCard key={section.slug} section={section} index={i} />
             ))}
           </div>
         )}
 
         {/* Empty State */}
-        {!loading && !error && venues.length === 0 && hasSearched && (
+        {!loading && !error && sections.length === 0 && (
           <div className="mt-16 text-center">
             <div className="mx-auto flex h-24 w-24 items-center justify-center border border-white/10 bg-dark-100">
               <Crown className="h-12 w-12 text-white/20" />
@@ -310,37 +193,8 @@ function CampsContent() {
               No Camps Found
             </h3>
             <p className="mt-3 text-white/50 max-w-md mx-auto">
-              {showAll
-                ? 'No camps are currently available. Check back soon for new sessions.'
-                : (
-                  <>
-                    We couldn&apos;t find any camps near{' '}
-                    {searchedLocation
-                      ? `${searchedLocation.city}, ${searchedLocation.state}`
-                      : `zip code ${zip}`}
-                    . Try a different zip code or browse all camps.
-                  </>
-                )
-              }
+              No camps match your current filters. Try adjusting your search criteria or check back soon for new sessions.
             </p>
-            <div className="flex items-center justify-center gap-4 mt-6">
-              {!showAll && (
-                <button
-                  onClick={handleChangeZip}
-                  className="px-8 py-3 bg-neon/20 border border-neon/30 text-neon hover:bg-neon/30 transition-colors text-sm font-bold uppercase tracking-wider"
-                >
-                  Search Another Zip
-                </button>
-              )}
-              {!showAll && (
-                <button
-                  onClick={handleBrowseAll}
-                  className="px-8 py-3 bg-white/5 border border-white/10 text-white/60 hover:text-white hover:bg-white/10 transition-colors text-sm font-bold uppercase tracking-wider"
-                >
-                  Browse All Camps
-                </button>
-              )}
-            </div>
           </div>
         )}
       </div>

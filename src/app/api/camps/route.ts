@@ -17,6 +17,7 @@ import {
   fetchCampsForDirector,
   fetchCampsNearZip,
   fetchAllPublicCamps,
+  fetchCampsGroupedByProgramType,
 } from '@/lib/services/camps'
 
 export async function GET(request: NextRequest) {
@@ -133,6 +134,19 @@ export async function GET(request: NextRequest) {
         const { data, error } = await fetchCampsForDirector()
         if (error) return NextResponse.json({ error: error.message }, { status: 500 })
         return NextResponse.json({ data })
+      }
+
+      case 'groupedByType': {
+        const zip = request.nextUrl.searchParams.get('zip')?.trim() || undefined
+        const filters = {
+          zip: zip || undefined,
+          programType: programType || undefined,
+          minAge: minAge ? parseInt(minAge) : undefined,
+          maxAge: maxAge ? parseInt(maxAge) : undefined,
+          search: search || undefined,
+        }
+        const result = await fetchCampsGroupedByProgramType(filters)
+        return NextResponse.json({ data: result })
       }
 
       case 'nearZip': {

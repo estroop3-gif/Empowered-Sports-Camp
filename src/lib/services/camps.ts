@@ -8,7 +8,8 @@ import prisma from '@/lib/db/client'
 import { Prisma } from '@/generated/prisma'
 import { lookupZipCode, haversineDistanceMiles } from '@/lib/geo'
 import { getProgramTagMap } from '@/lib/services/program-tags'
-import type { VenueGroupData, CampProgramData, NearZipSearchResult } from '@/types'
+import { fetchActiveProgramTags } from '@/lib/services/program-tags'
+import type { VenueGroupData, CampProgramData, NearZipSearchResult, CampListingItem, CampBadge, ProgramTypeSection, ProgramTypeGroupedResult } from '@/types'
 
 // ============================================================================
 // TYPES
@@ -961,6 +962,290 @@ export async function fetchAllPublicCamps(
 
   const total = venues.reduce((sum, v) => sum + v.programs.length, 0)
   return { venues, total }
+}
+
+// ============================================================================
+// PROGRAM-TYPE GROUPED (redesigned /camps page)
+// ============================================================================
+
+interface GroupedByTypeFilters {
+  zip?: string
+  programType?: string
+  minAge?: number
+  maxAge?: number
+  search?: string
+}
+
+/**
+ * Compute desirability score for a camp.
+ * Higher = more compelling to show first.
+ */
+function computeDesirabilityScore(camp: {
+  featured: boolean
+  earlyBirdDeadline: string | null
+  registrationCount: number
+  maxCapacity: number
+  startDate: string
+  createdAt: string
+  isFull: boolean
+}): number {
+  let score = 0
+  const now = Date.now()
+
+  // Featured boost
+  if (camp.featured) score += 50
+
+  // Early bird active
+  if (camp.earlyBirdDeadline && new Date(camp.earlyBirdDeadline).getTime() > now) {
+    score += 15
+  }
+
+  // Fill rate (0–30 pts)
+  const fillRate = camp.maxCapacity > 0 ? camp.registrationCount / camp.maxCapacity : 0
+  score += Math.round(fillRate * 30)
+
+  // Start date timing
+  const msPerWeek = 7 * 24 * 60 * 60 * 1000
+  const weeksUntilStart = (new Date(camp.startDate).getTime() - now) / msPerWeek
+  if (weeksUntilStart >= 2 && weeksUntilStart <= 8) {
+    score += 20 // sweet spot
+  } else if (weeksUntilStart < 2) {
+    score += 10 // urgent
+  } else if (weeksUntilStart <= 16) {
+    score += 15 // moderately far
+  } else {
+    score += 5  // very far out
+  }
+
+  // Recency bonus
+  const daysSinceCreated = (now - new Date(camp.createdAt).getTime()) / (24 * 60 * 60 * 1000)
+  if (daysSinceCreated <= 14) score += 10
+
+  // Sold out penalty
+  if (camp.isFull) score -= 100
+
+  return score
+}
+
+/**
+ * Fetch all active camps grouped by program type with desirability scoring and badges.
+ * Replaces the ZIP-gated hero approach with an immediate listing.
+ */
+export async function fetchCampsGroupedByProgramType(
+  filters: GroupedByTypeFilters = {}
+): Promise<ProgramTypeGroupedResult> {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  // Build where clause (same active-camp filters)
+  const where: Prisma.CampWhereInput = {
+    status: { in: ['published', 'registration_open'] },
+    startDate: { gt: today },
+    concludedAt: null,
+    AND: [
+      {
+        OR: [
+          { registrationClose: null },
+          { registrationClose: { gte: today } },
+        ],
+      },
+    ],
+  }
+
+  if (filters.programType) {
+    where.programType = filters.programType
+  }
+  if (filters.minAge !== undefined) {
+    where.maxAge = { gte: filters.minAge }
+  }
+  if (filters.maxAge !== undefined) {
+    where.minAge = { lte: filters.maxAge }
+  }
+  if (filters.search) {
+    ;(where.AND as Prisma.CampWhereInput[]).push({
+      OR: [
+        { name: { contains: filters.search, mode: 'insensitive' } },
+        { description: { contains: filters.search, mode: 'insensitive' } },
+        { venue: { name: { contains: filters.search, mode: 'insensitive' } } },
+        { venue: { city: { contains: filters.search, mode: 'insensitive' } } },
+      ],
+    })
+  }
+
+  // Fetch all matching camps
+  const camps = await prisma.camp.findMany({
+    where,
+    include: {
+      location: true,
+      venue: true,
+      tenant: true,
+      registrations: { select: { id: true } },
+    },
+    orderBy: { startDate: 'asc' },
+  })
+
+  // Resolve ZIP coordinates if provided
+  let zipInfo: Awaited<ReturnType<typeof lookupZipCode>> = null
+  if (filters.zip) {
+    zipInfo = await lookupZipCode(filters.zip)
+    // Gracefully skip distance if invalid ZIP
+  }
+
+  // Load tag map + active tags (for sort order)
+  const [tagMap, activeTags] = await Promise.all([
+    getProgramTagMap(),
+    fetchActiveProgramTags(),
+  ])
+
+  // Build sort-order lookup from program_tags table
+  const tagSortOrder = new Map<string, number>()
+  for (const tag of activeTags) {
+    tagSortOrder.set(tag.slug, tag.sortOrder)
+  }
+
+  // Group camps into sections
+  const sectionMap = new Map<string, CampListingItem[]>()
+
+  for (const camp of camps) {
+    const hasVenue = !!camp.venue
+    const hasLocation = !!camp.location
+
+    // Coordinates
+    const lat = hasVenue && camp.venue!.latitude
+      ? Number(camp.venue!.latitude)
+      : (hasLocation && camp.location!.latitude ? Number(camp.location!.latitude) : null)
+    const lng = hasVenue && camp.venue!.longitude
+      ? Number(camp.venue!.longitude)
+      : (hasLocation && camp.location!.longitude ? Number(camp.location!.longitude) : null)
+
+    // Distance
+    let distanceMiles: number | null = null
+    if (zipInfo && lat !== null && lng !== null) {
+      distanceMiles = Math.round(haversineDistanceMiles(zipInfo.latitude, zipInfo.longitude, lat, lng) * 10) / 10
+    }
+
+    // Computed fields
+    const registrationCount = camp.registrations?.length || 0
+    const maxCapacity = camp.capacity || 60
+    const spotsRemaining = Math.max(0, maxCapacity - registrationCount)
+    const isFull = spotsRemaining <= 0
+    const now = new Date()
+    const isEarlyBird = camp.earlyBirdDeadline && new Date(camp.earlyBirdDeadline) > now
+    const currentPrice = isEarlyBird && camp.earlyBirdPriceCents ? camp.earlyBirdPriceCents : camp.priceCents
+    const fillRate = maxCapacity > 0 ? registrationCount / maxCapacity : 0
+
+    const desirabilityScore = computeDesirabilityScore({
+      featured: camp.featured,
+      earlyBirdDeadline: camp.earlyBirdDeadline?.toISOString() || null,
+      registrationCount,
+      maxCapacity,
+      startDate: camp.startDate.toISOString(),
+      createdAt: camp.createdAt.toISOString(),
+      isFull,
+    })
+
+    // Badge: NEW! or EARLY BIRD (per-camp, MOST POPULAR assigned post-hoc)
+    const daysSinceCreated = (Date.now() - camp.createdAt.getTime()) / (24 * 60 * 60 * 1000)
+    let badge: CampBadge = null
+    if (daysSinceCreated <= 14 && !isFull) {
+      badge = 'NEW!'
+    } else if (isEarlyBird && !isFull) {
+      badge = 'EARLY BIRD'
+    }
+
+    const venueName = hasVenue ? camp.venue!.name : (hasLocation ? camp.location!.name : 'Location TBD')
+    const venueCity = hasVenue ? camp.venue!.city : (hasLocation ? camp.location!.city : null)
+    const venueState = hasVenue ? camp.venue!.state : (hasLocation ? camp.location!.state : null)
+
+    const item: CampListingItem = {
+      id: camp.id,
+      slug: camp.slug,
+      name: camp.name,
+      programType: camp.programType,
+      programTypeName: tagMap.get(camp.programType) || camp.programType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+      venueName,
+      venueCity,
+      venueState,
+      distanceMiles,
+      startDate: camp.startDate.toISOString(),
+      endDate: camp.endDate.toISOString(),
+      dailyStartTime: camp.startTime?.toISOString().slice(11, 16) || null,
+      dailyEndTime: camp.endTime?.toISOString().slice(11, 16) || null,
+      minAge: camp.minAge || 5,
+      maxAge: camp.maxAge || 14,
+      price: camp.priceCents,
+      currentPrice,
+      earlyBirdPrice: camp.earlyBirdPriceCents,
+      earlyBirdDeadline: camp.earlyBirdDeadline?.toISOString() || null,
+      sportsOffered: camp.sportsOffered || [],
+      highlights: camp.highlights || [],
+      spotsRemaining,
+      maxCapacity,
+      isFull,
+      featured: camp.featured,
+      status: camp.status,
+      createdAt: camp.createdAt.toISOString(),
+      desirabilityScore,
+      fillRate,
+      badge,
+    }
+
+    const key = camp.programType
+    if (!sectionMap.has(key)) {
+      sectionMap.set(key, [])
+    }
+    sectionMap.get(key)!.push(item)
+  }
+
+  // Build sections, sort camps within each by desirability, assign MOST POPULAR badge
+  const sections: ProgramTypeSection[] = []
+  for (const [slug, campItems] of sectionMap) {
+    // Sort by desirability descending
+    campItems.sort((a, b) => b.desirabilityScore - a.desirabilityScore)
+
+    // Post-hoc: assign MOST POPULAR to highest fill rate camp (>50%) without an existing badge
+    let bestFillIdx = -1
+    let bestFill = 0
+    for (let i = 0; i < campItems.length; i++) {
+      if (campItems[i].badge === null && campItems[i].fillRate > 0.5 && campItems[i].fillRate > bestFill && !campItems[i].isFull) {
+        bestFill = campItems[i].fillRate
+        bestFillIdx = i
+      }
+    }
+    if (bestFillIdx >= 0) {
+      campItems[bestFillIdx].badge = 'MOST POPULAR'
+    }
+
+    // Nearest distance in section
+    const distances = campItems.map(c => c.distanceMiles).filter((d): d is number => d !== null)
+    const nearestDistanceMiles = distances.length > 0 ? Math.min(...distances) : null
+
+    sections.push({
+      slug,
+      name: tagMap.get(slug) || slug.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+      sortOrder: tagSortOrder.get(slug) ?? 999,
+      campCount: campItems.length,
+      nearestDistanceMiles,
+      camps: campItems,
+    })
+  }
+
+  // Sort sections by ProgramTag sortOrder
+  sections.sort((a, b) => a.sortOrder - b.sortOrder)
+
+  const totalCamps = sections.reduce((sum, s) => sum + s.campCount, 0)
+
+  return {
+    sections,
+    totalCamps,
+    searchedLocation: zipInfo ? {
+      zip: zipInfo.zip,
+      city: zipInfo.city,
+      state: zipInfo.state,
+      latitude: zipInfo.latitude,
+      longitude: zipInfo.longitude,
+    } : null,
+  }
 }
 
 // ============================================================================

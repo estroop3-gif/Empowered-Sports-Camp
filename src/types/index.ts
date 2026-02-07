@@ -311,3 +311,63 @@ export interface NearZipSearchResult {
     longitude: number
   }
 }
+
+// ============================================================================
+// PROGRAM-TYPE GROUPED CAMP TYPES (for redesigned /camps page)
+// ============================================================================
+
+export type CampBadge = 'MOST POPULAR' | 'NEW!' | 'EARLY BIRD' | null
+
+export interface CampListingItem {
+  id: string
+  slug: string
+  name: string
+  programType: string
+  programTypeName: string
+  venueName: string
+  venueCity: string | null
+  venueState: string | null
+  distanceMiles: number | null
+  startDate: string
+  endDate: string
+  dailyStartTime: string | null
+  dailyEndTime: string | null
+  minAge: number
+  maxAge: number
+  price: number // cents
+  currentPrice: number // cents
+  earlyBirdPrice: number | null
+  earlyBirdDeadline: string | null
+  sportsOffered: string[]
+  highlights: string[]
+  spotsRemaining: number
+  maxCapacity: number
+  isFull: boolean
+  featured: boolean
+  status: string
+  createdAt: string
+  desirabilityScore: number
+  fillRate: number
+  badge: CampBadge
+}
+
+export interface ProgramTypeSection {
+  slug: string
+  name: string
+  sortOrder: number
+  campCount: number
+  nearestDistanceMiles: number | null
+  camps: CampListingItem[]
+}
+
+export interface ProgramTypeGroupedResult {
+  sections: ProgramTypeSection[]
+  totalCamps: number
+  searchedLocation?: {
+    zip: string
+    city: string
+    state: string
+    latitude: number
+    longitude: number
+  } | null
+}
