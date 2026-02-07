@@ -18,6 +18,9 @@ import {
   Shield,
   ShoppingBag,
   Coins,
+  Users,
+  Check,
+  X,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -80,6 +83,17 @@ interface Registration {
   }
 }
 
+interface SquadInvite {
+  id: string
+  squadId: string
+  campId: string
+  campName: string
+  invitingParentName: string
+  athleteNames: string[]
+  status: string
+  createdAt: string
+}
+
 /**
  * Parent Dashboard
  *
@@ -98,6 +112,8 @@ export default function ParentDashboard() {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [athletes, setAthletes] = useState<Athlete[]>([])
   const [registrations, setRegistrations] = useState<Registration[]>([])
+  const [squadInvites, setSquadInvites] = useState<SquadInvite[]>([])
+  const [respondingToInvite, setRespondingToInvite] = useState<string | null>(null)
 
   useEffect(() => {
     if (!authLoading) {
@@ -114,10 +130,11 @@ export default function ParentDashboard() {
 
     try {
       // Load all data in parallel
-      const [profileRes, athletesRes, registrationsRes] = await Promise.all([
+      const [profileRes, athletesRes, registrationsRes, squadInvitesRes] = await Promise.all([
         fetch(`/api/profiles?action=byId&profileId=${user.id}`),
         fetch(`/api/athletes?action=byParent&parentId=${user.id}`),
         fetch(`/api/registrations?action=byParent&parentId=${user.id}`),
+        fetch('/api/squads?action=invites'),
       ])
 
       // Check for 401 - token might be expired
@@ -138,10 +155,11 @@ export default function ParentDashboard() {
         return
       }
 
-      const [profileResult, athletesResult, registrationsResult] = await Promise.all([
+      const [profileResult, athletesResult, registrationsResult, squadInvitesResult] = await Promise.all([
         profileRes.json(),
         athletesRes.json(),
         registrationsRes.json(),
+        squadInvitesRes.json(),
       ])
 
       if (profileResult.data) {
@@ -154,6 +172,10 @@ export default function ParentDashboard() {
 
       if (registrationsResult.data) {
         setRegistrations(registrationsResult.data)
+      }
+
+      if (squadInvitesResult.data) {
+        setSquadInvites(squadInvitesResult.data)
       }
     } catch (err) {
       console.error('Failed to load dashboard data:', err)
@@ -210,6 +232,32 @@ export default function ParentDashboard() {
       currency: 'USD',
       minimumFractionDigits: 0,
     }).format(cents / 100)
+  }
+
+  const handleSquadResponse = async (memberId: string, response: 'accepted' | 'declined') => {
+    setRespondingToInvite(memberId)
+    try {
+      const res = await fetch('/api/squads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'respond',
+          memberId,
+          response,
+        }),
+      })
+
+      if (!res.ok) {
+        console.error('Failed to respond to squad invite')
+        return
+      }
+
+      // Refresh data after response
+      loadDashboardData()
+    } catch (err) {
+      console.error('Failed to respond to squad invite:', err)
+    }
+    setRespondingToInvite(null)
   }
 
   const getUserName = () => {
@@ -320,6 +368,69 @@ export default function ParentDashboard() {
                 )}
               </div>
             </div>
+
+            {/* Squad Requests Section */}
+            {squadInvites.length > 0 && (
+              <div className="bg-dark-100 border border-white/10">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-purple/30">
+                  <div className="flex items-center gap-3">
+                    <Users className="h-5 w-5 text-purple" />
+                    <h2 className="text-sm font-bold uppercase tracking-widest text-white">
+                      Squad Requests
+                    </h2>
+                    <span className="px-2 py-0.5 text-xs font-bold bg-purple/20 text-purple border border-purple/30">
+                      {squadInvites.length}
+                    </span>
+                  </div>
+                </div>
+                <div className="p-6 space-y-4">
+                  {squadInvites.map((invite) => (
+                    <div
+                      key={invite.id}
+                      className="p-4 bg-black/50 border border-white/10"
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <h4 className="font-bold text-white">{invite.campName}</h4>
+                          <p className="text-sm text-white/60 mt-1">
+                            <span className="text-purple">{invite.invitingParentName}</span> wants to squad up!
+                          </p>
+                          <p className="text-xs text-white/40 mt-2">
+                            Athletes to group: {invite.athleteNames.join(', ')}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="neon"
+                            size="sm"
+                            onClick={() => handleSquadResponse(invite.id, 'accepted')}
+                            disabled={respondingToInvite === invite.id}
+                          >
+                            {respondingToInvite === invite.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <>
+                                <Check className="h-4 w-4 mr-1" />
+                                Accept
+                              </>
+                            )}
+                          </Button>
+                          <Button
+                            variant="outline-white"
+                            size="sm"
+                            onClick={() => handleSquadResponse(invite.id, 'declined')}
+                            disabled={respondingToInvite === invite.id}
+                          >
+                            <X className="h-4 w-4 mr-1" />
+                            Decline
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Registrations Section */}
             <div className="bg-dark-100 border border-white/10">

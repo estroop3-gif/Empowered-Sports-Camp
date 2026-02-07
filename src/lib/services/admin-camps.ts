@@ -11,6 +11,7 @@ export interface CampFormData {
   slug: string
   description: string
   sport: string
+  program_type?: string
   location_id: string | null
   venue_id: string | null
   tenant_id: string | null
@@ -35,6 +36,8 @@ export interface AdminCamp {
   slug: string
   description: string | null
   sport: string | null
+  program_type: string
+  program_type_name?: string
   start_date: string
   end_date: string
   start_time: string | null
@@ -223,7 +226,8 @@ export async function fetchAdminCamps(options: {
         name: c.name,
         slug: c.slug,
         description: c.description,
-        sport: c.sportsOffered?.[0] || c.programType || 'Multi-Sport',
+        sport: c.sportsOffered?.[0] || 'Multi-Sport',
+        program_type: c.programType,
         start_date: c.startDate.toISOString().split('T')[0],
         end_date: c.endDate.toISOString().split('T')[0],
         start_time: c.startTime ? c.startTime.toISOString().slice(11, 16) : null,
@@ -294,7 +298,8 @@ export async function fetchCampById(id: string): Promise<AdminCamp | null> {
       name: camp.name,
       slug: camp.slug,
       description: camp.description,
-      sport: camp.sportsOffered?.[0] || camp.programType || 'Multi-Sport',
+      sport: camp.sportsOffered?.[0] || 'Multi-Sport',
+      program_type: camp.programType,
       start_date: camp.startDate.toISOString().split('T')[0],
       end_date: camp.endDate.toISOString().split('T')[0],
       start_time: camp.startTime ? camp.startTime.toISOString().slice(11, 16) : null,
@@ -382,7 +387,7 @@ export async function createCamp(formData: CampFormData): Promise<AdminCamp> {
         slug,
         description: formData.description || null,
         sportsOffered: formData.sport ? [formData.sport] : [],
-        programType: 'all_girls_sports_camp',
+        programType: formData.program_type || 'all_girls_sports_camp',
         locationId: formData.location_id || null,
         venueId: formData.venue_id || null,
         tenantId,
@@ -416,7 +421,8 @@ export async function createCamp(formData: CampFormData): Promise<AdminCamp> {
       name: camp.name,
       slug: camp.slug,
       description: camp.description,
-      sport: camp.sportsOffered?.[0] || camp.programType || 'Multi-Sport',
+      sport: camp.sportsOffered?.[0] || 'Multi-Sport',
+      program_type: camp.programType,
       start_date: camp.startDate.toISOString().split('T')[0],
       end_date: camp.endDate.toISOString().split('T')[0],
       start_time: camp.startTime ? camp.startTime.toISOString().slice(11, 16) : null,
@@ -474,6 +480,7 @@ export async function updateCamp(id: string, formData: Partial<CampFormData>): P
     if (formData.slug !== undefined) updateData.slug = formData.slug
     if (formData.description !== undefined) updateData.description = formData.description || null
     if (formData.sport !== undefined) updateData.sportsOffered = formData.sport ? [formData.sport] : []
+    if (formData.program_type !== undefined) updateData.programType = formData.program_type
     if (formData.location_id !== undefined) {
       updateData.location = formData.location_id
         ? { connect: { id: formData.location_id } }
@@ -532,7 +539,8 @@ export async function updateCamp(id: string, formData: Partial<CampFormData>): P
       name: camp.name,
       slug: camp.slug,
       description: camp.description,
-      sport: camp.sportsOffered?.[0] || camp.programType || 'Multi-Sport',
+      sport: camp.sportsOffered?.[0] || 'Multi-Sport',
+      program_type: camp.programType,
       start_date: camp.startDate.toISOString().split('T')[0],
       end_date: camp.endDate.toISOString().split('T')[0],
       start_time: camp.startTime ? camp.startTime.toISOString().slice(11, 16) : null,

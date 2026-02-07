@@ -338,7 +338,7 @@ export async function createVenue(input: CreateVenueInput): Promise<{
         city: input.city,
         state: input.state,
         postalCode: input.postal_code,
-        country: input.country ?? 'US',
+        country: input.country,
         latitude: input.latitude ?? null,
         longitude: input.longitude ?? null,
         regionLabel: input.region_label ?? null,

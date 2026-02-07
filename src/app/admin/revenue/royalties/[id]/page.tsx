@@ -117,11 +117,8 @@ const STATUS_CONFIG: Record<
   waived: { label: 'Waived', color: 'text-white/40', bgColor: 'bg-white/5 border-white/10', icon: XCircle },
 }
 
-const PROGRAM_TYPE_LABELS: Record<string, string> = {
-  all_girls_sports_camp: 'All Girls Sports Camp',
-  cit_program: 'CIT Program',
-  soccer_and_strength: 'Soccer & Strength',
-  basketball_intensive: 'Basketball Intensive',
+function formatProgramType(slug: string): string {
+  return slug.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
 }
 
 function formatCurrency(value: number): string {
@@ -701,7 +698,7 @@ export default function RoyaltyInvoiceDetailPage({
                 <div>
                   <p className="text-sm font-medium text-white">{invoice.camp.name}</p>
                   <p className="text-xs text-white/40">
-                    {PROGRAM_TYPE_LABELS[invoice.camp.programType] || invoice.camp.programType}
+                    {invoice.camp.programTypeName || formatProgramType(invoice.camp.programType)}
                   </p>
                 </div>
                 <div className="flex items-start gap-3">

@@ -14,6 +14,7 @@ import { useState, useEffect, use, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { AdminLayout, PageHeader, ContentCard } from '@/components/admin/admin-layout'
+import { AuthorizedPickupManager } from '@/components/athletes/AuthorizedPickupManager'
 import { useAuth } from '@/lib/auth/context'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -83,6 +84,9 @@ interface Athlete {
     phone: string | null
     city: string | null
     state: string | null
+    emergency_contact_name: string | null
+    emergency_contact_phone: string | null
+    emergency_contact_relationship: string | null
   }
   tenant?: {
     id: string
@@ -106,6 +110,35 @@ interface Registration {
   created_at: string
 }
 
+interface SquadMembership {
+  squadId: string
+  squadLabel: string
+  campId: string
+  campName: string
+  campStartDate: string
+  campEndDate: string
+  status: string
+  createdAt: string
+  otherMembers: Array<{
+    athleteId: string
+    athleteName: string
+    status: string
+  }>
+}
+
+// Risk flag auto-detection and resolution
+const computeAutoRisk = (athlete: Athlete): string => {
+  if (athlete.medical_notes || athlete.allergies) return 'restricted'
+  return 'none'
+}
+
+const RISK_LEVELS: Record<string, number> = { none: 0, monitor: 1, restricted: 2 }
+
+const effectiveRisk = (manualFlag: string | null, autoFlag: string): string => {
+  const manual = manualFlag || 'none'
+  return (RISK_LEVELS[manual] || 0) >= (RISK_LEVELS[autoFlag] || 0) ? manual : autoFlag
+}
+
 interface PageProps {
   params: Promise<{ athleteId: string }>
 }
@@ -118,6 +151,7 @@ export default function AdminAthleteDetailPage({ params }: PageProps) {
 
   const [athlete, setAthlete] = useState<Athlete | null>(null)
   const [registrations, setRegistrations] = useState<Registration[]>([])
+  const [squadMemberships, setSquadMemberships] = useState<SquadMembership[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -129,7 +163,12 @@ export default function AdminAthleteDetailPage({ params }: PageProps) {
 
   // Form state
   const [formData, setFormData] = useState<Partial<Athlete>>({})
-  const [activeTab, setActiveTab] = useState<'profile' | 'safety' | 'sports' | 'internal' | 'history'>('profile')
+  const [activeTab, setActiveTab] = useState<'profile' | 'safety' | 'sports' | 'internal' | 'history' | 'squads'>('profile')
+
+  // Internal tab independent state
+  const [internalRiskFlag, setInternalRiskFlag] = useState<string>('none')
+  const [internalNotes, setInternalNotes] = useState<string>('')
+  const [savingInternal, setSavingInternal] = useState(false)
 
   // Archive modal state
   const [showArchiveModal, setShowArchiveModal] = useState(false)
@@ -141,11 +180,19 @@ export default function AdminAthleteDetailPage({ params }: PageProps) {
     loadAthlete()
   }, [athleteId])
 
+  // Sync internal tab state when athlete data loads/changes
+  useEffect(() => {
+    if (athlete) {
+      setInternalRiskFlag(athlete.risk_flag || 'none')
+      setInternalNotes(athlete.internal_notes || '')
+    }
+  }, [athlete])
+
   const loadAthlete = async () => {
     setLoading(true)
     setError(null)
     try {
-      const response = await fetch(`/api/admin/athletes/${athleteId}?includeRegistrations=true`, {
+      const response = await fetch(`/api/admin/athletes/${athleteId}?includeRegistrations=true&includeSquads=true`, {
         credentials: 'include',
       })
       const data = await response.json()
@@ -157,6 +204,7 @@ export default function AdminAthleteDetailPage({ params }: PageProps) {
       setAthlete(data.athlete)
       setFormData(data.athlete)
       setRegistrations(data.registrations || [])
+      setSquadMemberships(data.squadMemberships || [])
     } catch (err) {
       console.error('Failed to load athlete:', err)
       setError((err as Error).message)
@@ -249,6 +297,31 @@ export default function AdminAthleteDetailPage({ params }: PageProps) {
       setError((err as Error).message)
     }
     setSaving(false)
+  }
+
+  const handleSaveInternal = async () => {
+    setSavingInternal(true)
+    setError(null)
+    try {
+      const response = await fetch(`/api/admin/athletes/${athleteId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          risk_flag: internalRiskFlag === 'none' ? null : internalRiskFlag,
+          internal_notes: internalNotes || null,
+        }),
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || 'Failed to save')
+      setAthlete(data.athlete)
+      setFormData(data.athlete)
+      setSuccessMessage('Internal info saved')
+      setTimeout(() => setSuccessMessage(null), 3000)
+    } catch (err) {
+      setError((err as Error).message)
+    }
+    setSavingInternal(false)
   }
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -374,6 +447,16 @@ export default function AdminAthleteDetailPage({ params }: PageProps) {
   const age = calculateAge(athlete.date_of_birth)
   const parentName = [athlete.parent?.first_name, athlete.parent?.last_name].filter(Boolean).join(' ') || 'Unknown'
   const isMale = athlete.gender?.toLowerCase() === 'male'
+
+  // Computed risk
+  const autoRisk = computeAutoRisk(athlete)
+  const displayRisk = effectiveRisk(athlete.risk_flag, autoRisk)
+
+  // Emergency contact fallback
+  const ecName = athlete.emergency_contact_name || athlete.parent?.emergency_contact_name || null
+  const ecPhone = athlete.emergency_contact_phone || athlete.parent?.emergency_contact_phone || null
+  const ecRelationship = athlete.emergency_contact_relationship || athlete.parent?.emergency_contact_relationship || null
+  const ecIsFromParent = !athlete.emergency_contact_name && !!athlete.parent?.emergency_contact_name
 
   // Render field - shows input in edit mode, text in view mode
   const renderField = (
@@ -553,15 +636,15 @@ export default function AdminAthleteDetailPage({ params }: PageProps) {
                   Archived
                 </span>
               )}
-              {athlete.risk_flag && athlete.risk_flag !== 'none' && (
+              {displayRisk && displayRisk !== 'none' && (
                 <span className={cn(
                   "px-2 py-1 text-xs font-bold uppercase flex items-center gap-1",
-                  athlete.risk_flag === 'monitor'
+                  displayRisk === 'monitor'
                     ? "bg-amber-500/10 border border-amber-500/30 text-amber-400"
                     : "bg-red-500/10 border border-red-500/30 text-red-400"
                 )}>
                   <ShieldAlert className="h-3 w-3" />
-                  {athlete.risk_flag}
+                  {displayRisk === 'restricted' ? 'High Risk' : displayRisk}
                 </span>
               )}
               {isMale && (
@@ -604,11 +687,12 @@ export default function AdminAthleteDetailPage({ params }: PageProps) {
       </ContentCard>
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-6 border-b border-white/10">
+      <div className="flex gap-1 mb-6 border-b border-white/10 overflow-x-auto">
         {[
           { id: 'profile', label: 'Profile', icon: User },
           { id: 'safety', label: 'Contact & Safety', icon: Heart },
           { id: 'sports', label: 'Sports & Preferences', icon: Trophy },
+          { id: 'squads', label: 'Squad Pairings', icon: Users },
           { id: 'internal', label: 'Internal', icon: ShieldAlert },
           { id: 'history', label: 'Enrollment History', icon: Clock },
         ].map((tab) => (
@@ -717,9 +801,34 @@ export default function AdminAthleteDetailPage({ params }: PageProps) {
         <div className="grid gap-6 lg:grid-cols-2">
           <ContentCard title="Emergency Contact">
             <div className="space-y-4">
-              {renderField('Contact Name', athlete.emergency_contact_name, 'emergency_contact_name')}
-              {renderField('Phone Number', athlete.emergency_contact_phone, 'emergency_contact_phone')}
-              {renderField('Relationship', athlete.emergency_contact_relationship, 'emergency_contact_relationship')}
+              {isEditMode ? (
+                <>
+                  {renderField('Contact Name', athlete.emergency_contact_name, 'emergency_contact_name')}
+                  {renderField('Phone Number', athlete.emergency_contact_phone, 'emergency_contact_phone')}
+                  {renderField('Relationship', athlete.emergency_contact_relationship, 'emergency_contact_relationship')}
+                </>
+              ) : (
+                <>
+                  <div>
+                    <label className="block text-xs text-white/40 uppercase tracking-wider mb-2">Contact Name</label>
+                    <p className="text-white py-2">{ecName || '—'}</p>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-white/40 uppercase tracking-wider mb-2">Phone Number</label>
+                    <p className="text-white py-2">{ecPhone || '—'}</p>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-white/40 uppercase tracking-wider mb-2">Relationship</label>
+                    <p className="text-white py-2">{ecRelationship || '—'}</p>
+                  </div>
+                  {ecIsFromParent && (
+                    <p className="text-xs text-amber-400 flex items-center gap-1">
+                      <AlertCircle className="h-3 w-3" />
+                      Using parent profile emergency contact (no athlete-level data)
+                    </p>
+                  )}
+                </>
+              )}
             </div>
           </ContentCard>
 
@@ -748,6 +857,16 @@ export default function AdminAthleteDetailPage({ params }: PageProps) {
               )}
             </div>
           </ContentCard>
+
+          <div className="lg:col-span-2">
+            <ContentCard title="Authorized Pickups">
+              <AuthorizedPickupManager
+                athleteId={athleteId}
+                athleteName={`${athlete.first_name} ${athlete.last_name}`}
+                readOnly={true}
+              />
+            </ContentCard>
+          </div>
         </div>
       )}
 
@@ -801,40 +920,58 @@ export default function AdminAthleteDetailPage({ params }: PageProps) {
         <div className="grid gap-6 lg:grid-cols-2">
           <ContentCard title="Risk Assessment" accent="magenta">
             <div className="space-y-4">
+              {/* Auto-detected risk banner */}
+              {autoRisk !== 'none' && (
+                <div className="p-3 bg-red-500/10 border border-red-500/30">
+                  <p className="text-xs text-red-400 font-bold uppercase mb-1 flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3" />
+                    Auto-Detected: {autoRisk}
+                  </p>
+                  <p className="text-xs text-white/60">
+                    This athlete has {athlete.medical_notes ? 'medical notes' : ''}{athlete.medical_notes && athlete.allergies ? ' and ' : ''}{athlete.allergies ? 'allergies' : ''} on file. Risk flag auto-set to restricted.
+                  </p>
+                </div>
+              )}
+
               <div>
                 <label className="block text-xs text-white/40 uppercase tracking-wider mb-2">
                   <ShieldAlert className="h-3 w-3 inline mr-1" />
-                  Risk Flag
+                  Manual Risk Flag
                 </label>
-                {isEditMode ? (
-                  <select
-                    value={formData.risk_flag || 'none'}
-                    onChange={(e) => setFormData({ ...formData, risk_flag: e.target.value === 'none' ? null : e.target.value })}
-                    className="w-full bg-black border border-white/20 text-white px-4 py-3 focus:border-neon focus:outline-none"
-                  >
-                    <option value="none">None</option>
-                    <option value="monitor">Monitor</option>
-                    <option value="restricted">Restricted</option>
-                  </select>
-                ) : (
-                  <div className="py-2">
-                    {athlete.risk_flag && athlete.risk_flag !== 'none' ? (
-                      <span className={cn(
-                        "px-3 py-1 text-sm font-bold uppercase flex items-center gap-2 w-fit",
-                        athlete.risk_flag === 'monitor'
-                          ? "bg-amber-500/10 border border-amber-500/30 text-amber-400"
-                          : "bg-red-500/10 border border-red-500/30 text-red-400"
-                      )}>
-                        <ShieldAlert className="h-4 w-4" />
-                        {athlete.risk_flag}
-                      </span>
-                    ) : (
-                      <span className="text-white/60">No risk flag</span>
-                    )}
-                  </div>
-                )}
+                <select
+                  value={internalRiskFlag}
+                  onChange={(e) => setInternalRiskFlag(e.target.value)}
+                  className="w-full bg-black border border-white/20 text-white px-4 py-3 focus:border-neon focus:outline-none"
+                >
+                  <option value="none">None</option>
+                  <option value="monitor">Monitor</option>
+                  <option value="restricted">Restricted</option>
+                </select>
                 <p className="text-xs text-white/40 mt-2">
                   Risk flags are visible to staff only and help identify athletes requiring additional attention.
+                </p>
+              </div>
+
+              {/* Effective risk display */}
+              <div>
+                <label className="block text-xs text-white/40 uppercase tracking-wider mb-2">Effective Risk Level</label>
+                <div className="py-2">
+                  {displayRisk !== 'none' ? (
+                    <span className={cn(
+                      "px-3 py-1 text-sm font-bold uppercase flex items-center gap-2 w-fit",
+                      displayRisk === 'monitor'
+                        ? "bg-amber-500/10 border border-amber-500/30 text-amber-400"
+                        : "bg-red-500/10 border border-red-500/30 text-red-400"
+                    )}>
+                      <ShieldAlert className="h-4 w-4" />
+                      {displayRisk === 'restricted' ? 'High Risk (Restricted)' : 'Monitor'}
+                    </span>
+                  ) : (
+                    <span className="text-white/60">No risk flag</span>
+                  )}
+                </div>
+                <p className="text-xs text-white/40">
+                  The higher of auto-detected and manual flag is used.
                 </p>
               </div>
 
@@ -854,19 +991,24 @@ export default function AdminAthleteDetailPage({ params }: PageProps) {
                   <FileText className="h-3 w-3 inline mr-1" />
                   Staff Notes
                 </label>
-                {isEditMode ? (
-                  <textarea
-                    value={formData.internal_notes || ''}
-                    onChange={(e) => setFormData({ ...formData, internal_notes: e.target.value })}
-                    placeholder="Internal notes about this athlete (staff only)..."
-                    className="w-full bg-black border border-white/20 text-white px-4 py-3 focus:border-neon focus:outline-none min-h-[200px]"
-                  />
-                ) : (
-                  <div className="bg-white/5 p-4 min-h-[100px]">
-                    <p className="text-white whitespace-pre-wrap">{athlete.internal_notes || 'No internal notes'}</p>
-                  </div>
-                )}
+                <textarea
+                  value={internalNotes}
+                  onChange={(e) => setInternalNotes(e.target.value)}
+                  placeholder="Internal notes about this athlete (staff only)..."
+                  className="w-full bg-black border border-white/20 text-white px-4 py-3 focus:border-neon focus:outline-none min-h-[200px]"
+                />
               </div>
+
+              <Button
+                variant="neon"
+                size="sm"
+                onClick={handleSaveInternal}
+                disabled={savingInternal}
+                className="w-full"
+              >
+                {savingInternal ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+                Save Internal Info
+              </Button>
             </div>
           </ContentCard>
         </div>
@@ -941,6 +1083,83 @@ export default function AdminAthleteDetailPage({ params }: PageProps) {
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+        </ContentCard>
+      )}
+
+      {activeTab === 'squads' && (
+        <ContentCard title="Squad Pairings" accent="purple">
+          {squadMemberships.length === 0 ? (
+            <div className="text-center py-8">
+              <Users className="h-10 w-10 text-white/20 mx-auto mb-3" />
+              <p className="text-white/40">No squad pairings found</p>
+              <p className="text-xs text-white/30 mt-2">
+                Squad pairings are created when parents request to group athletes together for camps.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {squadMemberships.map((squad) => (
+                <div
+                  key={`${squad.squadId}-${squad.campId}`}
+                  className="p-4 bg-black/50 border border-white/10"
+                >
+                  <div className="flex items-start justify-between gap-4 mb-3">
+                    <div>
+                      <h4 className="font-bold text-white">{squad.campName}</h4>
+                      <p className="text-xs text-white/40 mt-1">
+                        {formatDate(squad.campStartDate)} - {formatDate(squad.campEndDate)}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-white/40">Squad:</span>
+                      <span className="text-sm font-semibold text-purple">{squad.squadLabel}</span>
+                    </div>
+                  </div>
+
+                  {/* Status badge */}
+                  <div className="mb-3">
+                    <span className={cn(
+                      "px-2 py-1 text-xs font-bold uppercase",
+                      squad.status === 'accepted' && "bg-neon/10 text-neon border border-neon/30",
+                      squad.status === 'requested' && "bg-amber-500/10 text-amber-400 border border-amber-500/30",
+                      squad.status === 'declined' && "bg-red-500/10 text-red-400 border border-red-500/30",
+                    )}>
+                      {squad.status === 'accepted' ? 'Accepted' : squad.status === 'requested' ? 'Pending' : 'Declined'}
+                    </span>
+                  </div>
+
+                  {/* Other members */}
+                  {squad.otherMembers.length > 0 && (
+                    <div>
+                      <p className="text-xs text-white/40 uppercase tracking-wider mb-2">Squad Members</p>
+                      <div className="flex flex-wrap gap-2">
+                        {squad.otherMembers.map((member) => (
+                          <div
+                            key={member.athleteId}
+                            className="flex items-center gap-2 px-3 py-1.5 bg-white/5 border border-white/10"
+                          >
+                            <span className="text-sm text-white">{member.athleteName}</span>
+                            <span className={cn(
+                              "text-xs",
+                              member.status === 'accepted' ? "text-neon" : member.status === 'requested' ? "text-amber-400" : "text-red-400"
+                            )}>
+                              {member.status === 'accepted' && <CheckCircle className="h-3 w-3" />}
+                              {member.status === 'requested' && <Clock className="h-3 w-3" />}
+                              {member.status === 'declined' && <XCircle className="h-3 w-3" />}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {squad.otherMembers.length === 0 && (
+                    <p className="text-xs text-white/40 italic">No other members in this squad yet.</p>
+                  )}
+                </div>
+              ))}
             </div>
           )}
         </ContentCard>

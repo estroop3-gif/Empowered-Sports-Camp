@@ -10,7 +10,7 @@
 
 import { prisma } from '@/lib/db/client'
 import { createNotification } from './notifications'
-import { createStripeCheckoutSession, confirmDemoPayment } from './payments'
+import { createStripeCheckoutSession } from './payments'
 import type { PaymentStatus, RegistrationStatus, CampFriendSquad, CampFriendSquadMember } from '@/generated/prisma'
 
 // =============================================================================
@@ -577,16 +577,9 @@ export async function confirmRegistrationsFromPayment(params: {
   try {
     const { sessionId } = params
 
-    // Handle demo payments
-    if (sessionId.startsWith('demo_')) {
-      const demoResult = await confirmDemoPayment({ sessionId })
-      if (demoResult.error) {
-        return { data: null, error: demoResult.error }
-      }
-      return { data: { confirmed: 1 }, error: null }
-    }
-
     // Find registrations with this checkout session
+    // Works for both real Stripe sessions and demo sessions since all registrations
+    // have stripeCheckoutSessionId set during checkout creation
     const registrations = await prisma.registration.findMany({
       where: {
         stripeCheckoutSessionId: sessionId,

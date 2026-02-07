@@ -13,6 +13,7 @@ import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import CamperDetailDrawer from './CamperDetailDrawer'
 import type { RosterCamper, RosterCamperDetail, RosterListResult } from '@/lib/services/roster'
+import { useBannerOffset } from '@/hooks/useBannerOffset'
 
 // Helper to deduplicate campers by ID (prevents duplicate key errors)
 function deduplicateCampers<T extends { id: string }>(campers: T[]): T[] {
@@ -40,6 +41,8 @@ interface Group {
 }
 
 export default function TheRoster({ campId, role, backUrl }: TheRosterProps) {
+  const { topWithNavbar } = useBannerOffset()
+
   // Data state
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -341,7 +344,7 @@ export default function TheRoster({ campId, role, backUrl }: TheRosterProps) {
       const res = await fetch(`/api/athletes/${camper.athleteId}/authorized-pickups`)
       if (res.ok) {
         const data = await res.json()
-        setAuthorizedPickups(data.pickups || [])
+        setAuthorizedPickups(data.data || [])
       }
     } catch (err) {
       console.error('Failed to load authorized pickups:', err)
@@ -472,7 +475,7 @@ export default function TheRoster({ campId, role, backUrl }: TheRosterProps) {
     : `/director/camps/${campId}/grouping`
 
   return (
-    <div className="min-h-[calc(100vh-8rem)] bg-dark-100">
+    <div className="min-h-screen bg-dark-100" style={{ paddingTop: `${topWithNavbar}px` }}>
       {/* Header */}
       <div className="bg-black/50 border-b border-white/10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">

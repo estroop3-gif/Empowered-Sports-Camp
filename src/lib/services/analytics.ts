@@ -14,6 +14,7 @@
 
 import { prisma } from '@/lib/db/client'
 import { Prisma } from '@/generated/prisma'
+import { getProgramTagMap } from '@/lib/services/program-tags'
 
 // =============================================================================
 // Types
@@ -247,15 +248,11 @@ function getPeriodLabel(date: Date, granularity: 'day' | 'week' | 'month'): stri
   return date.toLocaleDateString('en-US', options)
 }
 
-function getProgramDisplayName(programType: string): string {
-  const names: Record<string, string> = {
-    all_girls_sports_camp: 'All Girls Sports Camp',
-    basketball_intensive: 'Basketball Intensive',
-    soccer_and_strength: 'Soccer & Strength',
-    volleyball_camp: 'Volleyball Camp',
-    multi_sport: 'Multi-Sport',
+function getProgramDisplayName(programType: string, tagMap?: Map<string, string>): string {
+  if (tagMap) {
+    return tagMap.get(programType) || programType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
   }
-  return names[programType] || programType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+  return programType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
 }
 
 // =============================================================================
@@ -812,11 +809,12 @@ export async function getGlobalKpiByProgram(
       }
     }
 
+    const tagMap = await getProgramTagMap()
     const programItems: ProgramKpiItem[] = []
     for (const [programType, data] of programMap) {
       programItems.push({
         programType,
-        programName: getProgramDisplayName(programType),
+        programName: getProgramDisplayName(programType, tagMap),
         tsgr: data.tsgr,
         sessionsHeld: data.sessionsHeld,
         totalCampers: data.totalCampers,
@@ -1274,11 +1272,12 @@ export async function getLicenseeProgramBreakdown(
       }
     }
 
+    const tagMap = await getProgramTagMap()
     const programItems: ProgramKpiItem[] = []
     for (const [programType, data] of programMap) {
       programItems.push({
         programType,
-        programName: getProgramDisplayName(programType),
+        programName: getProgramDisplayName(programType, tagMap),
         tsgr: data.tsgr,
         sessionsHeld: data.sessionsHeld,
         totalCampers: data.totalCampers,
@@ -1766,11 +1765,12 @@ export async function getAdminRevenueByProgram(
       )
     }
 
+    const tagMap = await getProgramTagMap()
     const items: AdminRevenueByProgramItem[] = []
     for (const [programType, data] of programMap) {
       items.push({
         programType,
-        programName: getProgramDisplayName(programType),
+        programName: getProgramDisplayName(programType, tagMap),
         grossRevenue: data.grossRevenue,
         upsellRevenue: data.upsellRevenue,
         baseRevenue: data.baseRevenue,
@@ -1838,6 +1838,7 @@ export async function getAdminRevenueSessions(
       orderBy: { startDate: 'desc' },
     })
 
+    const tagMap = await getProgramTagMap()
     const items: AdminRevenueSessionItem[] = camps.map(camp => {
       const baseRevenue = formatCurrency(
         camp.registrations.reduce((sum, r) => sum + (r.basePriceCents || 0), 0)
@@ -1865,7 +1866,7 @@ export async function getAdminRevenueSessions(
         campId: camp.id,
         campName: camp.name,
         programType: camp.programType,
-        programName: getProgramDisplayName(camp.programType),
+        programName: getProgramDisplayName(camp.programType, tagMap),
         licenseeId: camp.tenantId,
         licenseeName: camp.tenant?.name || 'Unknown Tenant',
         startDate: camp.startDate,

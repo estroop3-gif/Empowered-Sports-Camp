@@ -149,7 +149,7 @@ export async function POST(request: NextRequest) {
       city: body.city,
       state: body.state,
       postal_code: body.postal_code,
-      country: body.country || 'US',
+      country: body.country,
       latitude: body.latitude,
       longitude: body.longitude,
       region_label: body.region_label,

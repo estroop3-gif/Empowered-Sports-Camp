@@ -8,6 +8,7 @@ import {
   Star,
   Pill,
   GripVertical,
+  Link2,
 } from 'lucide-react'
 import { StandardizedCamper } from '@/lib/grouping/types'
 
@@ -149,6 +150,12 @@ export const CamperTile = memo(forwardRef<HTMLDivElement, CamperTileProps>(
                     aria-label="In friend group"
                   />
                 )}
+                {camper.squadId && (
+                  <Link2
+                    className="w-3.5 h-3.5 text-cyan-400"
+                    aria-label={`In squad${camper.squadMemberNames?.length ? ` with ${camper.squadMemberNames.join(', ')}` : ''}`}
+                  />
+                )}
                 {camper.gradeDiscrepancy && !camper.gradeDiscrepancyResolved && (
                   <AlertTriangle
                     className="w-3.5 h-3.5 text-warning"
@@ -269,6 +276,17 @@ export function CamperDetail({ camper, friendNames = [] }: CamperDetailProps) {
               <span className="uppercase text-xs tracking-wider">Friends</span>
             </div>
             <p className="text-white/70">{friendNames.join(', ')}</p>
+          </div>
+        )}
+
+        {/* Squad */}
+        {camper.squadId && camper.squadMemberNames && camper.squadMemberNames.length > 0 && (
+          <div>
+            <div className="flex items-center gap-2 text-cyan-400 font-semibold mb-1">
+              <Link2 className="w-4 h-4" />
+              <span className="uppercase text-xs tracking-wider">Squad ({camper.squadLabel || 'Squad'})</span>
+            </div>
+            <p className="text-white/70">{camper.squadMemberNames.join(', ')}</p>
           </div>
         )}
 

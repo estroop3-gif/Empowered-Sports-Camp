@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { ArrowRight, Zap } from 'lucide-react'
 import { CampCard } from '@/components/camps/camp-card'
 import { Button } from '@/components/ui/button'
-import { fetchFeaturedCamps, getProgramTypeLabel, type PublicCampCard } from '@/lib/services/camps'
+import { fetchFeaturedCamps, type PublicCampCard } from '@/lib/services/camps'
 import type { CampCardData } from '@/types'
 
 /**
@@ -13,7 +13,7 @@ function transformToCampCard(camp: PublicCampCard): CampCardData {
     id: camp.id,
     slug: camp.slug,
     name: camp.name,
-    programType: getProgramTypeLabel(camp.program_type),
+    programType: camp.program_type_name,
     location: camp.location_name || 'TBD',
     city: camp.city || '',
     state: camp.state || '',

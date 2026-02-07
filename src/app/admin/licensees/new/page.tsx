@@ -28,8 +28,10 @@ import {
   CheckCircle,
   AlertCircle,
   Send,
+  Globe,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { COUNTRIES, getRegionsForCountry, getRegionLabelForCountry } from '@/lib/constants/locations'
 
 /**
  * Create New Licensee Page
@@ -46,6 +48,7 @@ interface FormData {
   territory_name: string
   city: string
   state: string
+  country: string
   status: 'pending' | 'active'
   send_invite: boolean
 }
@@ -74,6 +77,7 @@ export default function NewLicenseePage() {
     territory_name: '',
     city: '',
     state: '',
+    country: 'US',
     status: 'pending',
     send_invite: true,
   })
@@ -357,6 +361,27 @@ export default function NewLicenseePage() {
                   </p>
                 </div>
 
+                <div>
+                  <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
+                    <Globe className="h-4 w-4 inline mr-2" />
+                    Country *
+                  </label>
+                  <select
+                    value={formData.country}
+                    onChange={(e) => {
+                      updateField('country', e.target.value)
+                      updateField('state', '') // Clear state when country changes
+                    }}
+                    className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-purple focus:outline-none appearance-none"
+                  >
+                    {COUNTRIES.map((country) => (
+                      <option key={country.code} value={country.code}>
+                        {country.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 <div className="grid gap-6 sm:grid-cols-2">
                   <div>
                     <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
@@ -380,21 +405,25 @@ export default function NewLicenseePage() {
                   </div>
                   <div>
                     <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
-                      State *
+                      {getRegionLabelForCountry(formData.country)} *
                     </label>
-                    <input
-                      type="text"
+                    <select
                       value={formData.state}
                       onChange={(e) => updateField('state', e.target.value)}
-                      placeholder="IL"
-                      maxLength={2}
                       className={cn(
-                        'w-full px-4 py-3 bg-black border text-white placeholder:text-white/30 focus:outline-none uppercase',
+                        'w-full px-4 py-3 bg-black border text-white focus:outline-none appearance-none',
                         formErrors.state
                           ? 'border-red-500 focus:border-red-500'
                           : 'border-white/20 focus:border-purple'
                       )}
-                    />
+                    >
+                      <option value="">Select {getRegionLabelForCountry(formData.country).toLowerCase()}...</option>
+                      {getRegionsForCountry(formData.country).map((region) => (
+                        <option key={region.code} value={region.code}>
+                          {region.name}
+                        </option>
+                      ))}
+                    </select>
                     {formErrors.state && (
                       <p className="mt-1 text-xs text-red-400">{formErrors.state}</p>
                     )}

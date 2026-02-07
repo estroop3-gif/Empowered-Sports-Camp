@@ -22,7 +22,6 @@ const footerLinks = {
     { label: 'All Girls Sports Camp', href: '/programs/all-girls-sports-camp' },
     { label: 'CIT Program', href: '/programs/cit-program' },
     { label: 'Soccer & Strength', href: '/programs/soccer-and-strength' },
-    { label: 'Basketball Intensive', href: '/programs/basketball-intensive' },
   ],
   company: [
     { label: 'About Us', href: '/about' },
@@ -154,17 +153,17 @@ export function Footer() {
               </li>
               <li>
                 <a
-                  href="tel:+1234567890"
+                  href="tel:+19417021883"
                   className="flex items-center gap-3 text-sm text-white/50 hover:text-neon transition-colors"
                 >
                   <Phone className="h-5 w-5" />
-                  (123) 456-7890
+                  (941) 702-1883
                 </a>
               </li>
               <li className="flex items-start gap-3 text-sm text-white/50">
                 <MapPin className="h-5 w-5 flex-shrink-0 mt-0.5" />
                 <span>
-                  Chicago, IL &amp; surrounding suburbs
+                  Serving Sarasota, Bradenton, Lakewood Ranch, &amp; Costa Rica
                 </span>
               </li>
             </ul>

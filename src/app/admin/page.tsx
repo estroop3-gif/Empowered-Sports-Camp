@@ -16,6 +16,7 @@ import {
   RefreshCw,
   Loader2,
   AlertCircle,
+  ShoppingBag,
 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -33,6 +34,7 @@ interface DashboardOverview {
   activeLicensees: number
   totalRegistrations: number
   totalRevenue: number
+  addonRevenue: number
   activeAthletes: number
   activeCamps: number
   todayCampers: number
@@ -190,6 +192,7 @@ export default function LicensorDashboard() {
     activeLicensees: 0,
     totalRegistrations: 0,
     totalRevenue: 0,
+    addonRevenue: 0,
     activeAthletes: 0,
     activeCamps: 0,
     todayCampers: 0,
@@ -248,7 +251,7 @@ export default function LicensorDashboard() {
       </div>
 
       {/* Global Stats */}
-      <StatCardGrid columns={4} className="mb-8">
+      <StatCardGrid columns={5} className="mb-8">
         <StatCard
           label="Active Licensees"
           value={overview.activeLicensees}
@@ -270,7 +273,7 @@ export default function LicensorDashboard() {
           }
         />
         <StatCard
-          label="Platform Revenue"
+          label="Registration Revenue"
           value={formatCurrency(overview.totalRevenue)}
           icon={DollarSign}
           accent="purple"
@@ -282,6 +285,12 @@ export default function LicensorDashboard() {
                 }
               : undefined
           }
+        />
+        <StatCard
+          label="Add-On Revenue"
+          value={formatCurrency(overview.addonRevenue)}
+          icon={ShoppingBag}
+          accent="magenta"
         />
         <StatCard
           label="Active Athletes"

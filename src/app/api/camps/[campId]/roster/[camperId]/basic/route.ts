@@ -36,6 +36,7 @@ export async function PATCH(
     if (body.shirtSize !== undefined) updates.shirtSize = body.shirtSize
     if (body.specialConsiderations !== undefined) updates.specialConsiderations = body.specialConsiderations
     if (body.internalNotes !== undefined) updates.internalNotes = body.internalNotes
+    if (body.riskFlag !== undefined) updates.riskFlag = body.riskFlag
 
     const { data, error } = await updateCamperBasicInfo({
       camperId,

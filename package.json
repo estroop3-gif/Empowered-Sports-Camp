@@ -38,7 +38,8 @@
     "react-pdf": "^10.2.0",
     "server-only": "^0.0.1",
     "stripe": "^20.0.0",
-    "tailwind-merge": "^3.4.0"
+    "tailwind-merge": "^3.4.0",
+    "zipcodes": "^8.0.0"
   },
   "devDependencies": {
     "@aws-sdk/client-amplify": "^3.971.0",
@@ -47,6 +48,7 @@
     "@types/pg": "^8.16.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/zipcodes": "^8.0.5",
     "archiver": "^7.0.1",
     "dotenv": "^17.2.3",
     "eslint": "^9",

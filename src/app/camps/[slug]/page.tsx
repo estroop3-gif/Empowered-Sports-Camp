@@ -17,7 +17,6 @@ import {
   formatPrice,
   formatDateRange,
   formatAgeRange,
-  getProgramTypeLabel,
   type PublicCampCard,
 } from '@/lib/services/camps'
 import { ShareCampButton } from '@/components/camps/ShareCampButton'
@@ -106,12 +105,6 @@ export default async function CampDetailPage({ params }: PageProps) {
             <div className="lg:col-span-2">
               {/* Header */}
               <div>
-                <div className="flex items-center gap-3 mb-4">
-                  <Zap className="h-5 w-5 text-neon" />
-                  <span className="text-xs font-bold uppercase tracking-widest text-neon">
-                    {getProgramTypeLabel(camp.program_type)}
-                  </span>
-                </div>
                 <h1 className="text-3xl font-black uppercase tracking-tight text-white sm:text-4xl lg:text-5xl">
                   {camp.name}
                 </h1>
@@ -162,9 +155,9 @@ export default async function CampDetailPage({ params }: PageProps) {
                 </div>
               </div>
 
-              {/* Image */}
+              {/* Image — hidden for now */}
               {camp.image_url ? (
-                <div className="mt-8 aspect-[16/9] overflow-hidden border border-white/10">
+                <div className="hidden mt-8 aspect-[16/9] overflow-hidden border border-white/10">
                   <img
                     src={camp.image_url}
                     alt={camp.name}
@@ -172,7 +165,7 @@ export default async function CampDetailPage({ params }: PageProps) {
                   />
                 </div>
               ) : (
-                <div className="mt-8 aspect-[16/9] overflow-hidden border border-white/10 bg-gradient-to-br from-neon/10 via-purple/10 to-magenta/10">
+                <div className="hidden mt-8 aspect-[16/9] overflow-hidden border border-white/10 bg-gradient-to-br from-neon/10 via-purple/10 to-magenta/10">
                   <div className="flex h-full items-center justify-center">
                     <Crown className="h-24 w-24 text-neon/30" />
                   </div>
@@ -351,20 +344,21 @@ export default async function CampDetailPage({ params }: PageProps) {
               <h3 className="text-lg font-bold uppercase tracking-wider text-white mb-4">
                 Location Details
               </h3>
-              {/* Map Placeholder */}
-              <div className="aspect-video bg-black/50 border border-white/10 mb-4 flex items-center justify-center">
+              {/* Map — OpenStreetMap embed (no API key needed) */}
+              <div className="aspect-video bg-black/50 border border-white/10 mb-4 overflow-hidden">
                 {camp.latitude && camp.longitude ? (
-                  <a
-                    href={`https://maps.google.com/?q=${camp.latitude},${camp.longitude}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-neon hover:text-neon/80 flex flex-col items-center gap-2"
-                  >
-                    <MapPin className="h-8 w-8" />
-                    <span className="text-sm">View on Google Maps</span>
-                  </a>
+                  <iframe
+                    title={`Map of ${camp.location_name || 'camp location'}`}
+                    width="100%"
+                    height="100%"
+                    style={{ border: 0 }}
+                    loading="lazy"
+                    src={`https://www.openstreetmap.org/export/embed.html?bbox=${camp.longitude - 0.01},${camp.latitude - 0.007},${camp.longitude + 0.01},${camp.latitude + 0.007}&layer=mapnik&marker=${camp.latitude},${camp.longitude}`}
+                  />
                 ) : (
-                  <MapPin className="h-8 w-8 text-white/20" />
+                  <div className="flex h-full items-center justify-center">
+                    <MapPin className="h-8 w-8 text-white/20" />
+                  </div>
                 )}
               </div>
               <h4 className="font-bold text-white">{camp.location_name || 'Location TBD'}</h4>

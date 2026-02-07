@@ -554,6 +554,11 @@ export function standardizeCamperData(
     assignedGroupName: null,
     assignmentType: null,
     assignmentReason: null,
+
+    // Squad info (populated later from squad service)
+    squadId: null,
+    squadLabel: null,
+    squadMemberNames: [],
   }
 
   return { camper, warnings }

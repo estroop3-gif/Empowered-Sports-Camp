@@ -36,6 +36,7 @@ interface UpdateTerritoryInput {
   notes?: string
 }
 import { cn } from '@/lib/utils'
+import { COUNTRIES, getRegionsForCountry, getRegionLabelForCountry } from '@/lib/constants/locations'
 import {
   ArrowLeft,
   MapPin,
@@ -57,14 +58,6 @@ import {
  *
  * View and edit an existing territory.
  */
-
-const US_STATES = [
-  'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA',
-  'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD',
-  'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ',
-  'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC',
-  'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY',
-]
 
 interface FormData {
   name: string
@@ -102,7 +95,7 @@ export default function EditTerritoryPage() {
   const [formData, setFormData] = useState<FormData>({
     name: '',
     description: '',
-    country: 'USA',
+    country: 'US',
     state_region: '',
     city: '',
     postal_codes: '',
@@ -464,7 +457,10 @@ export default function EditTerritoryPage() {
                     </label>
                     <select
                       value={formData.country}
-                      onChange={(e) => updateField('country', e.target.value)}
+                      onChange={(e) => {
+                        updateField('country', e.target.value)
+                        updateField('state_region', '') // Clear state when country changes
+                      }}
                       disabled={isClosed}
                       className={cn(
                         'w-full px-4 py-3 bg-black border text-white focus:outline-none appearance-none disabled:opacity-50',
@@ -473,14 +469,17 @@ export default function EditTerritoryPage() {
                           : 'border-white/20 focus:border-purple'
                       )}
                     >
-                      <option value="USA">United States</option>
-                      <option value="CAN">Canada</option>
+                      {COUNTRIES.map((country) => (
+                        <option key={country.code} value={country.code}>
+                          {country.name}
+                        </option>
+                      ))}
                     </select>
                   </div>
 
                   <div>
                     <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
-                      State / Region *
+                      {getRegionLabelForCountry(formData.country)} *
                     </label>
                     <select
                       value={formData.state_region}
@@ -493,10 +492,10 @@ export default function EditTerritoryPage() {
                           : 'border-white/20 focus:border-purple'
                       )}
                     >
-                      <option value="">Select state...</option>
-                      {US_STATES.map((state) => (
-                        <option key={state} value={state}>
-                          {state}
+                      <option value="">Select {getRegionLabelForCountry(formData.country).toLowerCase()}...</option>
+                      {getRegionsForCountry(formData.country).map((region) => (
+                        <option key={region.code} value={region.code}>
+                          {region.name}
                         </option>
                       ))}
                     </select>

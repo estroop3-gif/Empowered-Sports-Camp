@@ -1,12 +1,12 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Plus, Trash2, AlertCircle, CheckCircle2, User, Heart, Phone, UserPlus, Users, Pencil, Loader2 } from 'lucide-react'
+import { Plus, Trash2, AlertCircle, CheckCircle2, User, Heart, Phone, UserPlus, Users, Pencil, Loader2, Shield } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useCheckout, type ExistingAthlete, type ParentProfile } from '@/lib/checkout/context'
 import { useAuth } from '@/lib/auth/context'
 import { Button } from '@/components/ui/button'
-import type { CamperFormData, CampSession } from '@/types/registration'
+import type { CamperFormData, CampSession, PickupPersonInput } from '@/types/registration'
 
 /**
  * CamperForm
@@ -25,6 +25,17 @@ interface CamperFormProps {
   onContinue: () => void
   onBack?: () => void
 }
+
+const PICKUP_RELATIONSHIPS = [
+  'Parent',
+  'Guardian',
+  'Grandparent',
+  'Aunt/Uncle',
+  'Sibling (18+)',
+  'Family Friend',
+  'Nanny/Caregiver',
+  'Other',
+]
 
 const GRADES = [
   'Pre-K',
@@ -441,6 +452,81 @@ function CamperCard({
                 placeholder="Learning differences, behavioral notes, or accommodations..."
               />
             </div>
+          </div>
+
+          {/* Authorized Pickup */}
+          <div className="pt-4 border-t border-white/10">
+            <div className="flex items-center gap-2 mb-2">
+              <Shield className="h-4 w-4 text-neon" />
+              <h4 className="text-sm font-semibold uppercase tracking-wider text-white">
+                Authorized Pickup
+              </h4>
+            </div>
+            <p className="text-xs text-white/40 mb-4">
+              People authorized to pick up this camper (optional)
+            </p>
+
+            {(camper.authorizedPickups || []).map((pickup: PickupPersonInput, pickupIndex: number) => (
+              <div key={pickupIndex} className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_1fr_auto] gap-3 mb-3">
+                <FormInput
+                  label="Name"
+                  value={pickup.name}
+                  onChange={(e) => {
+                    const updated = [...(camper.authorizedPickups || [])]
+                    updated[pickupIndex] = { ...updated[pickupIndex], name: e.target.value }
+                    onUpdate({ authorizedPickups: updated })
+                  }}
+                  placeholder="Full name"
+                />
+                <FormSelect
+                  label="Relationship"
+                  value={pickup.relationship}
+                  onChange={(e) => {
+                    const updated = [...(camper.authorizedPickups || [])]
+                    updated[pickupIndex] = { ...updated[pickupIndex], relationship: e.target.value }
+                    onUpdate({ authorizedPickups: updated })
+                  }}
+                  options={PICKUP_RELATIONSHIPS.map((r) => ({ value: r, label: r }))}
+                />
+                <FormInput
+                  label="Phone"
+                  type="tel"
+                  value={pickup.phone}
+                  onChange={(e) => {
+                    const updated = [...(camper.authorizedPickups || [])]
+                    updated[pickupIndex] = { ...updated[pickupIndex], phone: e.target.value }
+                    onUpdate({ authorizedPickups: updated })
+                  }}
+                  placeholder="(555) 123-4567"
+                />
+                <div className="flex items-end pb-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const updated = (camper.authorizedPickups || []).filter((_, i) => i !== pickupIndex)
+                      onUpdate({ authorizedPickups: updated })
+                    }}
+                    className="p-2 text-white/40 hover:text-red-500 transition-colors"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+
+            {(camper.authorizedPickups || []).length < 5 && (
+              <button
+                type="button"
+                onClick={() => {
+                  const updated = [...(camper.authorizedPickups || []), { name: '', relationship: '', phone: '' }]
+                  onUpdate({ authorizedPickups: updated })
+                }}
+                className="w-full flex items-center justify-center gap-2 p-3 border border-dashed border-white/20 text-white/60 hover:border-neon hover:text-neon transition-colors text-sm"
+              >
+                <Plus className="h-4 w-4" />
+                <span className="font-semibold uppercase tracking-wider">Add Pickup Person</span>
+              </button>
+            )}
           </div>
         </div>
       )}

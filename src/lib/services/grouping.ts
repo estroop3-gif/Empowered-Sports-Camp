@@ -14,6 +14,7 @@
 
 import prisma from '@/lib/db/client'
 import { AssignmentType, GroupingStatus, ViolationType, ViolationSeverity } from '@/generated/prisma'
+import { syncFriendGroupIdsForCamp } from './campSquads'
 
 // ============================================================================
 // TYPES
@@ -36,6 +37,10 @@ export interface GroupingCamper {
   has_medical_notes: boolean
   has_allergies: boolean
   special_considerations: string | null
+  // Squad info
+  squad_id: string | null
+  squad_label: string | null
+  squad_member_names: string[]
 }
 
 export interface GroupingGroup {
@@ -240,6 +245,11 @@ function transformCamper(
     assignedGroup: { groupNumber: number } | null
     assignmentType: string | null
     specialConsiderations: string | null
+  },
+  squadInfo?: {
+    squadId: string | null
+    squadLabel: string | null
+    squadMemberNames: string[]
   }
 ): GroupingCamper {
   return {
@@ -259,6 +269,9 @@ function transformCamper(
     has_medical_notes: !!camperData.athlete.medicalNotes,
     has_allergies: !!camperData.athlete.allergies,
     special_considerations: camperData.specialConsiderations,
+    squad_id: squadInfo?.squadId || null,
+    squad_label: squadInfo?.squadLabel || null,
+    squad_member_names: squadInfo?.squadMemberNames || [],
   }
 }
 
@@ -467,9 +480,61 @@ export async function getCampGroupingState(
       where: { campId },
     })
 
+    // Fetch squad memberships for all athletes in this camp
+    const allAthleteIds = [
+      ...groups.flatMap(g => g.camperSessionData.map(csd => csd.athleteId)),
+      ...ungroupedCampers.map(csd => csd.athleteId),
+    ]
+
+    const squadMemberships = await prisma.campFriendSquadMember.findMany({
+      where: {
+        athleteId: { in: allAthleteIds },
+        status: 'accepted',
+        squad: { campId },
+      },
+      include: {
+        squad: {
+          include: {
+            members: {
+              where: { status: 'accepted' },
+              include: {
+                athlete: {
+                  select: {
+                    id: true,
+                    firstName: true,
+                    lastName: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    })
+
+    // Build a map from athleteId to squad info
+    const squadInfoMap = new Map<string, { squadId: string; squadLabel: string; squadMemberNames: string[] }>()
+    for (const membership of squadMemberships) {
+      const otherMembers = membership.squad.members
+        .filter(m => m.athleteId !== membership.athleteId)
+        .map(m => `${m.athlete.firstName} ${m.athlete.lastName}`)
+      squadInfoMap.set(membership.athleteId, {
+        squadId: membership.squadId,
+        squadLabel: membership.squad.label,
+        squadMemberNames: otherMembers,
+      })
+    }
+
     // Transform groups
     const transformedGroups: GroupingGroup[] = groups.map(group => {
-      const campers = group.camperSessionData.map(csd => transformCamper(csd))
+      const campers = group.camperSessionData.map(csd => {
+        const squadInfo = squadInfoMap.get(csd.athleteId)
+        return transformCamper(csd, squadInfo ? {
+          squadId: squadInfo.squadId,
+          squadLabel: squadInfo.squadLabel,
+          squadMemberNames: squadInfo.squadMemberNames,
+        } : undefined)
+      })
       const gradeStats = calculateGradeStats(campers)
 
       return {
@@ -491,7 +556,14 @@ export async function getCampGroupingState(
     })
 
     // Transform ungrouped
-    const transformedUngrouped = ungroupedCampers.map(csd => transformCamper(csd))
+    const transformedUngrouped = ungroupedCampers.map(csd => {
+      const squadInfo = squadInfoMap.get(csd.athleteId)
+      return transformCamper(csd, squadInfo ? {
+        squadId: squadInfo.squadId,
+        squadLabel: squadInfo.squadLabel,
+        squadMemberNames: squadInfo.squadMemberNames,
+      } : undefined)
+    })
 
     // Calculate warnings
     const warnings: GroupingWarning[] = []
@@ -559,6 +631,10 @@ export async function autoGroupCampers(
 ): Promise<{ data: GroupingResult | null; error: Error | null }> {
   try {
     const startTime = Date.now()
+
+    // Sync squad memberships to friend groups before grouping
+    // This ensures mutual squad requests become friendGroupId entries
+    await syncFriendGroupIdsForCamp({ campId })
 
     // Get camp configuration
     const camp = await prisma.camp.findUnique({

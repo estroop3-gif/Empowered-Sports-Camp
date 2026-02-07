@@ -26,7 +26,7 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { DropdownMenu, Modal } from '@/components/ui/dropdown-menu'
+import { Modal } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
 
 interface Athlete {
@@ -99,6 +99,8 @@ export default function AdminAthletesPage() {
   const [page, setPage] = useState(1)
   const [deleteTarget, setDeleteTarget] = useState<Athlete | null>(null)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [actionTarget, setActionTarget] = useState<Athlete | null>(null)
+  const [showActionModal, setShowActionModal] = useState(false)
   const [actionLoading, setActionLoading] = useState(false)
 
   const userName = user?.firstName || user?.email?.split('@')[0] || 'Admin'
@@ -237,28 +239,6 @@ export default function AdminAthletesPage() {
     }
     setActionLoading(false)
   }
-
-  const getDropdownItems = (athlete: Athlete) => [
-    {
-      label: 'View Details',
-      icon: Eye,
-      onClick: () => handleViewDetails(athlete),
-    },
-    {
-      label: athlete.is_active ? 'Archive' : 'Reactivate',
-      icon: Archive,
-      onClick: () => handleArchiveToggle(athlete),
-    },
-    {
-      label: 'Delete',
-      icon: Trash2,
-      variant: 'danger' as const,
-      onClick: () => {
-        setDeleteTarget(athlete)
-        setShowDeleteModal(true)
-      },
-    },
-  ]
 
   const getRiskBadge = (riskFlag: string | null) => {
     switch (riskFlag) {
@@ -581,11 +561,12 @@ export default function AdminAthletesPage() {
                         </span>
                       </td>
                       <td className="px-4 py-4 text-right" onClick={(e) => e.stopPropagation()}>
-                        <DropdownMenu
-                          trigger={<MoreVertical className="h-4 w-4" />}
-                          items={getDropdownItems(athlete)}
-                          align="right"
-                        />
+                        <button
+                          onClick={() => { setActionTarget(athlete); setShowActionModal(true) }}
+                          className="p-1.5 text-white/40 hover:text-white hover:bg-white/10 transition-colors"
+                        >
+                          <MoreVertical className="h-4 w-4" />
+                        </button>
                       </td>
                     </tr>
                   )
@@ -623,6 +604,60 @@ export default function AdminAthletesPage() {
           </div>
         )}
       </div>
+      {/* Action Modal */}
+      <Modal
+        isOpen={showActionModal}
+        onClose={() => { setShowActionModal(false); setActionTarget(null) }}
+        title={actionTarget ? `${actionTarget.first_name} ${actionTarget.last_name}` : 'Athlete Actions'}
+      >
+        {actionTarget && (
+          <div className="space-y-2">
+            <button
+              onClick={() => {
+                setShowActionModal(false)
+                setActionTarget(null)
+                handleViewDetails(actionTarget)
+              }}
+              className="w-full flex items-center gap-3 px-4 py-3 text-left text-white hover:bg-white/10 transition-colors"
+            >
+              <Eye className="h-4 w-4 text-neon" />
+              <span className="text-sm font-medium">View Details</span>
+            </button>
+            <button
+              onClick={async () => {
+                await handleArchiveToggle(actionTarget)
+                setShowActionModal(false)
+                setActionTarget(null)
+              }}
+              disabled={actionLoading}
+              className="w-full flex items-center gap-3 px-4 py-3 text-left text-white hover:bg-white/10 transition-colors disabled:opacity-50"
+            >
+              {actionLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin text-amber-400" />
+              ) : (
+                <Archive className="h-4 w-4 text-amber-400" />
+              )}
+              <span className="text-sm font-medium">
+                {actionTarget.is_active ? 'Archive Athlete' : 'Reactivate Athlete'}
+              </span>
+            </button>
+            <div className="border-t border-white/10 my-1" />
+            <button
+              onClick={() => {
+                setShowActionModal(false)
+                setDeleteTarget(actionTarget)
+                setActionTarget(null)
+                setShowDeleteModal(true)
+              }}
+              className="w-full flex items-center gap-3 px-4 py-3 text-left text-red-400 hover:bg-red-500/10 transition-colors"
+            >
+              <Trash2 className="h-4 w-4" />
+              <span className="text-sm font-medium">Delete Permanently</span>
+            </button>
+          </div>
+        )}
+      </Modal>
+
       {/* Delete Confirmation Modal */}
       <Modal
         isOpen={showDeleteModal}

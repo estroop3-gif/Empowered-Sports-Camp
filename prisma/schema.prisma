@@ -21,6 +21,7 @@ model Tenant {
   city                     String?
   state                    String?
   zip                      String?
+  country                  String?                   @default("US")
   timezone                 String?                   @default("America/New_York")
   licenseStatus            LicenseStatus             @default(active) @map("license_status")
   licenseStartDate         DateTime?                 @map("license_start_date") @db.Date
@@ -3193,4 +3194,17 @@ enum WaiverSigningStatus {
   signed
   expired
   declined
+}
+
+model ProgramTag {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  slug        String   @unique
+  name        String
+  description String?
+  sortOrder   Int      @default(0) @map("sort_order")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("program_tags")
 }

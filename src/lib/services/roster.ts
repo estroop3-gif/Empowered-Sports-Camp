@@ -61,6 +61,16 @@ export interface RosterCamperDetail extends RosterCamper {
   upsellsTotal: number
   // Attendance history for this camp
   attendanceHistory: RosterAttendanceRecord[]
+  // Sports & Preferences (from Athlete)
+  primarySportInterest: string | null
+  secondarySportInterest: string | null
+  jerseyNumberPreference: string | null
+  tShirtSize: string | null
+  // Internal (from Athlete)
+  riskFlag: string | null
+  internalNotes: string | null
+  // Squad pairings
+  squadMemberships: RosterSquadMembership[]
   // Camp info
   campName: string
   campStartDate: string
@@ -81,6 +91,17 @@ export interface RosterAttendanceRecord {
   checkOutTime: string | null
   status: string
   notes: string | null
+}
+
+export interface RosterSquadMembership {
+  squadId: string
+  squadLabel: string
+  status: string
+  otherMembers: Array<{
+    athleteId: string
+    athleteName: string
+    status: string
+  }>
 }
 
 export interface RosterFilters {
@@ -108,6 +129,7 @@ export interface CamperBasicUpdateInput {
   shirtSize?: string
   specialConsiderations?: string
   internalNotes?: string
+  riskFlag?: string
 }
 
 // ============================================================================
@@ -492,6 +514,32 @@ export async function getCamperDetail(params: {
         }
       })
 
+      // Get squad memberships
+      const squadMemberships = await prisma.campFriendSquadMember.findMany({
+        where: { athleteId: registration.athleteId, squad: { campId } },
+        include: {
+          squad: {
+            select: {
+              id: true, label: true,
+              members: { include: { athlete: { select: { id: true, firstName: true, lastName: true } } } },
+            },
+          },
+        },
+      })
+
+      const mappedSquads: RosterSquadMembership[] = squadMemberships.map((sm) => ({
+        squadId: sm.squad.id,
+        squadLabel: sm.squad.label,
+        status: sm.status,
+        otherMembers: sm.squad.members
+          .filter((m) => m.athleteId !== registration.athleteId)
+          .map((m) => ({
+            athleteId: m.athlete.id,
+            athleteName: `${m.athlete.firstName} ${m.athlete.lastName}`,
+            status: m.status,
+          })),
+      }))
+
       // Get today's attendance for current status
       const today = new Date()
       today.setHours(0, 0, 0, 0)
@@ -546,9 +594,9 @@ export async function getCamperDetail(params: {
             : null,
         parentEmail: shouldMaskContact ? null : registration.parent.email,
         parentPhone: shouldMaskContact ? null : registration.parent.phone,
-        emergencyContactName: registration.athlete.emergencyContactName,
-        emergencyContactPhone: registration.athlete.emergencyContactPhone,
-        emergencyContactRelationship: registration.athlete.emergencyContactRelationship,
+        emergencyContactName: registration.athlete.emergencyContactName || registration.parent.emergencyContactName,
+        emergencyContactPhone: registration.athlete.emergencyContactPhone || registration.parent.emergencyContactPhone,
+        emergencyContactRelationship: registration.athlete.emergencyContactRelationship || registration.parent.emergencyContactRelationship,
         medicalNotes: registration.athlete.medicalNotes,
         allergies: registration.athlete.allergies,
         specialConsiderations:
@@ -560,6 +608,13 @@ export async function getCamperDetail(params: {
         upsells,
         upsellsTotal,
         attendanceHistory,
+        primarySportInterest: registration.athlete.primarySportInterest,
+        secondarySportInterest: registration.athlete.secondarySportInterest,
+        jerseyNumberPreference: registration.athlete.jerseyNumberPreference,
+        tShirtSize: registration.athlete.tShirtSize || registration.shirtSize,
+        riskFlag: shouldMaskContact ? null : (registration.athlete.riskFlag || null),
+        internalNotes: shouldMaskContact ? null : (registration.athlete.internalNotes || null),
+        squadMemberships: mappedSquads,
         campName: camp.name,
         campStartDate: camp.startDate.toISOString().split('T')[0],
         campEndDate: camp.endDate.toISOString().split('T')[0],
@@ -641,6 +696,32 @@ export async function getCamperDetail(params: {
       }
     })
 
+    // Get squad memberships
+    const squadMemberships2 = await prisma.campFriendSquadMember.findMany({
+      where: { athleteId: registration.athleteId, squad: { campId } },
+      include: {
+        squad: {
+          select: {
+            id: true, label: true,
+            members: { include: { athlete: { select: { id: true, firstName: true, lastName: true } } } },
+          },
+        },
+      },
+    })
+
+    const mappedSquads2: RosterSquadMembership[] = squadMemberships2.map((sm) => ({
+      squadId: sm.squad.id,
+      squadLabel: sm.squad.label,
+      status: sm.status,
+      otherMembers: sm.squad.members
+        .filter((m) => m.athleteId !== registration.athleteId)
+        .map((m) => ({
+          athleteId: m.athlete.id,
+          athleteName: `${m.athlete.firstName} ${m.athlete.lastName}`,
+          status: m.status,
+        })),
+    }))
+
     // Get today's attendance for current status
     const today = new Date()
     today.setHours(0, 0, 0, 0)
@@ -696,9 +777,9 @@ export async function getCamperDetail(params: {
           : null,
       parentEmail: shouldMaskContact ? null : registration.parent.email,
       parentPhone: shouldMaskContact ? null : registration.parent.phone,
-      emergencyContactName: registration.athlete.emergencyContactName,
-      emergencyContactPhone: registration.athlete.emergencyContactPhone,
-      emergencyContactRelationship: registration.athlete.emergencyContactRelationship,
+      emergencyContactName: registration.athlete.emergencyContactName || registration.parent.emergencyContactName,
+      emergencyContactPhone: registration.athlete.emergencyContactPhone || registration.parent.emergencyContactPhone,
+      emergencyContactRelationship: registration.athlete.emergencyContactRelationship || registration.parent.emergencyContactRelationship,
       // Health & safety (always visible for safety)
       medicalNotes: registration.athlete.medicalNotes,
       allergies: registration.athlete.allergies,
@@ -714,6 +795,16 @@ export async function getCamperDetail(params: {
       upsellsTotal,
       // Attendance
       attendanceHistory,
+      // Sports & Preferences
+      primarySportInterest: registration.athlete.primarySportInterest,
+      secondarySportInterest: registration.athlete.secondarySportInterest,
+      jerseyNumberPreference: registration.athlete.jerseyNumberPreference,
+      tShirtSize: registration.athlete.tShirtSize || registration.shirtSize,
+      // Internal
+      riskFlag: shouldMaskContact ? null : (registration.athlete.riskFlag || null),
+      internalNotes: shouldMaskContact ? null : (registration.athlete.internalNotes || null),
+      // Squad pairings
+      squadMemberships: mappedSquads2,
       // Camp info
       campName: camp.name,
       campStartDate: camp.startDate.toISOString().split('T')[0],
@@ -799,6 +890,20 @@ export async function updateCamperBasicInfo(params: {
         where: { id: camperId },
         data: { specialConsiderations: updates.specialConsiderations },
       })
+    }
+
+    // Update athlete-level fields (riskFlag, internalNotes)
+    const athleteUpdates: Record<string, unknown> = {}
+    if (updates.internalNotes !== undefined) athleteUpdates.internalNotes = updates.internalNotes
+    if (updates.riskFlag !== undefined) athleteUpdates.riskFlag = updates.riskFlag === 'none' ? null : updates.riskFlag
+
+    if (Object.keys(athleteUpdates).length > 0) {
+      const reg = await prisma.registration.findUnique({
+        where: { id: registrationId }, select: { athleteId: true },
+      })
+      if (reg) {
+        await prisma.athlete.update({ where: { id: reg.athleteId }, data: athleteUpdates })
+      }
     }
 
     return { data: { success: true }, error: null }

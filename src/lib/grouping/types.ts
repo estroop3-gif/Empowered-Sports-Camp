@@ -152,6 +152,11 @@ export interface StandardizedCamper {
   assignedGroupName: string | null
   assignmentType: AssignmentType | null
   assignmentReason: string | null
+
+  // Squad Info (from Build Her Squad feature)
+  squadId: string | null
+  squadLabel: string | null
+  squadMemberNames: string[]
 }
 
 // ============================================================================

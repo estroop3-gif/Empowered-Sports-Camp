@@ -74,6 +74,7 @@ const createInitialCamper = (): CamperFormData => ({
   medicalNotes: '',
   allergies: '',
   specialConsiderations: '',
+  authorizedPickups: [],
   age: null,
   isEligible: false,
 })

@@ -58,13 +58,7 @@ export interface CampSession {
   tenantId: string
 }
 
-export type ProgramType =
-  | 'all_girls_sports_camp'
-  | 'cit_program'
-  | 'soccer_strength'
-  | 'basketball_intensive'
-  | 'volleyball_clinic'
-  | 'specialty_camp'
+export type ProgramType = string
 
 export interface CampLocation {
   id: string
@@ -132,6 +126,12 @@ export interface CheckoutState {
 
 export type CheckoutStep = 'camp' | 'campers' | 'squad' | 'addons' | 'waivers' | 'account' | 'payment' | 'confirmation'
 
+export interface PickupPersonInput {
+  name: string
+  relationship: string
+  phone: string
+}
+
 export interface CamperFormData {
   id: string // Temporary client-side ID
   existingAthleteId: string | null // Links to existing athlete record
@@ -145,6 +145,7 @@ export interface CamperFormData {
   medicalNotes: string
   allergies: string
   specialConsiderations: string
+  authorizedPickups: PickupPersonInput[]
   // Calculated
   age: number | null
   isEligible: boolean

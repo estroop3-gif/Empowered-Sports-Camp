@@ -6,6 +6,9 @@
 
 import prisma from '@/lib/db/client'
 import { Prisma } from '@/generated/prisma'
+import { lookupZipCode, haversineDistanceMiles } from '@/lib/geo'
+import { getProgramTagMap } from '@/lib/services/program-tags'
+import type { VenueGroupData, CampProgramData, NearZipSearchResult } from '@/types'
 
 // ============================================================================
 // TYPES
@@ -17,6 +20,7 @@ export interface PublicCampCard {
   name: string
   description: string | null
   program_type: string
+  program_type_name: string
   start_date: string
   end_date: string
   daily_start_time: string | null
@@ -95,7 +99,7 @@ export interface CampSearchResult {
  */
 function transformCampToCard(camp: Prisma.CampGetPayload<{
   include: { location: true; venue: true; tenant: true; registrations: { select: { id: true } } }
-}>): PublicCampCard {
+}>, tagMap?: Map<string, string>): PublicCampCard {
   const registrationCount = camp.registrations?.length || 0
   const maxCapacity = camp.capacity || 60
   const spotsRemaining = Math.max(0, maxCapacity - registrationCount)
@@ -130,6 +134,7 @@ function transformCampToCard(camp: Prisma.CampGetPayload<{
     name: camp.name,
     description: camp.description,
     program_type: camp.programType,
+    program_type_name: tagMap?.get(camp.programType) || camp.programType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
     start_date: camp.startDate.toISOString(),
     end_date: camp.endDate.toISOString(),
     daily_start_time: camp.startTime?.toISOString().slice(11, 16) || null,
@@ -308,8 +313,11 @@ export async function fetchPublicCamps(
     take: pageSize,
   })
 
+  // Load tag map for display names
+  const tagMap = await getProgramTagMap()
+
   // Transform to PublicCampCard format
-  let transformedCamps = camps.map(transformCampToCard)
+  let transformedCamps = camps.map(c => transformCampToCard(c, tagMap))
 
   // Filter by has spots (post-query filter since it's computed)
   if (filters.has_spots) {
@@ -343,7 +351,8 @@ export async function fetchCampBySlug(slug: string): Promise<PublicCampCard | nu
   })
 
   if (!camp) return null
-  return transformCampToCard(camp)
+  const tagMap = await getProgramTagMap()
+  return transformCampToCard(camp, tagMap)
 }
 
 /**
@@ -361,7 +370,8 @@ export async function fetchCampById(id: string): Promise<PublicCampCard | null> 
   })
 
   if (!camp) return null
-  return transformCampToCard(camp)
+  const tagMap = await getProgramTagMap()
+  return transformCampToCard(camp, tagMap)
 }
 
 /**
@@ -394,7 +404,8 @@ export async function fetchFeaturedCamps(limit: number = 3): Promise<PublicCampC
     take: limit,
   })
 
-  const transformedCamps = camps.map(transformCampToCard)
+  const tagMap = await getProgramTagMap()
+  const transformedCamps = camps.map(c => transformCampToCard(c, tagMap))
   return transformedCamps.filter(c => !c.is_full)
 }
 
@@ -464,7 +475,8 @@ export async function fetchCampsByLocation(
     take: limit,
   })
 
-  const transformedCamps = camps.map(transformCampToCard)
+  const tagMap = await getProgramTagMap()
+  const transformedCamps = camps.map(c => transformCampToCard(c, tagMap))
   return transformedCamps.filter(c => !c.is_full)
 }
 
@@ -575,8 +587,9 @@ export async function fetchCampStates(): Promise<string[]> {
 /**
  * Get available program types from active camps
  * Only includes program types with active camps (not past/concluded)
+ * Returns {slug, name}[] with display names from ProgramTag table
  */
-export async function fetchProgramTypes(): Promise<string[]> {
+export async function fetchProgramTypes(): Promise<{ slug: string; name: string }[]> {
   const activeCampFilter = getActiveCampFilter()
 
   const camps = await prisma.camp.findMany({
@@ -586,7 +599,368 @@ export async function fetchProgramTypes(): Promise<string[]> {
     orderBy: { programType: 'asc' },
   })
 
-  return camps.map(c => c.programType)
+  const tagMap = await getProgramTagMap()
+  return camps.map(c => ({
+    slug: c.programType,
+    name: tagMap.get(c.programType) || c.programType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+  }))
+}
+
+// ============================================================================
+// ZIP CODE SEARCH (VENUE-GROUPED)
+// ============================================================================
+
+interface NearZipFilters {
+  programType?: string
+  minAge?: number
+  maxAge?: number
+  search?: string
+}
+
+interface NearZipOptions {
+  sortBy?: 'distance' | 'startDate'
+  maxDistanceMiles?: number
+}
+
+/**
+ * Fetch camps near a zip code, grouped by venue, with distance sorting.
+ * Returns venue groups with nested program listings.
+ */
+export async function fetchCampsNearZip(
+  zipCode: string,
+  filters: NearZipFilters = {},
+  options: NearZipOptions = {}
+): Promise<NearZipSearchResult> {
+  const { sortBy = 'distance', maxDistanceMiles = 200 } = options
+
+  // 1. Look up zip coordinates
+  const zipInfo = await lookupZipCode(zipCode)
+  if (!zipInfo) {
+    throw new Error('Invalid zip code')
+  }
+
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  // 2. Build where clause (same active-camp filters as fetchPublicCamps)
+  const where: Prisma.CampWhereInput = {
+    status: { in: ['published', 'registration_open'] },
+    startDate: { gt: today },
+    concludedAt: null,
+    AND: [
+      {
+        OR: [
+          { registrationClose: null },
+          { registrationClose: { gte: today } },
+        ],
+      },
+    ],
+  }
+
+  if (filters.programType) {
+    where.programType = filters.programType
+  }
+  if (filters.minAge !== undefined) {
+    where.maxAge = { gte: filters.minAge }
+  }
+  if (filters.maxAge !== undefined) {
+    where.minAge = { lte: filters.maxAge }
+  }
+  if (filters.search) {
+    ;(where.AND as Prisma.CampWhereInput[]).push({
+      OR: [
+        { name: { contains: filters.search, mode: 'insensitive' } },
+        { description: { contains: filters.search, mode: 'insensitive' } },
+        { venue: { name: { contains: filters.search, mode: 'insensitive' } } },
+        { venue: { city: { contains: filters.search, mode: 'insensitive' } } },
+      ],
+    })
+  }
+
+  // 3. Fetch all active camps with venue, tenant, territory join
+  const camps = await prisma.camp.findMany({
+    where,
+    include: {
+      location: true,
+      venue: true,
+      tenant: {
+        include: {
+          territoryAssignments: {
+            include: {
+              territory: { select: { name: true } },
+            },
+            take: 1,
+          },
+        },
+      },
+      registrations: { select: { id: true } },
+    },
+    orderBy: { startDate: 'asc' },
+  })
+
+  // 4. Load tag map for display names, then calculate distance and build venue groups
+  const tagMap = await getProgramTagMap()
+  const venueMap = new Map<string, VenueGroupData>()
+
+  for (const camp of camps) {
+    // Get coordinates from venue or location
+    const hasVenue = !!camp.venue
+    const hasLocation = !!camp.location
+    const lat = hasVenue && camp.venue!.latitude
+      ? Number(camp.venue!.latitude)
+      : (hasLocation && camp.location!.latitude ? Number(camp.location!.latitude) : null)
+    const lng = hasVenue && camp.venue!.longitude
+      ? Number(camp.venue!.longitude)
+      : (hasLocation && camp.location!.longitude ? Number(camp.location!.longitude) : null)
+
+    // Calculate distance
+    let distanceMiles: number | null = null
+    if (lat !== null && lng !== null) {
+      distanceMiles = Math.round(haversineDistanceMiles(zipInfo.latitude, zipInfo.longitude, lat, lng) * 10) / 10
+    }
+
+    // Skip camps beyond max distance (but keep those without coordinates)
+    if (distanceMiles !== null && distanceMiles > maxDistanceMiles) {
+      continue
+    }
+
+    // Build venue key
+    const venueKey = camp.venueId || camp.locationId || `no-venue-${camp.id}`
+    const venueName = hasVenue
+      ? camp.venue!.name
+      : (hasLocation ? camp.location!.name : 'Location TBD')
+    const territoryName = camp.tenant?.territoryAssignments?.[0]?.territory?.name || null
+
+    // Build program data
+    const registrationCount = camp.registrations?.length || 0
+    const maxCapacity = camp.capacity || 60
+    const spotsRemaining = Math.max(0, maxCapacity - registrationCount)
+    const now = new Date()
+    const isEarlyBird = camp.earlyBirdDeadline && new Date(camp.earlyBirdDeadline) > now
+    const currentPrice = isEarlyBird && camp.earlyBirdPriceCents ? camp.earlyBirdPriceCents : camp.priceCents
+
+    const program: CampProgramData = {
+      id: camp.id,
+      slug: camp.slug,
+      name: camp.name,
+      programType: camp.programType,
+      programTypeName: tagMap.get(camp.programType) || camp.programType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+      startDate: camp.startDate.toISOString(),
+      endDate: camp.endDate.toISOString(),
+      dailyStartTime: camp.startTime?.toISOString().slice(11, 16) || null,
+      dailyEndTime: camp.endTime?.toISOString().slice(11, 16) || null,
+      minAge: camp.minAge || 5,
+      maxAge: camp.maxAge || 14,
+      price: camp.priceCents,
+      currentPrice,
+      earlyBirdPrice: camp.earlyBirdPriceCents,
+      earlyBirdDeadline: camp.earlyBirdDeadline?.toISOString() || null,
+      sportsOffered: camp.sportsOffered || [],
+      spotsRemaining,
+      maxCapacity,
+      isFull: spotsRemaining <= 0,
+      status: camp.status,
+    }
+
+    if (venueMap.has(venueKey)) {
+      venueMap.get(venueKey)!.programs.push(program)
+    } else {
+      venueMap.set(venueKey, {
+        venueId: camp.venueId || camp.locationId || null,
+        venueName,
+        territoryName,
+        addressLine1: hasVenue ? camp.venue!.addressLine1 : (hasLocation ? camp.location!.address : null),
+        addressLine2: hasVenue ? (camp.venue!.addressLine2 || null) : null,
+        city: hasVenue ? camp.venue!.city : (hasLocation ? camp.location!.city : null),
+        state: hasVenue ? camp.venue!.state : (hasLocation ? camp.location!.state : null),
+        postalCode: hasVenue ? camp.venue!.postalCode : (hasLocation ? camp.location!.zip : null),
+        distanceMiles,
+        latitude: lat,
+        longitude: lng,
+        programs: [program],
+      })
+    }
+  }
+
+  // 5. Sort venue groups
+  let venues = Array.from(venueMap.values())
+
+  if (sortBy === 'distance') {
+    venues.sort((a, b) => {
+      // Null distances go to end
+      if (a.distanceMiles === null && b.distanceMiles === null) return 0
+      if (a.distanceMiles === null) return 1
+      if (b.distanceMiles === null) return -1
+      return a.distanceMiles - b.distanceMiles
+    })
+  } else {
+    // Sort by earliest start date in each venue group
+    venues.sort((a, b) => {
+      const aEarliest = a.programs.reduce((min, p) => p.startDate < min ? p.startDate : min, a.programs[0]?.startDate || '')
+      const bEarliest = b.programs.reduce((min, p) => p.startDate < min ? p.startDate : min, b.programs[0]?.startDate || '')
+      return aEarliest.localeCompare(bEarliest)
+    })
+  }
+
+  const totalPrograms = venues.reduce((sum, v) => sum + v.programs.length, 0)
+
+  return {
+    venues,
+    total: totalPrograms,
+    searchedLocation: {
+      zip: zipInfo.zip,
+      city: zipInfo.city,
+      state: zipInfo.state,
+      latitude: zipInfo.latitude,
+      longitude: zipInfo.longitude,
+    },
+  }
+}
+
+/**
+ * Fetch ALL active public camps grouped by venue (no zip/distance filter).
+ * Used for the "Show All Camps" toggle.
+ */
+export async function fetchAllPublicCamps(
+  filters: NearZipFilters = {},
+  options: { sortBy?: 'startDate' } = {}
+): Promise<{ venues: VenueGroupData[]; total: number }> {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  const where: Prisma.CampWhereInput = {
+    status: { in: ['published', 'registration_open'] },
+    startDate: { gt: today },
+    concludedAt: null,
+    AND: [
+      {
+        OR: [
+          { registrationClose: null },
+          { registrationClose: { gte: today } },
+        ],
+      },
+    ],
+  }
+
+  if (filters.programType) {
+    where.programType = filters.programType
+  }
+  if (filters.minAge !== undefined) {
+    where.maxAge = { gte: filters.minAge }
+  }
+  if (filters.maxAge !== undefined) {
+    where.minAge = { lte: filters.maxAge }
+  }
+  if (filters.search) {
+    ;(where.AND as Prisma.CampWhereInput[]).push({
+      OR: [
+        { name: { contains: filters.search, mode: 'insensitive' } },
+        { description: { contains: filters.search, mode: 'insensitive' } },
+        { venue: { name: { contains: filters.search, mode: 'insensitive' } } },
+        { venue: { city: { contains: filters.search, mode: 'insensitive' } } },
+      ],
+    })
+  }
+
+  const camps = await prisma.camp.findMany({
+    where,
+    include: {
+      location: true,
+      venue: true,
+      tenant: {
+        include: {
+          territoryAssignments: {
+            include: {
+              territory: { select: { name: true } },
+            },
+            take: 1,
+          },
+        },
+      },
+      registrations: { select: { id: true } },
+    },
+    orderBy: { startDate: 'asc' },
+  })
+
+  const tagMap = await getProgramTagMap()
+  const venueMap = new Map<string, VenueGroupData>()
+
+  for (const camp of camps) {
+    const hasVenue = !!camp.venue
+    const hasLocation = !!camp.location
+    const lat = hasVenue && camp.venue!.latitude
+      ? Number(camp.venue!.latitude)
+      : (hasLocation && camp.location!.latitude ? Number(camp.location!.latitude) : null)
+    const lng = hasVenue && camp.venue!.longitude
+      ? Number(camp.venue!.longitude)
+      : (hasLocation && camp.location!.longitude ? Number(camp.location!.longitude) : null)
+
+    const venueKey = camp.venueId || camp.locationId || `no-venue-${camp.id}`
+    const venueName = hasVenue
+      ? camp.venue!.name
+      : (hasLocation ? camp.location!.name : 'Location TBD')
+    const territoryName = camp.tenant?.territoryAssignments?.[0]?.territory?.name || null
+
+    const registrationCount = camp.registrations?.length || 0
+    const maxCapacity = camp.capacity || 60
+    const spotsRemaining = Math.max(0, maxCapacity - registrationCount)
+    const now = new Date()
+    const isEarlyBird = camp.earlyBirdDeadline && new Date(camp.earlyBirdDeadline) > now
+    const currentPrice = isEarlyBird && camp.earlyBirdPriceCents ? camp.earlyBirdPriceCents : camp.priceCents
+
+    const program: CampProgramData = {
+      id: camp.id,
+      slug: camp.slug,
+      name: camp.name,
+      programType: camp.programType,
+      programTypeName: tagMap.get(camp.programType) || camp.programType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+      startDate: camp.startDate.toISOString(),
+      endDate: camp.endDate.toISOString(),
+      dailyStartTime: camp.startTime?.toISOString().slice(11, 16) || null,
+      dailyEndTime: camp.endTime?.toISOString().slice(11, 16) || null,
+      minAge: camp.minAge || 5,
+      maxAge: camp.maxAge || 14,
+      price: camp.priceCents,
+      currentPrice,
+      earlyBirdPrice: camp.earlyBirdPriceCents,
+      earlyBirdDeadline: camp.earlyBirdDeadline?.toISOString() || null,
+      sportsOffered: camp.sportsOffered || [],
+      spotsRemaining,
+      maxCapacity,
+      isFull: spotsRemaining <= 0,
+      status: camp.status,
+    }
+
+    if (venueMap.has(venueKey)) {
+      venueMap.get(venueKey)!.programs.push(program)
+    } else {
+      venueMap.set(venueKey, {
+        venueId: camp.venueId || camp.locationId || null,
+        venueName,
+        territoryName,
+        addressLine1: hasVenue ? camp.venue!.addressLine1 : (hasLocation ? camp.location!.address : null),
+        addressLine2: hasVenue ? (camp.venue!.addressLine2 || null) : null,
+        city: hasVenue ? camp.venue!.city : (hasLocation ? camp.location!.city : null),
+        state: hasVenue ? camp.venue!.state : (hasLocation ? camp.location!.state : null),
+        postalCode: hasVenue ? camp.venue!.postalCode : (hasLocation ? camp.location!.zip : null),
+        distanceMiles: null,
+        latitude: lat,
+        longitude: lng,
+        programs: [program],
+      })
+    }
+  }
+
+  // Sort by earliest start date
+  const venues = Array.from(venueMap.values())
+  venues.sort((a, b) => {
+    const aEarliest = a.programs.reduce((min, p) => p.startDate < min ? p.startDate : min, a.programs[0]?.startDate || '')
+    const bEarliest = b.programs.reduce((min, p) => p.startDate < min ? p.startDate : min, b.programs[0]?.startDate || '')
+    return aEarliest.localeCompare(bEarliest)
+  })
+
+  const total = venues.reduce((sum, v) => sum + v.programs.length, 0)
+  return { venues, total }
 }
 
 // ============================================================================
@@ -787,16 +1161,9 @@ export function formatAgeRange(minAge: number, maxAge: number): string {
 }
 
 /**
- * Get program type display name
+ * Get program type display name from ProgramTag cache
  */
-export function getProgramTypeLabel(programType: string): string {
-  const labels: Record<string, string> = {
-    all_girls_sports_camp: 'All-Girls Sports Camp',
-    cit_program: 'CIT Program',
-    soccer_strength: 'Soccer & Strength',
-    basketball_intensive: 'Basketball Intensive',
-    volleyball_clinic: 'Volleyball Clinic',
-    specialty_camp: 'Specialty Camp',
-  }
-  return labels[programType] || programType
+export async function getProgramTypeLabel(programType: string): Promise<string> {
+  const tagMap = await getProgramTagMap()
+  return tagMap.get(programType) || programType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
 }

@@ -257,3 +257,57 @@ export interface FilterOptions {
   endDate?: string
   programType?: string
 }
+
+// ============================================================================
+// VENUE-GROUPED CAMP TYPES (for zip code search)
+// ============================================================================
+
+export interface CampProgramData {
+  id: string
+  slug: string
+  name: string
+  programType: string
+  programTypeName: string
+  startDate: string
+  endDate: string
+  dailyStartTime: string | null
+  dailyEndTime: string | null
+  minAge: number
+  maxAge: number
+  price: number // cents
+  currentPrice: number // cents
+  earlyBirdPrice: number | null
+  earlyBirdDeadline: string | null
+  sportsOffered: string[]
+  spotsRemaining: number
+  maxCapacity: number
+  isFull: boolean
+  status: string
+}
+
+export interface VenueGroupData {
+  venueId: string | null
+  venueName: string
+  territoryName: string | null
+  addressLine1: string | null
+  addressLine2: string | null
+  city: string | null
+  state: string | null
+  postalCode: string | null
+  distanceMiles: number | null
+  latitude: number | null
+  longitude: number | null
+  programs: CampProgramData[]
+}
+
+export interface NearZipSearchResult {
+  venues: VenueGroupData[]
+  total: number
+  searchedLocation: {
+    zip: string
+    city: string
+    state: string
+    latitude: number
+    longitude: number
+  }
+}

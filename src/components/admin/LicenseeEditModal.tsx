@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Loader2, AlertTriangle, User, Mail, Phone, MapPin, Building2 } from 'lucide-react'
+import { X, Loader2, AlertTriangle, User, Mail, Phone, MapPin, Building2, Globe } from 'lucide-react'
+import { COUNTRIES, getRegionsForCountry, getRegionLabelForCountry } from '@/lib/constants/locations'
 
 interface Licensee {
   id: string
@@ -12,6 +13,7 @@ interface Licensee {
   phone: string | null
   city: string | null
   state: string | null
+  country?: string | null
   created_at: string
   tenant_id?: string | null
   tenant_name?: string | null
@@ -25,59 +27,6 @@ interface LicenseeEditModalProps {
   onSave: (updatedLicensee: Licensee) => void
 }
 
-const US_STATES = [
-  { value: 'AL', label: 'Alabama' },
-  { value: 'AK', label: 'Alaska' },
-  { value: 'AZ', label: 'Arizona' },
-  { value: 'AR', label: 'Arkansas' },
-  { value: 'CA', label: 'California' },
-  { value: 'CO', label: 'Colorado' },
-  { value: 'CT', label: 'Connecticut' },
-  { value: 'DE', label: 'Delaware' },
-  { value: 'FL', label: 'Florida' },
-  { value: 'GA', label: 'Georgia' },
-  { value: 'HI', label: 'Hawaii' },
-  { value: 'ID', label: 'Idaho' },
-  { value: 'IL', label: 'Illinois' },
-  { value: 'IN', label: 'Indiana' },
-  { value: 'IA', label: 'Iowa' },
-  { value: 'KS', label: 'Kansas' },
-  { value: 'KY', label: 'Kentucky' },
-  { value: 'LA', label: 'Louisiana' },
-  { value: 'ME', label: 'Maine' },
-  { value: 'MD', label: 'Maryland' },
-  { value: 'MA', label: 'Massachusetts' },
-  { value: 'MI', label: 'Michigan' },
-  { value: 'MN', label: 'Minnesota' },
-  { value: 'MS', label: 'Mississippi' },
-  { value: 'MO', label: 'Missouri' },
-  { value: 'MT', label: 'Montana' },
-  { value: 'NE', label: 'Nebraska' },
-  { value: 'NV', label: 'Nevada' },
-  { value: 'NH', label: 'New Hampshire' },
-  { value: 'NJ', label: 'New Jersey' },
-  { value: 'NM', label: 'New Mexico' },
-  { value: 'NY', label: 'New York' },
-  { value: 'NC', label: 'North Carolina' },
-  { value: 'ND', label: 'North Dakota' },
-  { value: 'OH', label: 'Ohio' },
-  { value: 'OK', label: 'Oklahoma' },
-  { value: 'OR', label: 'Oregon' },
-  { value: 'PA', label: 'Pennsylvania' },
-  { value: 'RI', label: 'Rhode Island' },
-  { value: 'SC', label: 'South Carolina' },
-  { value: 'SD', label: 'South Dakota' },
-  { value: 'TN', label: 'Tennessee' },
-  { value: 'TX', label: 'Texas' },
-  { value: 'UT', label: 'Utah' },
-  { value: 'VT', label: 'Vermont' },
-  { value: 'VA', label: 'Virginia' },
-  { value: 'WA', label: 'Washington' },
-  { value: 'WV', label: 'West Virginia' },
-  { value: 'WI', label: 'Wisconsin' },
-  { value: 'WY', label: 'Wyoming' },
-]
-
 export function LicenseeEditModal({ licensee, onClose, onSave }: LicenseeEditModalProps) {
   const [firstName, setFirstName] = useState(licensee.first_name || '')
   const [lastName, setLastName] = useState(licensee.last_name || '')
@@ -85,6 +34,7 @@ export function LicenseeEditModal({ licensee, onClose, onSave }: LicenseeEditMod
   const [phone, setPhone] = useState(licensee.phone || '')
   const [city, setCity] = useState(licensee.city || '')
   const [state, setState] = useState(licensee.state || '')
+  const [country, setCountry] = useState(licensee.country || 'US')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [mounted, setMounted] = useState(false)
@@ -138,6 +88,7 @@ export function LicenseeEditModal({ licensee, onClose, onSave }: LicenseeEditMod
           phone: phone.trim() || null,
           city: city.trim() || null,
           state: state || null,
+          country: country || null,
         }),
       })
 
@@ -155,6 +106,7 @@ export function LicenseeEditModal({ licensee, onClose, onSave }: LicenseeEditMod
         phone: phone.trim() || null,
         city: city.trim() || null,
         state: state || null,
+        country: country || null,
       }
 
       onSave(updatedLicensee)
@@ -311,7 +263,29 @@ export function LicenseeEditModal({ licensee, onClose, onSave }: LicenseeEditMod
               </div>
             </div>
 
-            {/* Location */}
+            {/* Country */}
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-white/60 mb-2">
+                <Globe className="h-3 w-3 inline mr-1" />
+                Country
+              </label>
+              <select
+                value={country}
+                onChange={(e) => {
+                  setCountry(e.target.value)
+                  setState('') // Clear state when country changes
+                }}
+                className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-neon focus:outline-none appearance-none"
+              >
+                {COUNTRIES.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* City & State */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-white/60 mb-2">
@@ -330,17 +304,17 @@ export function LicenseeEditModal({ licensee, onClose, onSave }: LicenseeEditMod
               </div>
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-white/60 mb-2">
-                  State
+                  {getRegionLabelForCountry(country)}
                 </label>
                 <select
                   value={state}
                   onChange={(e) => setState(e.target.value)}
                   className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-neon focus:outline-none appearance-none"
                 >
-                  <option value="">Select state</option>
-                  {US_STATES.map((s) => (
-                    <option key={s.value} value={s.value}>
-                      {s.label}
+                  <option value="">Select {getRegionLabelForCountry(country).toLowerCase()}</option>
+                  {getRegionsForCountry(country).map((r) => (
+                    <option key={r.code} value={r.code}>
+                      {r.name}
                     </option>
                   ))}
                 </select>

@@ -51,7 +51,7 @@ export function HeroSection() {
             {/* Badge */}
             <div className="inline-flex items-center gap-3 bg-white/5 border border-neon/30 px-5 py-2.5 text-sm font-bold uppercase tracking-wider text-neon mb-8 backdrop-blur-sm">
               <Zap className="h-4 w-4" />
-              Summer 2025 Registration Open
+              Summer 2026 Registration Open
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-neon opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-neon"></span>

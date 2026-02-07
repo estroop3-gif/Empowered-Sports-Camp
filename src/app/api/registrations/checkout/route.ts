@@ -343,6 +343,34 @@ export async function POST(request: NextRequest) {
         })
       }
 
+      // Create authorized pickup records
+      if (camperData.authorizedPickups?.length > 0) {
+        try {
+          for (const pickup of camperData.authorizedPickups) {
+            if (pickup.name && pickup.relationship) {
+              const existing = await prisma.authorizedPickup.findFirst({
+                where: { athleteId: athlete.id, name: pickup.name, isActive: true },
+              })
+              if (!existing) {
+                await prisma.authorizedPickup.create({
+                  data: {
+                    athleteId: athlete.id,
+                    parentProfileId: parentProfile.id,
+                    name: pickup.name,
+                    relationship: pickup.relationship,
+                    phone: pickup.phone || null,
+                    photoIdOnFile: false,
+                  },
+                })
+              }
+            }
+          }
+        } catch (pickupError) {
+          console.error('[Checkout] Failed to create authorized pickups:', pickupError)
+          // Non-blocking: don't fail checkout for pickup creation errors
+        }
+      }
+
       // Create registration
       const { data: regData, error: regError } = await createRegistration({
         tenantId: effectiveTenantId,

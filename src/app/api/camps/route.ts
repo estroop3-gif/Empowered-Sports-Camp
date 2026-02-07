@@ -15,6 +15,8 @@ import {
   fetchUpcomingCampsForDirector,
   fetchActiveCamps,
   fetchCampsForDirector,
+  fetchCampsNearZip,
+  fetchAllPublicCamps,
 } from '@/lib/services/camps'
 
 export async function GET(request: NextRequest) {
@@ -96,9 +98,20 @@ export async function GET(request: NextRequest) {
       }
 
       case 'programTypes': {
-        // Returns string[] directly
+        // Returns {slug, name}[] from ProgramTag table
         const data = await fetchProgramTypes()
         return NextResponse.json({ data })
+      }
+
+      case 'allCamps': {
+        const filters = {
+          programType: programType || undefined,
+          minAge: minAge ? parseInt(minAge) : undefined,
+          maxAge: maxAge ? parseInt(maxAge) : undefined,
+          search: search || undefined,
+        }
+        const result = await fetchAllPublicCamps(filters)
+        return NextResponse.json({ data: result })
       }
 
       case 'upcomingForDirector': {
@@ -122,10 +135,28 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ data })
       }
 
+      case 'nearZip': {
+        const zip = request.nextUrl.searchParams.get('zip')?.trim()
+        if (!zip || zip.length < 3 || zip.length > 10) {
+          return NextResponse.json({ error: 'Valid postal code required' }, { status: 400 })
+        }
+        const sortBy = (request.nextUrl.searchParams.get('sortBy') as 'distance' | 'startDate') || 'distance'
+        const filters = {
+          programType: programType || undefined,
+          minAge: minAge ? parseInt(minAge) : undefined,
+          maxAge: maxAge ? parseInt(maxAge) : undefined,
+          search: search || undefined,
+        }
+        const result = await fetchCampsNearZip(zip, filters, { sortBy })
+        return NextResponse.json({ data: result })
+      }
+
       default:
         return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
     }
   } catch (error) {
-    return NextResponse.json({ error: 'Server error' }, { status: 500 })
+    console.error('[Camps API] Error:', error)
+    const message = error instanceof Error ? error.message : 'Server error'
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }

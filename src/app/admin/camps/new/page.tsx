@@ -30,6 +30,7 @@ import {
   FileText,
 } from 'lucide-react'
 import { useUpload, STORAGE_FOLDERS } from '@/lib/storage/use-upload'
+import { AddProgramTypeModal } from '@/components/admin/camps/AddProgramTypeModal'
 import Image from 'next/image'
 
 const US_STATES = [
@@ -345,6 +346,7 @@ interface CampFormData {
   slug: string
   description: string
   sport: string
+  program_type: string
   location_id: string | null
   venue_id: string | null
   tenant_id: string
@@ -361,6 +363,11 @@ interface CampFormData {
   status: 'draft' | 'published' | 'open' | 'closed'
   featured: boolean
   image_url: string | null
+}
+
+interface ProgramTagOption {
+  slug: string
+  name: string
 }
 
 interface Tenant {
@@ -437,9 +444,13 @@ export default function AdminCreateCampPage() {
   const [venues, setVenues] = useState<Venue[]>([])
   const [selectedTerritoryId, setSelectedTerritoryId] = useState<string>('')
 
+  // Program tag options
+  const [programTagOptions, setProgramTagOptions] = useState<ProgramTagOption[]>([])
+
   // Modal state
   const [showTerritoryModal, setShowTerritoryModal] = useState(false)
   const [showVenueModal, setShowVenueModal] = useState(false)
+  const [showAddProgramTypeModal, setShowAddProgramTypeModal] = useState(false)
 
   // Venue search dropdown state
   const [venueSearchQuery, setVenueSearchQuery] = useState('')
@@ -456,6 +467,7 @@ export default function AdminCreateCampPage() {
     slug: '',
     description: '',
     sport: 'Multi-Sport',
+    program_type: 'all_girls_sports_camp',
     location_id: null,
     venue_id: null,
     tenant_id: '',
@@ -636,6 +648,12 @@ export default function AdminCreateCampPage() {
       const roleData = await roleResponse.json()
 
       setUserRole(roleData.role)
+
+      // Fetch program tag options for all roles
+      fetch('/api/program-tags')
+        .then(r => r.ok ? r.json() : null)
+        .then(json => { if (json?.data) setProgramTagOptions(json.data) })
+        .catch(() => {})
 
       if (roleData.role === 'hq_admin') {
         // Fetch territories for HQ admin
@@ -849,6 +867,14 @@ export default function AdminCreateCampPage() {
         preselectedTenantId={formData.tenant_id}
         territories={territories}
       />
+      <AddProgramTypeModal
+        open={showAddProgramTypeModal}
+        onClose={() => setShowAddProgramTypeModal(false)}
+        onCreated={(tag) => {
+          setProgramTagOptions(prev => [...prev, tag])
+          setFormData(prev => ({ ...prev, program_type: tag.slug }))
+        }}
+      />
 
       <div className="mb-6">
         <Link
@@ -961,7 +987,36 @@ export default function AdminCreateCampPage() {
 
                 <div>
                   <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
-                    Sport / Program Type
+                    Program Type
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={formData.program_type}
+                      onChange={(e) => setFormData(prev => ({ ...prev, program_type: e.target.value }))}
+                      className="flex-1 px-4 py-3 bg-black border border-white/20 text-white focus:border-neon focus:outline-none"
+                    >
+                      {programTagOptions.length > 0 ? (
+                        programTagOptions.map(tag => (
+                          <option key={tag.slug} value={tag.slug}>{tag.name}</option>
+                        ))
+                      ) : (
+                        <option value="all_girls_sports_camp">All-Girls Sports Camp</option>
+                      )}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => setShowAddProgramTypeModal(true)}
+                      className="px-3 py-3 bg-neon/10 border border-neon/30 text-neon hover:bg-neon/20 transition-colors shrink-0"
+                      title="Add new program type"
+                    >
+                      <Plus className="h-5 w-5" />
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
+                    Sport(s) Offered
                   </label>
                   <select
                     value={formData.sport}

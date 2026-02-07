@@ -46,6 +46,9 @@ export interface AdminAthlete {
     phone: string | null
     city: string | null
     state: string | null
+    emergency_contact_name: string | null
+    emergency_contact_phone: string | null
+    emergency_contact_relationship: string | null
   }
   tenant?: {
     id: string
@@ -149,6 +152,9 @@ function transformAthlete(athlete: {
     phone: string | null
     city: string | null
     state: string | null
+    emergencyContactName: string | null
+    emergencyContactPhone: string | null
+    emergencyContactRelationship: string | null
   }
   tenant?: {
     id: string
@@ -193,6 +199,9 @@ function transformAthlete(athlete: {
       phone: athlete.parent.phone,
       city: athlete.parent.city,
       state: athlete.parent.state,
+      emergency_contact_name: athlete.parent.emergencyContactName || null,
+      emergency_contact_phone: athlete.parent.emergencyContactPhone || null,
+      emergency_contact_relationship: athlete.parent.emergencyContactRelationship || null,
     } : undefined,
     tenant: athlete.tenant ? {
       id: athlete.tenant.id,
@@ -681,6 +690,9 @@ export async function getAthleteById(params: {
             phone: true,
             city: true,
             state: true,
+            emergencyContactName: true,
+            emergencyContactPhone: true,
+            emergencyContactRelationship: true,
           },
         },
         tenant: {
@@ -881,6 +893,9 @@ export async function updateAthleteAdmin(params: {
             phone: true,
             city: true,
             state: true,
+            emergencyContactName: true,
+            emergencyContactPhone: true,
+            emergencyContactRelationship: true,
           },
         },
         tenant: {
@@ -1107,6 +1122,93 @@ export async function getAvailableGrades(): Promise<{ data: string[] | null; err
     }
   } catch (error) {
     console.error('[Athletes Admin] Failed to get grades:', error)
+    return { data: null, error: error as Error }
+  }
+}
+
+// =============================================================================
+// Squad Membership Types & Functions
+// =============================================================================
+
+export interface AthleteSquadMembership {
+  squadId: string
+  squadLabel: string
+  campId: string
+  campName: string
+  campStartDate: string
+  campEndDate: string
+  status: string
+  createdAt: string
+  otherMembers: Array<{
+    athleteId: string
+    athleteName: string
+    status: string
+  }>
+}
+
+/**
+ * Get squad memberships for an athlete across all camps
+ */
+export async function getAthleteSquadMemberships(params: {
+  athleteId: string
+}): Promise<{ data: AthleteSquadMembership[] | null; error: Error | null }> {
+  try {
+    const { athleteId } = params
+
+    // Get all squad memberships for this athlete
+    const memberships = await prisma.campFriendSquadMember.findMany({
+      where: { athleteId },
+      include: {
+        squad: {
+          include: {
+            camp: {
+              select: {
+                id: true,
+                name: true,
+                startDate: true,
+                endDate: true,
+              },
+            },
+            members: {
+              include: {
+                athlete: {
+                  select: {
+                    id: true,
+                    firstName: true,
+                    lastName: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    })
+
+    const result: AthleteSquadMembership[] = memberships.map((m) => ({
+      squadId: m.squadId,
+      squadLabel: m.squad.label,
+      campId: m.squad.campId,
+      campName: m.squad.camp.name,
+      campStartDate: m.squad.camp.startDate.toISOString().split('T')[0],
+      campEndDate: m.squad.camp.endDate.toISOString().split('T')[0],
+      status: m.status,
+      createdAt: m.createdAt.toISOString(),
+      otherMembers: m.squad.members
+        .filter((member) => member.athleteId !== athleteId)
+        .map((member) => ({
+          athleteId: member.athleteId,
+          athleteName: `${member.athlete.firstName} ${member.athlete.lastName}`,
+          status: member.status,
+        })),
+    }))
+
+    return { data: result, error: null }
+  } catch (error) {
+    console.error('[Athletes Admin] Failed to get athlete squad memberships:', error)
     return { data: null, error: error as Error }
   }
 }

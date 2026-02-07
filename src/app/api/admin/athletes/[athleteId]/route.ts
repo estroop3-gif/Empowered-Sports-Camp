@@ -15,6 +15,7 @@ import {
   archiveAthlete,
   reactivateAthlete,
   deleteAthletePermanently,
+  getAthleteSquadMemberships,
 } from '@/lib/services/athletes-admin'
 
 interface RouteParams {
@@ -35,6 +36,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const { athleteId } = await params
     const searchParams = request.nextUrl.searchParams
     const includeRegistrations = searchParams.get('includeRegistrations') === 'true'
+    const includeSquads = searchParams.get('includeSquads') === 'true'
 
     const { data: athlete, error } = await getAthleteById({
       athleteId,
@@ -58,9 +60,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       registrations = regs
     }
 
+    let squadMemberships = null
+    if (includeSquads) {
+      const { data: squads } = await getAthleteSquadMemberships({
+        athleteId,
+      })
+      squadMemberships = squads
+    }
+
     return NextResponse.json({
       athlete,
       registrations,
+      squadMemberships,
     })
   } catch (error) {
     console.error('[API] GET /api/admin/athletes/[id] error:', error)
