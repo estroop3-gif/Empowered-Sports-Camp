@@ -698,7 +698,7 @@ export default function RoyaltyInvoiceDetailPage({
                 <div>
                   <p className="text-sm font-medium text-white">{invoice.camp.name}</p>
                   <p className="text-xs text-white/40">
-                    {invoice.camp.programTypeName || formatProgramType(invoice.camp.programType)}
+                    {formatProgramType(invoice.camp.programType)}
                   </p>
                 </div>
                 <div className="flex items-start gap-3">
