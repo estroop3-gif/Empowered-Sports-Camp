@@ -52,6 +52,13 @@ interface AdminCamp {
     city: string | null
     state: string | null
   } | null
+  venue?: {
+    id: string
+    name: string
+    short_name: string | null
+    city: string | null
+    state: string | null
+  } | null
   tenant?: {
     id: string
     name: string
@@ -166,7 +173,8 @@ export default function AdminCampsPage() {
     const q = searchQuery.toLowerCase()
     return (
       camp.name.toLowerCase().includes(q) ||
-      camp.location?.city?.toLowerCase().includes(q) ||
+      camp.venue?.name?.toLowerCase().includes(q) ||
+      camp.venue?.city?.toLowerCase().includes(q) ||
       camp.tenant?.name?.toLowerCase().includes(q)
     )
   })
@@ -254,7 +262,7 @@ export default function AdminCampsPage() {
                   <th className="text-left py-4 px-4 text-xs font-bold uppercase tracking-wider text-white/50">Camp</th>
                   <th className="text-left py-4 px-4 text-xs font-bold uppercase tracking-wider text-white/50">Territory</th>
                   <th className="text-left py-4 px-4 text-xs font-bold uppercase tracking-wider text-white/50">Dates</th>
-                  <th className="text-left py-4 px-4 text-xs font-bold uppercase tracking-wider text-white/50">Location</th>
+                  <th className="text-left py-4 px-4 text-xs font-bold uppercase tracking-wider text-white/50">Venue</th>
                   <th className="text-right py-4 px-4 text-xs font-bold uppercase tracking-wider text-white/50">Price</th>
                   <th className="text-center py-4 px-4 text-xs font-bold uppercase tracking-wider text-white/50">Capacity</th>
                   <th className="text-center py-4 px-4 text-xs font-bold uppercase tracking-wider text-white/50">Status</th>
@@ -279,9 +287,9 @@ export default function AdminCampsPage() {
                     <td className="py-4 px-4">
                       <div className="flex items-center gap-2 text-white/70">
                         <MapPin className="h-4 w-4 text-white/40" />
-                        {camp.location
-                          ? [camp.location.name, camp.location.city, camp.location.state].filter(Boolean).join(', ') || 'Location set'
-                          : 'No location'}
+                        {camp.venue
+                          ? [camp.venue.name, camp.venue.city, camp.venue.state].filter(Boolean).join(', ')
+                          : 'No venue'}
                       </div>
                     </td>
                     <td className="py-4 px-4 text-right">
