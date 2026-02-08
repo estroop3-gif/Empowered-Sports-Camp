@@ -111,9 +111,9 @@ export async function POST(request: NextRequest) {
     }
 
 
-    // Get current registration count
+    // Get current registration count (exclude waitlisted and cancelled)
     const currentCount = await prisma.registration.count({
-      where: { campId, status: { not: 'cancelled' } },
+      where: { campId, status: { in: ['confirmed', 'pending'] } },
     })
 
     if (camp.capacity && currentCount + campers.length > camp.capacity) {

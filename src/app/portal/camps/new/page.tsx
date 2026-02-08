@@ -31,7 +31,7 @@ interface CampFormData {
   name: string
   slug: string
   description: string
-  sport: string
+  sports: string[]
   location_id: string | null
   venue_id: string | null
   tenant_id: string
@@ -76,19 +76,6 @@ interface Venue {
   state: string | null
   tenant_id: string | null
 }
-
-const SPORTS = [
-  'Multi-Sport',
-  'Basketball',
-  'Soccer',
-  'Volleyball',
-  'Flag Football',
-  'Lacrosse',
-  'Tennis',
-  'Softball',
-  'Track & Field',
-  'Swimming',
-]
 
 const STATUS_OPTIONS = [
   { value: 'draft', label: 'Draft', description: 'Not visible to public' },
@@ -700,12 +687,13 @@ export default function CreateCampPage() {
   // Modal state
   const [showTerritoryModal, setShowTerritoryModal] = useState(false)
   const [showVenueModal, setShowVenueModal] = useState(false)
+  const [sportTagOptions, setSportTagOptions] = useState<string[]>([])
 
   const [formData, setFormData] = useState<CampFormData>({
     name: '',
     slug: '',
     description: '',
-    sport: 'Multi-Sport',
+    sports: [],
     location_id: null,
     venue_id: null,
     tenant_id: '',
@@ -830,6 +818,12 @@ export default function CreateCampPage() {
 
       setUserRole(roleData.role)
       setUserTenantId(roleData.tenant_id)
+
+      // Fetch sport tag options
+      fetch('/api/sport-tags')
+        .then(r => r.ok ? r.json() : null)
+        .then(json => { if (json?.data) setSportTagOptions(json.data.map((t: { name: string }) => t.name)) })
+        .catch(() => {})
 
       if (roleData.role === 'hq_admin') {
         const tenantsResponse = await fetch('/api/admin/camps/tenants')
@@ -1092,17 +1086,32 @@ export default function CreateCampPage() {
 
                 <div>
                   <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
-                    Sport / Program Type
+                    Sport(s) Offered
                   </label>
-                  <select
-                    value={formData.sport}
-                    onChange={(e) => setFormData(prev => ({ ...prev, sport: e.target.value }))}
-                    className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-neon focus:outline-none"
-                  >
-                    {SPORTS.map(sport => (
-                      <option key={sport} value={sport}>{sport}</option>
-                    ))}
-                  </select>
+                  <div className="flex flex-wrap gap-2">
+                    {sportTagOptions.map(sport => {
+                      const selected = formData.sports.includes(sport)
+                      return (
+                        <button
+                          key={sport}
+                          type="button"
+                          onClick={() => setFormData(prev => ({
+                            ...prev,
+                            sports: selected
+                              ? prev.sports.filter(s => s !== sport)
+                              : [...prev.sports, sport],
+                          }))}
+                          className={`px-4 py-2 text-sm font-bold uppercase tracking-wider border transition-colors ${
+                            selected
+                              ? 'bg-neon/20 border-neon text-neon'
+                              : 'bg-black border-white/20 text-white/50 hover:border-white/40 hover:text-white'
+                          }`}
+                        >
+                          {sport}
+                        </button>
+                      )
+                    })}
+                  </div>
                 </div>
 
                 <div>

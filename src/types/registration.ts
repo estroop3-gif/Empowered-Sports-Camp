@@ -122,9 +122,10 @@ export interface CheckoutState {
   promoCode: AppliedPromoCode | null
   totals: CheckoutTotals
   squadId: string | null // "Build Her Squad" feature
+  isWaitlistMode: boolean
 }
 
-export type CheckoutStep = 'camp' | 'campers' | 'squad' | 'addons' | 'waivers' | 'account' | 'payment' | 'confirmation'
+export type CheckoutStep = 'camp' | 'campers' | 'squad' | 'addons' | 'waivers' | 'account' | 'payment' | 'confirmation' | 'waitlist-confirm'
 
 export interface PickupPersonInput {
   name: string

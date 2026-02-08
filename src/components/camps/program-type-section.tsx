@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { Calendar, Users, Clock, MapPin, Navigation } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { formatDateRange, formatTime12h } from '@/lib/utils'
 import type { ProgramTypeSection, CampListingItem } from '@/types'
 
 const SECTION_GRADIENTS = [
@@ -20,25 +21,6 @@ function formatPrice(cents: number): string {
   }).format(cents / 100)
 }
 
-function formatDateRange(startDate: string, endDate: string): string {
-  const start = new Date(startDate)
-  const end = new Date(endDate)
-  const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' }
-  if (start.getMonth() === end.getMonth()) {
-    return `${start.toLocaleDateString('en-US', { month: 'short' })} ${start.getDate()}-${end.getDate()}, ${start.getFullYear()}`
-  }
-  return `${start.toLocaleDateString('en-US', opts)} - ${end.toLocaleDateString('en-US', opts)}, ${start.getFullYear()}`
-}
-
-function formatTime12h(time24: string): string {
-  const [hStr, mStr] = time24.split(':')
-  let h = parseInt(hStr, 10)
-  const m = mStr || '00'
-  const ampm = h >= 12 ? 'PM' : 'AM'
-  if (h > 12) h -= 12
-  if (h === 0) h = 12
-  return m === '00' ? `${h}${ampm}` : `${h}:${m}${ampm}`
-}
 
 function BadgePill({ flag }: { badge?: CampListingItem['badge']; flag?: string | null }) {
   if (!flag) return null
@@ -174,7 +156,7 @@ function CampRow({ camp }: { camp: CampListingItem }) {
 
           <div>
             {camp.isFull ? (
-              <Badge variant="error" size="sm">Sold Out</Badge>
+              <Badge variant="warning" size="sm">Waitlist Open</Badge>
             ) : camp.spotsRemaining <= 10 ? (
               <Badge variant="warning" size="sm">{camp.spotsRemaining} spots left</Badge>
             ) : (
@@ -186,11 +168,11 @@ function CampRow({ camp }: { camp: CampListingItem }) {
             <Link href={`/camps/${camp.slug}`}>
               <Button variant="ghost" size="sm">Details</Button>
             </Link>
-            {!camp.isFull && (
-              <Link href={`/camps/${camp.slug}`}>
-                <Button variant="neon" size="sm">Register</Button>
-              </Link>
-            )}
+            <Link href={`/register/${camp.slug}`}>
+              <Button variant={camp.isFull ? 'outline-neon' : 'neon'} size="sm">
+                {camp.isFull ? 'Waitlist' : 'Register'}
+              </Button>
+            </Link>
           </div>
         </div>
       </div>

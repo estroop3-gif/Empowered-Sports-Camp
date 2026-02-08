@@ -14,6 +14,7 @@
  */
 
 import { useState, useEffect, useMemo } from 'react'
+import { parseDateSafe } from '@/lib/utils'
 import type { RosterCamperDetail } from '@/lib/services/roster'
 
 type TabKey = 'overview' | 'contact' | 'sports' | 'internal'
@@ -448,7 +449,7 @@ function OverviewTab({
                 className="flex items-center justify-between text-sm py-2 border-b border-gray-100 last:border-0"
               >
                 <span className="text-gray-600">
-                  Day {record.dayNumber} - {new Date(record.date).toLocaleDateString()}
+                  Day {record.dayNumber} - {parseDateSafe(record.date).toLocaleDateString()}
                 </span>
                 <StatusBadge status={record.status} />
               </div>

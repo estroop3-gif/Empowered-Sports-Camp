@@ -11,7 +11,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useAuth } from '@/lib/auth/context'
 import { PortalCard } from '@/components/portal'
-import { cn } from '@/lib/utils'
+import { cn, parseDateSafe } from '@/lib/utils'
 import {
   Building2,
   DollarSign,
@@ -513,7 +513,7 @@ function ActiveCampsCard({
                   <div className="flex flex-wrap items-center gap-3 text-xs text-white/50">
                     <span className="flex items-center gap-1">
                       <Calendar className="h-3 w-3" />
-                      {new Date(camp.start_date).toLocaleDateString()}
+                      {parseDateSafe(camp.start_date).toLocaleDateString()}
                     </span>
                     {camp.location_city && (
                       <span className="flex items-center gap-1">

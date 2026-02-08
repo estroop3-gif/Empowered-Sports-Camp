@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { parseDateSafe } from '@/lib/utils'
 import { AdminLayout, PageHeader, ContentCard } from '@/components/admin/admin-layout'
 import { CampCreateStepper, getStepsForCurrentStep } from '@/components/admin/camps/CampCreateStepper'
 import {
@@ -500,7 +501,7 @@ export default function CampCreateSchedulePage() {
                   <div className="flex justify-between">
                     <span className="text-white/50">Dates</span>
                     <span className="text-white">
-                      {new Date(formData.start_date).toLocaleDateString()} - {new Date(formData.end_date).toLocaleDateString()}
+                      {parseDateSafe(formData.start_date).toLocaleDateString()} - {parseDateSafe(formData.end_date).toLocaleDateString()}
                     </span>
                   </div>
                   <div className="flex justify-between">

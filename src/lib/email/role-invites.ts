@@ -1,10 +1,10 @@
 /**
  * Role Invite Email Templates
  *
- * Sends branded invite emails for all role types using AWS SES.
+ * Sends branded invite emails for all role types using Resend.
  */
 
-import { sendEmail } from './ses-client'
+import { sendEmail, logEmail } from './resend-client'
 import { UserRole } from '@/generated/prisma'
 
 // Role display names and descriptions
@@ -187,16 +187,26 @@ export async function sendRoleInviteEmail(
   options: RoleInviteEmailOptions
 ): Promise<EmailResult> {
   const roleInfo = ROLE_INFO[options.targetRole] || { name: options.targetRole }
+  const subject = `You're Invited to Join Empowered Sports Camp as ${roleInfo.name}`
 
   const result = await sendEmail({
     to: options.to,
-    subject: `You're Invited to Join Empowered Sports Camp as ${roleInfo.name}`,
+    subject,
     html: generateRoleInviteHtml(options),
     text: generateRoleInviteText(options),
   })
 
+  await logEmail({
+    toEmail: options.to,
+    subject,
+    emailType: 'system_alert',
+    status: result.success ? 'sent' : 'failed',
+    providerMessageId: result.messageId,
+    errorMessage: result.error,
+  })
+
   if (!result.success) {
-    console.error('SES error:', result.error)
+    console.error('Email send error:', result.error)
   }
 
   return result

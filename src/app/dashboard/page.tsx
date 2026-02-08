@@ -23,7 +23,7 @@ import {
   X,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
+import { cn, parseDateSafe } from '@/lib/utils'
 import { LogoutButton } from '@/components/layout/user-menu'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth/context'
@@ -219,8 +219,8 @@ export default function ParentDashboard() {
   )
 
   const formatDateRange = (startDate: string, endDate: string) => {
-    const start = new Date(startDate)
-    const end = new Date(endDate)
+    const start = parseDateSafe(startDate)
+    const end = parseDateSafe(endDate)
     const options: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' }
     const yearOptions: Intl.DateTimeFormatOptions = { year: 'numeric' }
     return `${start.toLocaleDateString('en-US', options)}-${end.toLocaleDateString('en-US', options)}, ${end.toLocaleDateString('en-US', yearOptions)}`

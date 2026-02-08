@@ -1,11 +1,11 @@
 /**
  * Incentive Email Helper
  *
- * Sends compensation report emails using AWS SES.
+ * Sends compensation report emails using Resend.
  */
 
 import prisma from '@/lib/db/client'
-import { sendEmail, isEmailConfigured } from './ses-client'
+import { sendEmail, isEmailConfigured, logEmail } from './resend-client'
 import type { CompensationSummary } from '@/lib/services/incentives'
 
 // HQ email for licensor notifications
@@ -71,7 +71,7 @@ export async function sendCompensationReportEmail(params: {
       }
     }
 
-    // Send via AWS SES
+    // Send via Resend
     const result = await sendEmail({
       to: recipients,
       cc: summary.staff.email,
@@ -79,8 +79,21 @@ export async function sendCompensationReportEmail(params: {
       html: emailHtml,
     })
 
+    // Log each recipient
+    for (const email of recipients) {
+      await logEmail({
+        toEmail: email,
+        subject,
+        emailType: 'system_alert',
+        tenantId,
+        status: result.success ? 'sent' : 'failed',
+        providerMessageId: result.messageId,
+        errorMessage: result.error,
+      })
+    }
+
     if (!result.success) {
-      console.error('[Email] SES error:', result.error)
+      console.error('[Email] Resend error:', result.error)
       return { data: null, error: new Error(result.error) }
     }
 

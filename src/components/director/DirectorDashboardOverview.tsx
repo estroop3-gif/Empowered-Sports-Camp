@@ -16,7 +16,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { PortalCard } from '@/components/portal'
-import { cn } from '@/lib/utils'
+import { cn, parseDateSafe, formatTime12h } from '@/lib/utils'
 import {
   LayoutDashboard,
   Calendar,
@@ -313,7 +313,7 @@ function TodayCampItem({
             {camp.start_time && camp.end_time && (
               <span className="flex items-center gap-1">
                 <Clock className="h-3 w-3" />
-                {camp.start_time} - {camp.end_time}
+                {formatTime12h(camp.start_time)} - {formatTime12h(camp.end_time)}
               </span>
             )}
             <span className="text-white/40">
@@ -415,10 +415,10 @@ function UpcomingCampsCard({
               <div className="flex items-center gap-3 text-sm text-white/50">
                 <span className="flex items-center gap-1">
                   <Calendar className="h-3 w-3" />
-                  {new Date(camp.start_date).toLocaleDateString('en-US', {
+                  {parseDateSafe(camp.start_date).toLocaleDateString('en-US', {
                     month: 'short',
                     day: 'numeric',
-                  })} - {new Date(camp.end_date).toLocaleDateString('en-US', {
+                  })} - {parseDateSafe(camp.end_date).toLocaleDateString('en-US', {
                     month: 'short',
                     day: 'numeric',
                   })}

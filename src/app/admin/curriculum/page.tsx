@@ -16,7 +16,7 @@ import {
   DifficultyLevel,
   BlockCategory,
 } from '@/lib/services/curriculum'
-import { cn } from '@/lib/utils'
+import { cn, parseDateSafe } from '@/lib/utils'
 import {
   BookOpen,
   Blocks,
@@ -82,7 +82,7 @@ export default function CurriculumPage() {
   const [camps, setCamps] = useState<Array<{
     id: string
     name: string
-    sport: string
+    sports: string[]
     start_date: string
     end_date: string
     tenant_id: string | null
@@ -751,7 +751,7 @@ function AssignmentsTab({
   camps: Array<{
     id: string
     name: string
-    sport: string
+    sports: string[]
     start_date: string
     end_date: string
     tenant_id: string | null
@@ -859,7 +859,7 @@ function AssignmentsTab({
               </thead>
               <tbody className="divide-y divide-white/5">
                 {filteredCamps.map(camp => {
-                  const sportLabel = SPORTS.find(s => s.value === camp.sport)?.label || camp.sport
+                  const sportLabel = camp.sports?.length ? camp.sports.join(', ') : 'No sport'
                   return (
                     <tr key={camp.id} className="hover:bg-white/5 transition-colors">
                       <td className="px-4 py-4">
@@ -870,7 +870,7 @@ function AssignmentsTab({
                       </td>
                       <td className="px-4 py-4">
                         <span className="text-white/60 text-sm">
-                          {new Date(camp.start_date).toLocaleDateString()} - {new Date(camp.end_date).toLocaleDateString()}
+                          {parseDateSafe(camp.start_date).toLocaleDateString()} - {parseDateSafe(camp.end_date).toLocaleDateString()}
                         </span>
                       </td>
                       <td className="px-4 py-4">

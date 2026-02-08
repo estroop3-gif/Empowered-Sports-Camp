@@ -6,7 +6,7 @@
  * Create a new venue for the licensee's tenant.
  */
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { PortalPageHeader, PortalCard } from '@/components/portal'
@@ -41,28 +41,18 @@ const INDOOR_OUTDOOR_OPTIONS = [
   { value: 'both', label: 'Both' },
 ]
 
-const AVAILABLE_SPORTS = [
-  'Soccer',
-  'Basketball',
-  'Football',
-  'Baseball',
-  'Softball',
-  'Volleyball',
-  'Tennis',
-  'Swimming',
-  'Track & Field',
-  'Lacrosse',
-  'Field Hockey',
-  'Wrestling',
-  'Gymnastics',
-  'Cheerleading',
-  'Multi-Sport',
-]
-
 export default function LicenseeNewVenuePage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [sportTagOptions, setSportTagOptions] = useState<string[]>([])
+
+  useEffect(() => {
+    fetch('/api/sport-tags')
+      .then(r => r.ok ? r.json() : null)
+      .then(json => { if (json?.data) setSportTagOptions(json.data.map((t: { name: string }) => t.name)) })
+      .catch(() => {})
+  }, [])
 
   // Form state
   const [formData, setFormData] = useState({
@@ -375,7 +365,7 @@ export default function LicenseeNewVenuePage() {
               Sports Supported
             </label>
             <div className="flex flex-wrap gap-2">
-              {AVAILABLE_SPORTS.map((sport) => (
+              {sportTagOptions.map((sport) => (
                 <button
                   key={sport}
                   type="button"

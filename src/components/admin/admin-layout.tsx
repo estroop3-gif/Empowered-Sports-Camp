@@ -111,6 +111,7 @@ const licensorNavItems: NavItem[] = [
       { label: 'Create Camp', href: '/admin/camps/new' },
       { label: 'Camp HQ', href: '/admin/camp-hq' },
       { label: 'Check-In Kiosk', href: '/camp-checkin' },
+      { label: 'Sport Tags', href: '/admin/sport-tags' },
     ],
   },
   {

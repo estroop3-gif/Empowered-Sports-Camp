@@ -10,7 +10,7 @@ export interface CampFormData {
   name: string
   slug: string
   description: string
-  sport: string
+  sports: string[]
   program_type?: string
   location_id: string | null
   venue_id: string | null
@@ -39,7 +39,7 @@ export interface AdminCamp {
   name: string
   slug: string
   description: string | null
-  sport: string | null
+  sports: string[]
   program_type: string
   program_type_name?: string
   start_date: string
@@ -235,7 +235,7 @@ export async function fetchAdminCamps(options: {
         name: c.name,
         slug: c.slug,
         description: c.description,
-        sport: c.sportsOffered?.[0] || 'Multi-Sport',
+        sports: c.sportsOffered || [],
         program_type: c.programType,
         start_date: c.startDate.toISOString().split('T')[0],
         end_date: c.endDate.toISOString().split('T')[0],
@@ -312,7 +312,7 @@ export async function fetchCampById(id: string): Promise<AdminCamp | null> {
       name: camp.name,
       slug: camp.slug,
       description: camp.description,
-      sport: camp.sportsOffered?.[0] || 'Multi-Sport',
+      sports: camp.sportsOffered || [],
       program_type: camp.programType,
       start_date: camp.startDate.toISOString().split('T')[0],
       end_date: camp.endDate.toISOString().split('T')[0],
@@ -415,7 +415,7 @@ export async function createCamp(formData: CampFormData): Promise<AdminCamp> {
         name: formData.name,
         slug,
         description: formData.description || null,
-        sportsOffered: formData.sport ? [formData.sport] : [],
+        sportsOffered: formData.sports || [],
         programType: formData.program_type || 'all_girls_sports_camp',
         locationId: formData.location_id || null,
         venueId: formData.venue_id || null,
@@ -476,7 +476,7 @@ export async function createCamp(formData: CampFormData): Promise<AdminCamp> {
       name: camp.name,
       slug: camp.slug,
       description: camp.description,
-      sport: camp.sportsOffered?.[0] || 'Multi-Sport',
+      sports: camp.sportsOffered || [],
       program_type: camp.programType,
       start_date: camp.startDate.toISOString().split('T')[0],
       end_date: camp.endDate.toISOString().split('T')[0],
@@ -538,7 +538,7 @@ export async function updateCamp(id: string, formData: Partial<CampFormData>): P
     if (formData.name !== undefined) updateData.name = formData.name
     if (formData.slug !== undefined) updateData.slug = formData.slug
     if (formData.description !== undefined) updateData.description = formData.description || null
-    if (formData.sport !== undefined) updateData.sportsOffered = formData.sport ? [formData.sport] : []
+    if (formData.sports !== undefined) updateData.sportsOffered = formData.sports || []
     if (formData.program_type !== undefined) updateData.programType = formData.program_type
     if (formData.location_id !== undefined) {
       updateData.location = formData.location_id
@@ -606,7 +606,7 @@ export async function updateCamp(id: string, formData: Partial<CampFormData>): P
       name: camp.name,
       slug: camp.slug,
       description: camp.description,
-      sport: camp.sportsOffered?.[0] || 'Multi-Sport',
+      sports: camp.sportsOffered || [],
       program_type: camp.programType,
       start_date: camp.startDate.toISOString().split('T')[0],
       end_date: camp.endDate.toISOString().split('T')[0],
@@ -682,7 +682,7 @@ export async function duplicateCamp(id: string): Promise<AdminCamp> {
     name: `${existing.name} (Copy)`,
     slug: `${existing.slug}-copy-${Date.now()}`,
     description: existing.description || '',
-    sport: existing.sport || '',
+    sports: existing.sports || [],
     location_id: existing.location_id,
     venue_id: existing.venue_id,
     tenant_id: existing.tenant_id,

@@ -26,6 +26,7 @@ interface RegistrationLayoutProps {
   campSession: CampSession | null
   availableAddOns: AddOn[]
   hideAccountStep?: boolean
+  isWaitlistMode?: boolean
 }
 
 export function RegistrationLayout({
@@ -34,6 +35,7 @@ export function RegistrationLayout({
   campSession,
   availableAddOns,
   hideAccountStep = false,
+  isWaitlistMode = false,
 }: RegistrationLayoutProps) {
   const { topWithNavbar } = useBannerOffset()
   // Height of this sub-header (h-16 = 64px)
@@ -99,13 +101,13 @@ export function RegistrationLayout({
           {/* Left Column - Stepper (Desktop) */}
           <div className="hidden lg:block lg:col-span-2">
             <div className="sticky" style={{ top: `${stickyContentTop + 16}px` }}>
-              <RegistrationStepper currentStep={currentStep} hideAccountStep={hideAccountStep} />
+              <RegistrationStepper currentStep={currentStep} hideAccountStep={hideAccountStep} isWaitlistMode={isWaitlistMode} />
             </div>
           </div>
 
           {/* Mobile Stepper */}
           <div className="lg:hidden mb-8">
-            <RegistrationStepper currentStep={currentStep} variant="horizontal" hideAccountStep={hideAccountStep} />
+            <RegistrationStepper currentStep={currentStep} variant="horizontal" hideAccountStep={hideAccountStep} isWaitlistMode={isWaitlistMode} />
           </div>
 
           {/* Center Column - Form Content */}

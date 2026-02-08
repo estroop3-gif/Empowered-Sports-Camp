@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo } from 'react'
 import Link from 'next/link'
+import { parseDateSafe } from '@/lib/utils'
 import { AdminLayout, PageHeader, ContentCard } from '@/components/admin/admin-layout'
 import { DataTable, TableBadge } from '@/components/ui/data-table'
 import {
@@ -204,9 +205,8 @@ export default function AdminCampsPage() {
   }
 
   const formatDateRange = (start: string, end: string) => {
-    // Append T12:00:00 to avoid UTC midnight rolling back a day in US timezones
-    const startDate = new Date(start.includes('T') ? start : `${start}T12:00:00`)
-    const endDate = new Date(end.includes('T') ? end : `${end}T12:00:00`)
+    const startDate = parseDateSafe(start)
+    const endDate = parseDateSafe(end)
     const options: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' }
     return `${startDate.toLocaleDateString('en-US', options)} - ${endDate.toLocaleDateString('en-US', options)}, ${startDate.getFullYear()}`
   }

@@ -25,7 +25,7 @@ interface AdminCamp {
   name: string
   slug: string
   description: string | null
-  sport: string | null
+  sports: string[]
   start_date: string
   end_date: string
   start_time: string | null

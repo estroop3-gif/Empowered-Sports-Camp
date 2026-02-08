@@ -26,7 +26,7 @@ interface AdminCamp {
   name: string
   slug: string
   description: string | null
-  sport: string | null
+  sports: string[]
   start_date: string
   end_date: string
   start_time: string | null
@@ -61,7 +61,7 @@ interface CampFormData {
   name: string
   slug: string
   description: string
-  sport: string
+  sports: string[]
   location_id: string | null
   tenant_id: string
   start_date: string
@@ -89,19 +89,6 @@ interface Location {
   tenant_id: string
 }
 
-const SPORTS = [
-  'Multi-Sport',
-  'Basketball',
-  'Soccer',
-  'Volleyball',
-  'Flag Football',
-  'Lacrosse',
-  'Tennis',
-  'Softball',
-  'Track & Field',
-  'Swimming',
-]
-
 const STATUS_OPTIONS = [
   { value: 'draft', label: 'Draft', description: 'Not visible to public' },
   { value: 'published', label: 'Published', description: 'Visible but registration closed' },
@@ -125,6 +112,7 @@ export default function EditCampPage({ params }: PageProps) {
 
   const [userRole, setUserRole] = useState<string | null>(null)
   const [locations, setLocations] = useState<Location[]>([])
+  const [sportTagOptions, setSportTagOptions] = useState<string[]>([])
 
   const [formData, setFormData] = useState<Partial<CampFormData>>({})
 
@@ -161,12 +149,18 @@ export default function EditCampPage({ params }: PageProps) {
       }
       const { camp: campData } = await campResponse.json()
 
+      // Fetch sport tag options
+      fetch('/api/sport-tags')
+        .then(r => r.ok ? r.json() : null)
+        .then(json => { if (json?.data) setSportTagOptions(json.data.map((t: { name: string }) => t.name)) })
+        .catch(() => {})
+
       setCamp(campData)
       setFormData({
         name: campData.name,
         slug: campData.slug,
         description: campData.description || '',
-        sport: campData.sport || 'Multi-Sport',
+        sports: campData.sports || [],
         location_id: campData.location_id,
         start_date: campData.start_date,
         end_date: campData.end_date,
@@ -341,17 +335,32 @@ export default function EditCampPage({ params }: PageProps) {
 
                 <div>
                   <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
-                    Sport / Program Type
+                    Sport(s) Offered
                   </label>
-                  <select
-                    value={formData.sport || ''}
-                    onChange={(e) => setFormData(prev => ({ ...prev, sport: e.target.value }))}
-                    className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-neon focus:outline-none"
-                  >
-                    {SPORTS.map(sport => (
-                      <option key={sport} value={sport}>{sport}</option>
-                    ))}
-                  </select>
+                  <div className="flex flex-wrap gap-2">
+                    {sportTagOptions.map(sport => {
+                      const selected = (formData.sports || []).includes(sport)
+                      return (
+                        <button
+                          key={sport}
+                          type="button"
+                          onClick={() => setFormData(prev => ({
+                            ...prev,
+                            sports: selected
+                              ? (prev.sports || []).filter(s => s !== sport)
+                              : [...(prev.sports || []), sport],
+                          }))}
+                          className={`px-4 py-2 text-sm font-bold uppercase tracking-wider border transition-colors ${
+                            selected
+                              ? 'bg-neon/20 border-neon text-neon'
+                              : 'bg-black border-white/20 text-white/50 hover:border-white/40 hover:text-white'
+                          }`}
+                        >
+                          {sport}
+                        </button>
+                      )
+                    })}
+                  </div>
                 </div>
 
                 <div>

@@ -14,6 +14,7 @@ import {
   Calendar,
   Download,
 } from 'lucide-react'
+import { parseDateSafe } from '@/lib/utils'
 import { generateReportPDF } from '@/lib/utils/pdf-export'
 
 interface RegistrationReport {
@@ -78,7 +79,7 @@ export default function RegistrationReportPage() {
         data: {
           headers: ['Date', 'Count'],
           rows: report.registrationsByDate.map((item) => [
-            new Date(item.date).toLocaleDateString(),
+            parseDateSafe(item.date).toLocaleDateString(),
             item.count,
           ]),
         },

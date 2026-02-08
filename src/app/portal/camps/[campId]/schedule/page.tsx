@@ -26,18 +26,7 @@ import {
   CheckCircle,
   RefreshCw,
 } from 'lucide-react'
-
-/** Convert "HH:MM" or "HH:MM:SS" 24h time to "H:MM AM/PM" */
-function formatTime12h(time?: string | null): string {
-  if (!time) return ''
-  const [hStr, mStr] = time.split(':')
-  let h = parseInt(hStr, 10)
-  const m = mStr || '00'
-  const ampm = h >= 12 ? 'PM' : 'AM'
-  if (h === 0) h = 12
-  else if (h > 12) h -= 12
-  return `${h}:${m} ${ampm}`
-}
+import { formatTime12h, parseDateSafe } from '@/lib/utils'
 
 interface PageProps {
   params: Promise<{ campId: string }>
@@ -63,7 +52,7 @@ export default function CampSchedulePage({ params }: PageProps) {
     end_date: string
     start_time: string | null
     end_time: string | null
-    sport: string | null
+    sports: string[]
   } | null>(null)
 
   // Days and schedule
@@ -102,7 +91,7 @@ export default function CampSchedulePage({ params }: PageProps) {
         end_date: data.end_date,
         start_time: data.start_time,
         end_time: data.end_time,
-        sport: data.sport,
+        sports: data.sports || [],
       })
 
       // If no days exist yet, create them
@@ -277,7 +266,7 @@ export default function CampSchedulePage({ params }: PageProps) {
 
             <CampCurriculumSelector
               campId={campId}
-              campSport={camp.sport}
+              campSport={camp.sports?.[0] || null}
               currentAssignment={curriculum}
               onAssigned={handleCurriculumAssigned}
               canEdit={canEdit}
@@ -308,7 +297,7 @@ export default function CampSchedulePage({ params }: PageProps) {
                   Day {day.day_number}
                   {day.actual_date && (
                     <span className="ml-2 text-xs opacity-70">
-                      {new Date(day.actual_date).toLocaleDateString('en-US', {
+                      {parseDateSafe(day.actual_date).toLocaleDateString('en-US', {
                         month: 'short',
                         day: 'numeric',
                       })}
@@ -351,7 +340,7 @@ export default function CampSchedulePage({ params }: PageProps) {
                 <div>
                   <p className="text-xs text-white/40 uppercase tracking-wider mb-1">Dates</p>
                   <p className="text-white">
-                    {new Date(camp.start_date).toLocaleDateString()} - {new Date(camp.end_date).toLocaleDateString()}
+                    {parseDateSafe(camp.start_date).toLocaleDateString()} - {parseDateSafe(camp.end_date).toLocaleDateString()}
                   </p>
                 </div>
                 <div>
@@ -362,10 +351,10 @@ export default function CampSchedulePage({ params }: PageProps) {
                   <p className="text-xs text-white/40 uppercase tracking-wider mb-1">Total Days</p>
                   <p className="text-white">{days.length} days</p>
                 </div>
-                {camp.sport && (
+                {camp.sports?.length > 0 && (
                   <div>
                     <p className="text-xs text-white/40 uppercase tracking-wider mb-1">Sport</p>
-                    <p className="text-white">{camp.sport}</p>
+                    <p className="text-white">{camp.sports.join(', ')}</p>
                   </div>
                 )}
               </div>

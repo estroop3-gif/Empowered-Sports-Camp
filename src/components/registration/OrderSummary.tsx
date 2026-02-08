@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Image from 'next/image'
 import { ChevronDown, ChevronUp, Calendar, MapPin, Tag, Percent, Sparkles } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn, parseDateSafe } from '@/lib/utils'
 import { useCheckout } from '@/lib/checkout/context'
 import type { CampSession, AddOn } from '@/types/registration'
 
@@ -27,7 +27,7 @@ function formatCents(cents: number): string {
 }
 
 function formatDate(dateString: string): string {
-  return new Date(dateString).toLocaleDateString('en-US', {
+  return parseDateSafe(dateString).toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
   })

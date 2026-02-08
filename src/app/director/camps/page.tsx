@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useAuth } from '@/lib/auth/context'
+import { parseDateSafe, formatTime12h } from '@/lib/utils'
 import { PortalPageHeader, PortalCard, LmsGate } from '@/components/portal'
 import {
   Calendar,
@@ -208,12 +209,12 @@ export default function DirectorCampsPage() {
                       <div className="flex flex-wrap items-center gap-4 mt-2 text-sm text-white/50">
                         <span className="flex items-center gap-1">
                           <Calendar className="h-4 w-4" />
-                          {new Date(camp.start_date).toLocaleDateString()} - {new Date(camp.end_date).toLocaleDateString()}
+                          {parseDateSafe(camp.start_date).toLocaleDateString()} - {parseDateSafe(camp.end_date).toLocaleDateString()}
                         </span>
                         {camp.start_time && camp.end_time && (
                           <span className="flex items-center gap-1">
                             <Clock className="h-4 w-4" />
-                            {camp.start_time} - {camp.end_time}
+                            {formatTime12h(camp.start_time)} - {formatTime12h(camp.end_time)}
                           </span>
                         )}
                         {location && (

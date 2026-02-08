@@ -7,7 +7,7 @@
  */
 
 import { useState, useEffect } from 'react'
-import { cn } from '@/lib/utils'
+import { cn, parseDateSafe } from '@/lib/utils'
 import {
   DollarSign,
   Target,
@@ -691,7 +691,7 @@ export function IncentiveSummaryPanel({
                   >
                     <td className="py-3 pr-4 font-bold">Day {snapshot.day_number}</td>
                     <td className="py-3 pr-4">
-                      {new Date(snapshot.date).toLocaleDateString('en-US', {
+                      {parseDateSafe(snapshot.date).toLocaleDateString('en-US', {
                         weekday: 'short',
                         month: 'short',
                         day: 'numeric',

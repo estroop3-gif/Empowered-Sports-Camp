@@ -23,7 +23,7 @@ import {
   AlertOctagon,
   TrendingUp,
 } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn, parseDateSafe } from '@/lib/utils'
 
 interface ConclusionOverview {
   camp: {
@@ -228,8 +228,8 @@ export function ConcludeCampModal({ campId, onClose, onSuccess }: ConcludeCampMo
                 </div>
                 <div className="text-sm text-white/50 flex items-center gap-2">
                   <Calendar className="h-4 w-4" />
-                  {new Date(overview.camp.start_date).toLocaleDateString()} -{' '}
-                  {new Date(overview.camp.end_date).toLocaleDateString()}
+                  {parseDateSafe(overview.camp.start_date).toLocaleDateString()} -{' '}
+                  {parseDateSafe(overview.camp.end_date).toLocaleDateString()}
                 </div>
               </div>
 

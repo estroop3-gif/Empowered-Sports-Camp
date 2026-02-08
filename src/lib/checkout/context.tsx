@@ -74,7 +74,7 @@ const createInitialCamper = (): CamperFormData => ({
   medicalNotes: '',
   allergies: '',
   specialConsiderations: '',
-  authorizedPickups: [],
+  authorizedPickups: [{ name: '', relationship: '', phone: '' }],
   age: null,
   isEligible: false,
 })
@@ -113,6 +113,7 @@ const initialState: CheckoutState = {
   promoCode: null,
   totals: initialTotals,
   squadId: null,
+  isWaitlistMode: false,
 }
 
 // =====================================================
@@ -135,6 +136,7 @@ type CheckoutAction =
   | { type: 'UPDATE_ADDON_QUANTITY'; addonId: string; variantId: string | null; camperId: string | null; quantity: number }
   | { type: 'APPLY_PROMO'; promo: AppliedPromoCode }
   | { type: 'REMOVE_PROMO' }
+  | { type: 'SET_WAITLIST_MODE'; isWaitlistMode: boolean }
   | { type: 'RESET' }
 
 // =====================================================
@@ -368,6 +370,9 @@ function checkoutReducer(state: CheckoutState, action: CheckoutAction): Checkout
     case 'REMOVE_PROMO':
       return { ...state, promoCode: null }
 
+    case 'SET_WAITLIST_MODE':
+      return { ...state, isWaitlistMode: action.isWaitlistMode }
+
     case 'RESET':
       return initialState
 
@@ -426,6 +431,9 @@ interface CheckoutContextValue {
   applyPromo: (promo: AppliedPromoCode) => void
   removePromo: () => void
 
+  // Waitlist
+  setWaitlistMode: (isWaitlistMode: boolean) => void
+
   // Reset
   reset: () => void
 }
@@ -437,6 +445,7 @@ const CheckoutContext = createContext<CheckoutContextValue | undefined>(undefine
 // =====================================================
 
 const STEP_ORDER: CheckoutStep[] = ['camp', 'campers', 'squad', 'addons', 'waivers', 'account', 'payment', 'confirmation']
+const WAITLIST_STEP_ORDER: CheckoutStep[] = ['camp', 'campers', 'squad', 'waivers', 'account', 'waitlist-confirm']
 
 // Storage key for checkout state
 const CHECKOUT_STORAGE_KEY = 'empowered-checkout-state'
@@ -475,8 +484,8 @@ function loadPersistedState(): CheckoutState | null {
 function persistState(state: CheckoutState) {
   if (typeof window === 'undefined') return
   try {
-    // Don't persist if we're on the confirmation step (checkout complete)
-    if (state.step === 'confirmation') {
+    // Don't persist if we're on the confirmation/waitlist-confirm step (checkout complete)
+    if (state.step === 'confirmation' || state.step === 'waitlist-confirm') {
       localStorage.removeItem(CHECKOUT_STORAGE_KEY)
       return
     }
@@ -594,25 +603,27 @@ export function CheckoutProvider({ children, campSlug }: CheckoutProviderProps) 
   }, [scrollToTop])
 
   const nextStep = useCallback(() => {
-    const currentIndex = STEP_ORDER.indexOf(state.step)
-    if (currentIndex < STEP_ORDER.length - 1) {
-      dispatch({ type: 'SET_STEP', step: STEP_ORDER[currentIndex + 1] })
+    const order = state.isWaitlistMode ? WAITLIST_STEP_ORDER : STEP_ORDER
+    const currentIndex = order.indexOf(state.step)
+    if (currentIndex < order.length - 1) {
+      dispatch({ type: 'SET_STEP', step: order[currentIndex + 1] })
       scrollToTop()
     }
-  }, [state.step, scrollToTop])
+  }, [state.step, state.isWaitlistMode, scrollToTop])
 
   const prevStep = useCallback(() => {
-    const currentIndex = STEP_ORDER.indexOf(state.step)
+    const order = state.isWaitlistMode ? WAITLIST_STEP_ORDER : STEP_ORDER
+    const currentIndex = order.indexOf(state.step)
     if (currentIndex > 0) {
-      dispatch({ type: 'SET_STEP', step: STEP_ORDER[currentIndex - 1] })
+      dispatch({ type: 'SET_STEP', step: order[currentIndex - 1] })
       scrollToTop()
     }
-  }, [state.step, scrollToTop])
+  }, [state.step, state.isWaitlistMode, scrollToTop])
 
   const canProceed = useCallback((): boolean => {
     switch (state.step) {
       case 'camp':
-        return state.campSession !== null && state.campSession.spotsRemaining > 0
+        return state.campSession !== null && (state.isWaitlistMode || state.campSession.spotsRemaining > 0)
 
       case 'campers':
         return (
@@ -621,12 +632,21 @@ export function CheckoutProvider({ children, campSlug }: CheckoutProviderProps) 
               c.firstName.trim() !== '' &&
               c.lastName.trim() !== '' &&
               c.dateOfBirth !== '' &&
-              c.isEligible
+              c.isEligible &&
+              // At least one authorized pickup with name + phone
+              (c.authorizedPickups || []).length > 0 &&
+              (c.authorizedPickups || []).some(
+                (p) => p.name.trim() !== '' && p.phone.trim() !== ''
+              )
           ) &&
           state.parentInfo.firstName.trim() !== '' &&
           state.parentInfo.lastName.trim() !== '' &&
           state.parentInfo.email.trim() !== '' &&
-          state.parentInfo.phone.trim() !== ''
+          state.parentInfo.phone.trim() !== '' &&
+          // Emergency contact required
+          state.parentInfo.emergencyContactName.trim() !== '' &&
+          state.parentInfo.emergencyContactPhone.trim() !== '' &&
+          state.parentInfo.emergencyContactRelationship.trim() !== ''
         )
 
       case 'squad':
@@ -735,6 +755,11 @@ export function CheckoutProvider({ children, campSlug }: CheckoutProviderProps) 
     dispatch({ type: 'REMOVE_PROMO' })
   }, [])
 
+  // Waitlist
+  const setWaitlistMode = useCallback((isWaitlistMode: boolean) => {
+    dispatch({ type: 'SET_WAITLIST_MODE', isWaitlistMode })
+  }, [])
+
   // Reset
   const reset = useCallback(() => {
     dispatch({ type: 'RESET' })
@@ -766,6 +791,7 @@ export function CheckoutProvider({ children, campSlug }: CheckoutProviderProps) 
     getAddOnQuantity,
     applyPromo,
     removePromo,
+    setWaitlistMode,
     reset,
   }
 

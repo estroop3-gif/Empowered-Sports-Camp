@@ -9,7 +9,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { PortalPageHeader, PortalCard } from '@/components/portal'
-import { cn } from '@/lib/utils'
+import { cn, formatTime12h } from '@/lib/utils'
 import {
   Loader2,
   AlertCircle,
@@ -141,7 +141,7 @@ export default function CitTodayPage() {
                       {schedule.camp_start_time && schedule.camp_end_time && (
                         <span className="flex items-center gap-1">
                           <Clock className="h-4 w-4" />
-                          Camp: {schedule.camp_start_time} - {schedule.camp_end_time}
+                          Camp: {formatTime12h(schedule.camp_start_time)} - {formatTime12h(schedule.camp_end_time)}
                         </span>
                       )}
                     </div>
@@ -166,7 +166,7 @@ export default function CitTodayPage() {
                       <Clock className="h-6 w-6 text-neon" />
                     </div>
                     <div>
-                      <p className="text-lg font-bold text-neon">{schedule.call_time}</p>
+                      <p className="text-lg font-bold text-neon">{formatTime12h(schedule.call_time)}</p>
                       <p className="text-sm text-white/50">Your arrival time</p>
                     </div>
                     {schedule.location_address && (
@@ -231,7 +231,7 @@ export default function CitTodayPage() {
                           {/* Time */}
                           <div className="w-24 flex-shrink-0 text-right">
                             <span className="text-sm font-mono text-orange-400">
-                              {block.start_time}
+                              {formatTime12h(block.start_time)}
                             </span>
                           </div>
 
@@ -280,7 +280,7 @@ export default function CitTodayPage() {
                                 )}
                               </div>
                               <span className="text-xs text-white/40 whitespace-nowrap">
-                                {block.start_time} - {block.end_time}
+                                {formatTime12h(block.start_time)} - {formatTime12h(block.end_time)}
                               </span>
                             </div>
                           </div>

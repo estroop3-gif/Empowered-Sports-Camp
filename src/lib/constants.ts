@@ -10,18 +10,6 @@ export const NAV_LINKS = [
   { label: 'Contact', href: '/contact' },
 ] as const
 
-export const SPORTS = [
-  'Soccer',
-  'Basketball',
-  'Volleyball',
-  'Softball',
-  'Flag Football',
-  'Lacrosse',
-  'Field Hockey',
-  'Tennis',
-  'Track & Field',
-] as const
-
 export const AGE_RANGES = [
   { label: 'Ages 5-7', min: 5, max: 7 },
   { label: 'Ages 8-10', min: 8, max: 10 },

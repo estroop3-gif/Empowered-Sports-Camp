@@ -22,7 +22,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { PortalCard } from '@/components/portal'
-import { cn } from '@/lib/utils'
+import { cn, parseDateSafe, formatTime12h } from '@/lib/utils'
 import {
   Calendar,
   MapPin,
@@ -375,7 +375,7 @@ function TodayCampSchedule({
         <div className="mb-4 p-2 bg-blue-400/10 border border-blue-400/30 text-sm">
           <span className="text-white/50">Your shift: </span>
           <span className="font-bold text-blue-400">
-            {camp.call_time} - {camp.shift_end_time || 'TBD'}
+            {formatTime12h(camp.call_time)} - {camp.shift_end_time ? formatTime12h(camp.shift_end_time) : 'TBD'}
           </span>
         </div>
       )}
@@ -396,7 +396,7 @@ function TodayCampSchedule({
                 )}
               >
                 <span className="text-white/50 w-24 flex-shrink-0">
-                  {block.start_time} - {block.end_time}
+                  {formatTime12h(block.start_time)} - {formatTime12h(block.end_time)}
                 </span>
                 <span className={cn(
                   'font-medium',
@@ -494,10 +494,10 @@ function UpcomingCampsCard({
               <div className="flex items-center gap-3 text-sm text-white/50">
                 <span className="flex items-center gap-1">
                   <Calendar className="h-3 w-3" />
-                  {new Date(camp.start_date).toLocaleDateString('en-US', {
+                  {parseDateSafe(camp.start_date).toLocaleDateString('en-US', {
                     month: 'short',
                     day: 'numeric',
-                  })} - {new Date(camp.end_date).toLocaleDateString('en-US', {
+                  })} - {parseDateSafe(camp.end_date).toLocaleDateString('en-US', {
                     month: 'short',
                     day: 'numeric',
                   })}

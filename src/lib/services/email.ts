@@ -1,10 +1,10 @@
 /**
  * Email Service
  *
- * Production-ready email integration via AWS SES with email logging.
+ * Production-ready email integration via Resend with email logging.
  *
  * Handles:
- * - Transactional emails via AWS SES
+ * - Transactional emails via Resend
  * - Parent-facing camp communications (registration, reminders, recaps)
  * - Seasonal follow-up campaigns
  * - Application notifications
@@ -12,7 +12,7 @@
  * - Email logging for observability
  */
 
-import { sendEmail as sesSendEmail, isEmailConfigured } from '@/lib/email/ses-client'
+import { sendEmail as sesSendEmail, isEmailConfigured } from '@/lib/email/resend-client'
 import { prisma } from '@/lib/db/client'
 import type { EmailType, EmailStatus, Prisma, EmailTemplate } from '@/generated/prisma'
 
@@ -121,7 +121,7 @@ export interface SendEmailParams {
 // Configuration
 // =============================================================================
 
-const DEFAULT_FROM_EMAIL = process.env.SES_FROM_EMAIL || process.env.FROM_EMAIL || 'Empowered Sports Camp <noreply@empoweredsportscamp.com>'
+const DEFAULT_FROM_EMAIL = process.env.FROM_EMAIL || 'Empowered Sports Camp <noreply@empoweredsportscamp.com>'
 const IS_DEVELOPMENT = process.env.NODE_ENV !== 'production'
 
 // Template cache (in-memory, refreshes on server restart)
@@ -264,7 +264,7 @@ async function logEmail(params: {
 // =============================================================================
 
 /**
- * Send a transactional email using AWS SES with logging
+ * Send a transactional email using Resend with logging
  */
 export async function sendTransactionalEmail(params: SendEmailParams): Promise<{ data: EmailResult | null; error: Error | null }> {
   const { templateCode, to, context, tenantId, userId, from, replyTo } = params
@@ -275,7 +275,7 @@ export async function sendTransactionalEmail(params: SendEmailParams): Promise<{
     const emailType = templateToEmailType[templateCode]
     const fromEmail = from || DEFAULT_FROM_EMAIL
 
-    // In development without AWS credentials, log and return success
+    // In development without Resend key, log and return success
     if (IS_DEVELOPMENT && !isEmailConfigured()) {
       console.log('[Email] Would send email:', {
         templateCode,
@@ -307,7 +307,7 @@ export async function sendTransactionalEmail(params: SendEmailParams): Promise<{
       }
     }
 
-    // Send via AWS SES
+    // Send via Resend
     const result = await sesSendEmail({
       from: fromEmail,
       to,
@@ -317,7 +317,7 @@ export async function sendTransactionalEmail(params: SendEmailParams): Promise<{
     })
 
     if (!result.success) {
-      console.error('[Email] SES error:', result.error)
+      console.error('[Email] Resend error:', result.error)
 
       await logEmail({
         tenantId,

@@ -21,7 +21,7 @@ import {
   Trophy,
   Mic,
 } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn, parseDateSafe } from '@/lib/utils'
 
 interface EndDayInfo {
   day_number: number
@@ -214,7 +214,7 @@ export function EndDayModal({ campId, campDayId, onClose, onSuccess }: EndDayMod
                     <div>
                       <div className="font-bold text-white">Day {dayInfo.day_number}</div>
                       <div className="text-sm text-white/50">
-                        {new Date(dayInfo.date).toLocaleDateString('en-US', {
+                        {parseDateSafe(dayInfo.date).toLocaleDateString('en-US', {
                           weekday: 'long',
                           month: 'long',
                           day: 'numeric',

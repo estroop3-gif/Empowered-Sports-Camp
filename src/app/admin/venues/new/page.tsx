@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { AdminLayout, PageHeader, ContentCard } from '@/components/admin/admin-layout'
 import { cn } from '@/lib/utils'
+import { AddSportModal } from '@/components/admin/camps/AddSportModal'
 import { COUNTRIES, getRegionLabelForCountry, countryHasRegions } from '@/lib/constants/locations'
 import { RegionInput } from '@/components/ui/RegionInput'
 import {
@@ -71,22 +72,6 @@ interface FormData {
   hero_image_url: string
 }
 
-const SPORTS = [
-  'Multi-Sport',
-  'Basketball',
-  'Soccer',
-  'Volleyball',
-  'Flag Football',
-  'Softball',
-  'Tennis',
-  'Track & Field',
-  'Swimming',
-  'Lacrosse',
-  'Gymnastics',
-  'Dance',
-  'Cheerleading',
-]
-
 const FACILITY_TYPES: { value: FacilityType; label: string; icon: React.ElementType }[] = [
   { value: 'school', label: 'School', icon: Building2 },
   { value: 'park', label: 'Park', icon: TreePine },
@@ -148,6 +133,8 @@ export default function NewVenuePage() {
   const [territories, setTerritories] = useState<Territory[]>([])
   const [selectedTerritoryId, setSelectedTerritoryId] = useState<string>('')
   const [loading, setLoading] = useState(true)
+  const [sportTagOptions, setSportTagOptions] = useState<string[]>([])
+  const [showAddSportModal, setShowAddSportModal] = useState(false)
 
   const [formData, setFormData] = useState<FormData>({
     tenant_id: '',
@@ -219,6 +206,12 @@ export default function NewVenuePage() {
         if (territoriesRes.ok) {
           const territoriesData = await territoriesRes.json()
           setTerritories(territoriesData.territories || [])
+        }
+        // Fetch sport tags
+        const sportRes = await fetch('/api/sport-tags')
+        if (sportRes.ok) {
+          const sportData = await sportRes.json()
+          setSportTagOptions((sportData.data || []).map((t: { name: string }) => t.name))
         }
       } catch (err) {
         console.error('Failed to fetch data:', err)
@@ -394,6 +387,14 @@ export default function NewVenuePage() {
 
   return (
     <AdminLayout userRole="hq_admin" userName="Admin">
+      <AddSportModal
+        open={showAddSportModal}
+        onClose={() => setShowAddSportModal(false)}
+        onCreated={(tag) => {
+          setSportTagOptions(prev => [...prev, tag.name])
+          setFormData(prev => ({ ...prev, sports_supported: [...prev.sports_supported, tag.name] }))
+        }}
+      />
       <div className="mb-6">
         <Link
           href={isReturnToCampCreate ? '/portal/camps/new' : '/admin/venues'}
@@ -650,7 +651,7 @@ export default function NewVenuePage() {
                     Sports Supported
                   </label>
                   <div className="flex flex-wrap gap-2">
-                    {SPORTS.map((sport) => (
+                    {sportTagOptions.map((sport) => (
                       <button
                         key={sport}
                         type="button"
@@ -665,6 +666,13 @@ export default function NewVenuePage() {
                         {sport}
                       </button>
                     ))}
+                    <button
+                      type="button"
+                      onClick={() => setShowAddSportModal(true)}
+                      className="px-3 py-1.5 border border-dashed border-white/20 text-white/30 hover:border-purple hover:text-purple transition-colors"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </button>
                   </div>
                 </div>
 

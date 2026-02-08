@@ -46,7 +46,7 @@ export function CampCard({ camp }: CampCardProps) {
         {/* Availability Badge */}
         {isFull && (
           <div className="absolute right-3 top-3">
-            <Badge variant="error">Sold Out</Badge>
+            <Badge variant="warning">Waitlist Open</Badge>
           </div>
         )}
         {isLowAvailability && (

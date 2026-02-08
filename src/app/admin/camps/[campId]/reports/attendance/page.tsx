@@ -14,6 +14,7 @@ import {
   Calendar,
   Download,
 } from 'lucide-react'
+import { parseDateSafe } from '@/lib/utils'
 import { generateReportPDF } from '@/lib/utils/pdf-export'
 
 interface AttendanceDay {
@@ -60,7 +61,7 @@ export default function AttendanceReportPage() {
 
     const tableRows = report.days.map((day) => [
       `Day ${day.dayNumber}`,
-      new Date(day.date).toLocaleDateString('en-US', {
+      parseDateSafe(day.date).toLocaleDateString('en-US', {
         weekday: 'short',
         month: 'short',
         day: 'numeric',
@@ -228,7 +229,7 @@ export default function AttendanceReportPage() {
                       </div>
                     </td>
                     <td className="py-3 px-4 text-white/70">
-                      {new Date(day.date).toLocaleDateString('en-US', {
+                      {parseDateSafe(day.date).toLocaleDateString('en-US', {
                         weekday: 'short',
                         month: 'short',
                         day: 'numeric',

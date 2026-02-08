@@ -153,7 +153,7 @@ function ProgramRow({ program }: { program: CampProgramData }) {
 
           <div>
             {program.isFull ? (
-              <Badge variant="error" size="sm">Sold Out</Badge>
+              <Badge variant="warning" size="sm">Waitlist Open</Badge>
             ) : program.spotsRemaining <= 10 ? (
               <Badge variant="warning" size="sm">{program.spotsRemaining} spots left</Badge>
             ) : (
@@ -165,11 +165,11 @@ function ProgramRow({ program }: { program: CampProgramData }) {
             <Link href={`/camps/${program.slug}`}>
               <Button variant="ghost" size="sm">Details</Button>
             </Link>
-            {!program.isFull && (
-              <Link href={`/camps/${program.slug}`}>
-                <Button variant="neon" size="sm">Register</Button>
-              </Link>
-            )}
+            <Link href={`/register/${program.slug}`}>
+              <Button variant={program.isFull ? 'outline-neon' : 'neon'} size="sm">
+                {program.isFull ? 'Waitlist' : 'Register'}
+              </Button>
+            </Link>
           </div>
         </div>
       </div>

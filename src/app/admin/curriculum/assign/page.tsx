@@ -8,7 +8,7 @@ import {
   CurriculumTemplate,
   SPORTS,
 } from '@/lib/services/curriculum'
-import { cn } from '@/lib/utils'
+import { cn, parseDateSafe } from '@/lib/utils'
 import {
   ArrowLeft,
   Calendar,
@@ -28,7 +28,7 @@ import {
 interface CampWithAssignment {
   id: string
   name: string
-  sport: string
+  sports: string[]
   start_date: string
   end_date: string
   tenant_id: string | null
@@ -164,14 +164,14 @@ export default function CurriculumAssignmentPage() {
   // Filter camps
   const filteredCamps = camps.filter(camp => {
     if (searchTerm && !camp.name.toLowerCase().includes(searchTerm.toLowerCase())) return false
-    if (sportFilter && camp.sport !== sportFilter) return false
+    if (sportFilter && !camp.sports?.includes(sportFilter)) return false
     if (showAssigned === 'assigned' && !camp.assigned_template_id) return false
     if (showAssigned === 'unassigned' && camp.assigned_template_id) return false
     return true
   })
 
   // Get unique sports from camps
-  const campSports = [...new Set(camps.map(c => c.sport))]
+  const campSports = [...new Set(camps.flatMap(c => c.sports || []))]
 
   if (loading) {
     return (
@@ -284,12 +284,12 @@ export default function CurriculumAssignmentPage() {
       {/* Camp List */}
       <div className="space-y-4">
         {filteredCamps.map((camp) => {
-          const sportConfig = SPORTS.find(s => s.value === camp.sport)
-          const startDate = new Date(camp.start_date).toLocaleDateString('en-US', {
+          const sportConfig = SPORTS.find(s => camp.sports?.includes(s.value))
+          const startDate = parseDateSafe(camp.start_date).toLocaleDateString('en-US', {
             month: 'short',
             day: 'numeric',
           })
-          const endDate = new Date(camp.end_date).toLocaleDateString('en-US', {
+          const endDate = parseDateSafe(camp.end_date).toLocaleDateString('en-US', {
             month: 'short',
             day: 'numeric',
             year: 'numeric',
@@ -329,7 +329,7 @@ export default function CurriculumAssignmentPage() {
                         'px-2 py-0.5 text-xs font-bold uppercase tracking-wider border',
                         'bg-purple/10 text-purple border-purple/30'
                       )}>
-                        {sportConfig?.label || camp.sport}
+                        {camp.sports?.length ? camp.sports.join(', ') : 'No sport'}
                       </span>
                       <span className="flex items-center gap-1">
                         <Calendar className="h-3 w-3" />
@@ -428,7 +428,7 @@ function AssignTemplateModal({
   saving: boolean
 }) {
   const [searchTerm, setSearchTerm] = useState('')
-  const [sportFilter, setSportFilter] = useState(camp.sport || '')
+  const [sportFilter, setSportFilter] = useState(camp.sports?.[0] || '')
 
   // Filter templates
   const filteredTemplates = templates.filter(t => {
@@ -439,8 +439,8 @@ function AssignTemplateModal({
 
   // Get matching templates (same sport as camp) first
   const sortedTemplates = [...filteredTemplates].sort((a, b) => {
-    const aMatches = a.sport === camp.sport ? 0 : 1
-    const bMatches = b.sport === camp.sport ? 0 : 1
+    const aMatches = camp.sports?.includes(a.sport) ? 0 : 1
+    const bMatches = camp.sports?.includes(b.sport) ? 0 : 1
     return aMatches - bMatches
   })
 
@@ -499,7 +499,7 @@ function AssignTemplateModal({
               {sortedTemplates.map(template => {
                 const sportConfig = SPORTS.find(s => s.value === template.sport)
                 const isSelected = selectedTemplateId === template.id
-                const isMatchingSport = template.sport === camp.sport
+                const isMatchingSport = camp.sports?.includes(template.sport)
 
                 return (
                   <button

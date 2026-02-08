@@ -29,6 +29,7 @@ import {
 } from 'lucide-react'
 import { CampWaiverSelector } from '@/components/waivers/CampWaiverSelector'
 import { AddProgramTypeModal } from '@/components/admin/camps/AddProgramTypeModal'
+import { AddSportModal } from '@/components/admin/camps/AddSportModal'
 import { useUpload, STORAGE_FOLDERS } from '@/lib/storage/use-upload'
 
 // Types (defined locally to avoid Prisma imports in client component)
@@ -37,7 +38,7 @@ interface AdminCamp {
   name: string
   slug: string
   description: string | null
-  sport: string | null
+  sports: string[]
   start_date: string
   end_date: string
   start_time: string | null
@@ -59,7 +60,7 @@ interface CampFormData {
   name: string
   slug: string
   description: string
-  sport: string
+  sports: string[]
   program_type: string
   location_id: string | null
   venue_id: string | null
@@ -109,19 +110,6 @@ interface Location {
   tenant_id: string
 }
 
-const SPORTS = [
-  'Multi-Sport',
-  'Basketball',
-  'Soccer',
-  'Volleyball',
-  'Flag Football',
-  'Lacrosse',
-  'Tennis',
-  'Softball',
-  'Track & Field',
-  'Swimming',
-]
-
 const STATUS_OPTIONS = [
   { value: 'draft', label: 'Draft', description: 'Not visible to public' },
   { value: 'published', label: 'Published', description: 'Visible but registration closed' },
@@ -144,6 +132,8 @@ export default function AdminEditCampPage({ params }: { params: Promise<{ campId
   const [venues, setVenues] = useState<Venue[]>([])
   const [programTagOptions, setProgramTagOptions] = useState<ProgramTagOption[]>([])
   const [showAddProgramTypeModal, setShowAddProgramTypeModal] = useState(false)
+  const [sportTagOptions, setSportTagOptions] = useState<string[]>([])
+  const [showAddSportModal, setShowAddSportModal] = useState(false)
 
   // Venue search dropdown state
   const [venueSearchQuery, setVenueSearchQuery] = useState('')
@@ -159,7 +149,7 @@ export default function AdminEditCampPage({ params }: { params: Promise<{ campId
     name: '',
     slug: '',
     description: '',
-    sport: 'Multi-Sport',
+    sports: [],
     program_type: 'all_girls_sports_camp',
     location_id: null,
     venue_id: null,
@@ -266,12 +256,18 @@ export default function AdminEditCampPage({ params }: { params: Promise<{ campId
         .then(json => { if (json?.data) setProgramTagOptions(json.data) })
         .catch(() => {})
 
+      // Fetch sport tag options
+      fetch('/api/sport-tags')
+        .then(r => r.ok ? r.json() : null)
+        .then(json => { if (json?.data) setSportTagOptions(json.data.map((t: { name: string }) => t.name)) })
+        .catch(() => {})
+
       setCamp(campData)
       setFormData({
         name: campData.name,
         slug: campData.slug,
         description: campData.description || '',
-        sport: campData.sport || 'Multi-Sport',
+        sports: campData.sports || [],
         program_type: campData.program_type || 'all_girls_sports_camp',
         location_id: campData.location_id,
         venue_id: campData.venue_id || null,
@@ -416,6 +412,14 @@ export default function AdminEditCampPage({ params }: { params: Promise<{ campId
           setFormData(prev => ({ ...prev, program_type: tag.slug }))
         }}
       />
+      <AddSportModal
+        open={showAddSportModal}
+        onClose={() => setShowAddSportModal(false)}
+        onCreated={(tag) => {
+          setSportTagOptions(prev => [...prev, tag.name])
+          setFormData(prev => ({ ...prev, sports: [...prev.sports, tag.name] }))
+        }}
+      />
       <div className="mb-6 flex items-center justify-between">
         <Link
           href="/admin/camps"
@@ -510,15 +514,37 @@ export default function AdminEditCampPage({ params }: { params: Promise<{ campId
                   <label className="block text-sm font-bold uppercase tracking-wider text-white/60 mb-2">
                     Sport(s) Offered
                   </label>
-                  <select
-                    value={formData.sport}
-                    onChange={(e) => setFormData(prev => ({ ...prev, sport: e.target.value }))}
-                    className="w-full px-4 py-3 bg-black border border-white/20 text-white focus:border-neon focus:outline-none"
-                  >
-                    {SPORTS.map(sport => (
-                      <option key={sport} value={sport}>{sport}</option>
-                    ))}
-                  </select>
+                  <div className="flex flex-wrap gap-2">
+                    {sportTagOptions.map(sport => {
+                      const selected = formData.sports.includes(sport)
+                      return (
+                        <button
+                          key={sport}
+                          type="button"
+                          onClick={() => setFormData(prev => ({
+                            ...prev,
+                            sports: selected
+                              ? prev.sports.filter(s => s !== sport)
+                              : [...prev.sports, sport],
+                          }))}
+                          className={`px-4 py-2 text-sm font-bold uppercase tracking-wider border transition-colors ${
+                            selected
+                              ? 'bg-neon/20 border-neon text-neon'
+                              : 'bg-black border-white/20 text-white/50 hover:border-white/40 hover:text-white'
+                          }`}
+                        >
+                          {sport}
+                        </button>
+                      )
+                    })}
+                    <button
+                      type="button"
+                      onClick={() => setShowAddSportModal(true)}
+                      className="px-4 py-2 text-sm font-bold uppercase tracking-wider border border-dashed border-white/20 text-white/30 hover:border-neon hover:text-neon transition-colors"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
 
                 <div>

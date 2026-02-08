@@ -9,7 +9,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { PortalPageHeader, PortalCard } from '@/components/portal'
-import { cn } from '@/lib/utils'
+import { cn, parseDateSafe, formatTime12h } from '@/lib/utils'
 import {
   Loader2,
   AlertCircle,
@@ -198,10 +198,10 @@ function CampCard({ camp }: { camp: CitCampSummary }) {
           <div className="flex flex-wrap items-center gap-4 text-sm text-white/50 mb-3">
             <span className="flex items-center gap-1">
               <Calendar className="h-4 w-4" />
-              {new Date(camp.start_date).toLocaleDateString('en-US', {
+              {parseDateSafe(camp.start_date).toLocaleDateString('en-US', {
                 month: 'short',
                 day: 'numeric',
-              })} - {new Date(camp.end_date).toLocaleDateString('en-US', {
+              })} - {parseDateSafe(camp.end_date).toLocaleDateString('en-US', {
                 month: 'short',
                 day: 'numeric',
                 year: 'numeric',
@@ -217,7 +217,7 @@ function CampCard({ camp }: { camp: CitCampSummary }) {
             {camp.start_time && camp.end_time && (
               <span className="flex items-center gap-1">
                 <Clock className="h-4 w-4" />
-                {camp.start_time} - {camp.end_time}
+                {formatTime12h(camp.start_time)} - {formatTime12h(camp.end_time)}
               </span>
             )}
           </div>
@@ -233,7 +233,7 @@ function CampCard({ camp }: { camp: CitCampSummary }) {
             )}
             {camp.call_time && (
               <span className="text-purple">
-                <span className="text-white/40">Call Time:</span> {camp.call_time}
+                <span className="text-white/40">Call Time:</span> {formatTime12h(camp.call_time)}
               </span>
             )}
             <span className="text-white/50">

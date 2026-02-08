@@ -12,7 +12,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/lib/auth/context'
 import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
+import { cn, parseDateSafe } from '@/lib/utils'
 import {
   ShoppingBag,
   ArrowLeft,
@@ -190,8 +190,8 @@ export default function CampStorePage() {
   }
 
   const formatDateRange = (startDate: string, endDate: string) => {
-    const start = new Date(startDate)
-    const end = new Date(endDate)
+    const start = parseDateSafe(startDate)
+    const end = parseDateSafe(endDate)
     const options: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' }
     return `${start.toLocaleDateString('en-US', options)}-${end.toLocaleDateString('en-US', options)}`
   }

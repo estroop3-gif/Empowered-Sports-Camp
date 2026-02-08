@@ -16,7 +16,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import { cn } from '@/lib/utils'
+import { cn, parseDateSafe, formatTime12h } from '@/lib/utils'
 import { PortalCard } from '@/components/portal'
 import {
   LayoutDashboard,
@@ -39,6 +39,7 @@ import {
   Send,
   DollarSign,
   Shield,
+  ClipboardList,
   Plus,
   Pencil,
   Trash2,
@@ -51,6 +52,8 @@ import { AddStaffModal, EditStaffModal } from '@/components/camp-hq/staffing'
 import { StartDayModal } from './StartDayModal'
 import { EndDayModal } from './EndDayModal'
 import { ConcludeCampModal } from './ConcludeCampModal'
+import { SendEmailModal } from './SendEmailModal'
+import { WaitlistTab } from './WaitlistTab'
 import type {
   CampHqOverview,
   CampHqDay,
@@ -73,6 +76,7 @@ export type CampHqTab =
   | 'staffing'
   | 'reports'
   | 'incentives'
+  | 'waitlist'
 
 interface CampHqShellProps {
   campId: string
@@ -104,6 +108,7 @@ const TABS: TabConfig[] = [
   { id: 'staffing', label: 'Staffing', icon: UserCog },
   { id: 'reports', label: 'Reports', icon: FileBarChart },
   { id: 'incentives', label: 'Incentives', icon: DollarSign },
+  { id: 'waitlist', label: 'Waitlist', icon: ClipboardList },
 ]
 
 // ============================================================================
@@ -122,6 +127,7 @@ export function CampHqShell({
   const [loading, setLoading] = useState(true)
   const [overview, setOverview] = useState<CampHqOverview | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [showSendEmail, setShowSendEmail] = useState(false)
 
   // Load overview data
   const loadOverview = useCallback(async () => {
@@ -191,7 +197,17 @@ export function CampHqShell({
         overview={overview}
         routePrefix={routePrefix}
         isAdmin={isAdmin}
+        onSendEmail={() => setShowSendEmail(true)}
       />
+
+      {/* Send Email Modal */}
+      {showSendEmail && overview && (
+        <SendEmailModal
+          campId={campId}
+          campName={overview.camp.name}
+          onClose={() => setShowSendEmail(false)}
+        />
+      )}
 
       {/* Tab Navigation */}
       <div className="border-b border-white/10 mb-6 -mx-4 lg:-mx-8 px-4 lg:px-8">
@@ -265,6 +281,9 @@ export function CampHqShell({
             isAdmin={isAdmin}
           />
         )}
+        {activeTab === 'waitlist' && (
+          <WaitlistTab campId={campId} />
+        )}
       </div>
     </div>
   )
@@ -278,10 +297,12 @@ function CampHqHeader({
   overview,
   routePrefix,
   isAdmin,
+  onSendEmail,
 }: {
   overview: CampHqOverview
   routePrefix: string
   isAdmin: boolean
+  onSendEmail: () => void
 }) {
   const { camp, location, stats } = overview
 
@@ -338,13 +359,13 @@ function CampHqHeader({
           <div className="flex flex-wrap items-center gap-4 mt-2 text-sm text-white/50">
             <span className="flex items-center gap-1">
               <Calendar className="h-4 w-4" />
-              {new Date(camp.start_date).toLocaleDateString()} -{' '}
-              {new Date(camp.end_date).toLocaleDateString()}
+              {parseDateSafe(camp.start_date).toLocaleDateString()} -{' '}
+              {parseDateSafe(camp.end_date).toLocaleDateString()}
             </span>
             {camp.start_time && camp.end_time && (
               <span className="flex items-center gap-1">
                 <Clock className="h-4 w-4" />
-                {camp.start_time} - {camp.end_time}
+                {formatTime12h(camp.start_time)} - {formatTime12h(camp.end_time)}
               </span>
             )}
             {location && (
@@ -360,8 +381,16 @@ function CampHqHeader({
           </div>
         </div>
 
-        {/* Quick Stats */}
-        <div className="flex gap-4">
+        {/* Actions + Quick Stats */}
+        <div className="flex items-center gap-6">
+          <button
+            onClick={onSendEmail}
+            className="flex items-center gap-2 px-4 py-2 bg-purple hover:bg-purple/80 text-white font-bold text-sm uppercase tracking-wider transition-colors"
+          >
+            <Send className="h-4 w-4" />
+            Send Email
+          </button>
+          <div className="flex gap-4">
           <div className="text-center">
             <div className="text-2xl font-bold text-white">{stats.total_registered}</div>
             <div className="text-xs text-white/40 uppercase">Campers</div>
@@ -374,11 +403,18 @@ function CampHqHeader({
             <div className="text-2xl font-bold text-white">{stats.total_staff}</div>
             <div className="text-xs text-white/40 uppercase">Staff</div>
           </div>
+          {stats.total_waitlisted > 0 && (
+          <div className="text-center">
+            <div className="text-2xl font-bold text-purple">{stats.total_waitlisted}</div>
+            <div className="text-xs text-white/40 uppercase">Waitlist</div>
+          </div>
+          )}
           <div className="text-center">
             <div className="text-2xl font-bold text-white">
               {stats.days_completed}/{stats.days_total}
             </div>
             <div className="text-xs text-white/40 uppercase">Days</div>
+          </div>
           </div>
         </div>
       </div>
@@ -868,7 +904,7 @@ function CampDayTab({
                       )}
                     </div>
                     <div className="text-sm text-white/50">
-                      {new Date(day.date).toLocaleDateString('en-US', {
+                      {parseDateSafe(day.date).toLocaleDateString('en-US', {
                         weekday: 'short',
                         month: 'short',
                         day: 'numeric',

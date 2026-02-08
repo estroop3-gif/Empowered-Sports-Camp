@@ -8,7 +8,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUserFromRequest } from '@/lib/auth/server'
 import { getContractById, markContractAsSent } from '@/lib/services/venue-contracts'
 import { getVenueById } from '@/lib/services/venues'
-import { sendEmail } from '@/lib/email/ses-client'
+import { sendEmail, logEmail } from '@/lib/email/resend-client'
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib'
 import { downloadFile, extractKeyFromUrl, uploadFile } from '@/lib/storage/s3'
 
@@ -479,11 +479,21 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       pdfUrl,
     })
 
-    // Send email via AWS SES
+    // Send email via Resend
+    const emailSubject = `Venue Contract - ${venueName} - Empowered Sports Camp`
     const emailResult = await sendEmail({
       to: recipientEmail,
-      subject: `Venue Contract - ${venueName} - Empowered Sports Camp`,
+      subject: emailSubject,
       html: emailHtml,
+    })
+
+    await logEmail({
+      toEmail: recipientEmail,
+      subject: emailSubject,
+      emailType: 'system_alert',
+      status: emailResult.success ? 'sent' : 'failed',
+      providerMessageId: emailResult.messageId,
+      errorMessage: emailResult.error,
     })
 
     if (!emailResult.success) {

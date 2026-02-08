@@ -28,6 +28,7 @@ import Stripe from 'stripe'
 import { prisma } from '@/lib/db/client'
 import type { PaymentStatus, OrderStatus } from '@/generated/prisma'
 import { createNotification } from './notifications'
+import { onSpotOpened, reorderPositions } from './waitlist'
 
 // =============================================================================
 // Types
@@ -542,6 +543,10 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session): Promise
         status: 'confirmed',
         stripePaymentIntentId: paymentIntentId,
         paidAt: new Date(),
+        // Clear waitlist fields for any waitlisted registrations
+        waitlistPosition: null,
+        waitlistOfferSentAt: null,
+        waitlistOfferExpiresAt: null,
       },
     })
 
@@ -574,6 +579,14 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session): Promise
         category: 'camp',
         severity: 'success',
       }).catch((err) => console.error('[Payments] Failed to send confirmation notification:', err))
+    }
+
+    // Reorder waitlist positions for affected camps (in case these were waitlisted registrations)
+    if (registrations.length > 0) {
+      const campIds = [...new Set(registrations.map(r => r.campId))]
+      for (const cId of campIds) {
+        reorderPositions(cId).catch(err => console.error('[Payments] Waitlist reorder failed:', err))
+      }
     }
 
     console.log('[Payments] Registrations confirmed:', allRegIds.join(', '))
@@ -752,6 +765,13 @@ async function handleChargeRefunded(charge: Stripe.Charge): Promise<string | nul
       category: 'camp',
       severity: 'info',
     }).catch((err) => console.error('[Payments] Failed to send refund notification:', err))
+
+    // Notify next waitlisted person if a spot opened
+    if (isFullRefund) {
+      onSpotOpened(registration.campId).catch(err =>
+        console.error('[Payments] Waitlist notification failed:', err)
+      )
+    }
 
     return registration.id
   }

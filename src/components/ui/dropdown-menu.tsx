@@ -46,15 +46,23 @@ export function DropdownMenu({
     if (isOpen && triggerRef.current) {
       const rect = triggerRef.current.getBoundingClientRect()
       const menuWidth = 180 // min-width of menu
+      const menuHeight = items.length * 40 + 8 // estimated item height + padding
+
+      // Check if menu would overflow below the viewport
+      const spaceBelow = window.innerHeight - rect.bottom
+      const fitsBelow = spaceBelow >= menuHeight + 4
+      const top = fitsBelow
+        ? rect.bottom + 4
+        : rect.top - menuHeight - 4
 
       setPosition({
-        top: rect.bottom + window.scrollY + 4,
+        top,
         left: align === 'right'
-          ? rect.right + window.scrollX - menuWidth
-          : rect.left + window.scrollX,
+          ? rect.right - menuWidth
+          : rect.left,
       })
     }
-  }, [isOpen, align])
+  }, [isOpen, align, items.length])
 
   // Close on click outside
   useEffect(() => {

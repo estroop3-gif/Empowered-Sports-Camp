@@ -10,7 +10,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { PortalPageHeader, PortalCard, LmsGate } from '@/components/portal'
-import { cn } from '@/lib/utils'
+import { cn, formatTime12h } from '@/lib/utils'
 import {
   Calendar,
   MapPin,
@@ -141,7 +141,7 @@ function TodayScheduleCard({ schedule }: { schedule: CoachTodaySchedule }) {
             {schedule.camp_start_time && schedule.camp_end_time && (
               <span className="flex items-center gap-1">
                 <Clock className="h-3 w-3" />
-                {schedule.camp_start_time} - {schedule.camp_end_time}
+                {formatTime12h(schedule.camp_start_time)} - {formatTime12h(schedule.camp_end_time)}
               </span>
             )}
           </div>
@@ -177,7 +177,7 @@ function TodayScheduleCard({ schedule }: { schedule: CoachTodaySchedule }) {
             <div>
               <div className="text-xs text-white/40 uppercase mb-1">Your Shift</div>
               <div className="text-lg font-bold text-blue-400">
-                {schedule.call_time} - {schedule.shift_end_time || 'TBD'}
+                {formatTime12h(schedule.call_time)} - {schedule.shift_end_time ? formatTime12h(schedule.shift_end_time) : 'TBD'}
               </div>
             </div>
             {schedule.station_name && (
@@ -212,9 +212,9 @@ function TodayScheduleCard({ schedule }: { schedule: CoachTodaySchedule }) {
                   )}
                 >
                   <div className="text-sm text-white/50 w-24 flex-shrink-0">
-                    {block.start_time}
+                    {formatTime12h(block.start_time)}
                     <br />
-                    <span className="text-xs">- {block.end_time}</span>
+                    <span className="text-xs">- {formatTime12h(block.end_time)}</span>
                   </div>
                   <div className="flex-1">
                     <div className={cn(

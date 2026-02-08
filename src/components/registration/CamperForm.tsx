@@ -463,7 +463,7 @@ function CamperCard({
               </h4>
             </div>
             <p className="text-xs text-white/40 mb-4">
-              People authorized to pick up this camper (optional)
+              People authorized to pick up this camper (required — at least one person)
             </p>
 
             {(camper.authorizedPickups || []).map((pickup: PickupPersonInput, pickupIndex: number) => (
@@ -499,18 +499,20 @@ function CamperCard({
                   }}
                   placeholder="(555) 123-4567"
                 />
-                <div className="flex items-end pb-1">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const updated = (camper.authorizedPickups || []).filter((_, i) => i !== pickupIndex)
-                      onUpdate({ authorizedPickups: updated })
-                    }}
-                    className="p-2 text-white/40 hover:text-red-500 transition-colors"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
+                {(camper.authorizedPickups || []).length > 1 && (
+                  <div className="flex items-end pb-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const updated = (camper.authorizedPickups || []).filter((_, i) => i !== pickupIndex)
+                        onUpdate({ authorizedPickups: updated })
+                      }}
+                      className="p-2 text-white/40 hover:text-red-500 transition-colors"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
 
@@ -630,6 +632,17 @@ export function CamperForm({ campSession, onContinue, onBack }: CamperFormProps)
 
   return (
     <div className="space-y-8">
+      {/* Waitlist Banner */}
+      {state.isWaitlistMode && (
+        <div className="bg-purple/10 border border-purple/30 p-4 flex items-start gap-3">
+          <AlertCircle className="h-5 w-5 text-purple flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-semibold text-white">This camp is full — you&apos;re joining the waitlist</p>
+            <p className="text-sm text-white/60 mt-1">Complete your info and we&apos;ll notify you when a spot opens.</p>
+          </div>
+        </div>
+      )}
+
       {/* Section Header */}
       <div>
         <h1 className="text-2xl sm:text-3xl font-black uppercase tracking-wider text-white">

@@ -19,6 +19,7 @@ interface RegistrationStepperProps {
   currentStep: CheckoutStep
   variant?: 'vertical' | 'horizontal'
   hideAccountStep?: boolean
+  isWaitlistMode?: boolean
 }
 
 interface StepConfig {
@@ -38,15 +39,28 @@ const STEPS: StepConfig[] = [
   { id: 'confirmation', label: 'CONFIRMED', number: 8 },
 ]
 
+const WAITLIST_STEPS: StepConfig[] = [
+  { id: 'camp', label: 'SELECT CAMP', number: 1 },
+  { id: 'campers', label: 'CAMPER INFO', number: 2 },
+  { id: 'squad', label: 'HER SQUAD', number: 3 },
+  { id: 'waivers', label: 'WAIVERS', number: 4 },
+  { id: 'account', label: 'ACCOUNT', number: 5 },
+  { id: 'waitlist-confirm', label: 'WAITLIST', number: 6 },
+]
+
 export function RegistrationStepper({
   currentStep,
   variant = 'vertical',
   hideAccountStep = false,
+  isWaitlistMode = false,
 }: RegistrationStepperProps) {
+  // Use waitlist steps when in waitlist mode
+  const baseSteps = isWaitlistMode ? WAITLIST_STEPS : STEPS
+
   // Filter out the account step when user is authenticated and renumber
   const steps = hideAccountStep
-    ? STEPS.filter((s) => s.id !== 'account').map((s, i) => ({ ...s, number: i + 1 }))
-    : STEPS
+    ? baseSteps.filter((s) => s.id !== 'account').map((s, i) => ({ ...s, number: i + 1 }))
+    : baseSteps
   const currentIndex = steps.findIndex((s) => s.id === currentStep)
 
   if (variant === 'horizontal') {

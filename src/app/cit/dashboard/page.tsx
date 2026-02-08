@@ -16,7 +16,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useAuth } from '@/lib/auth/context'
 import { PortalPageHeader, PortalCard } from '@/components/portal'
-import { cn } from '@/lib/utils'
+import { cn, parseDateSafe, formatTime12h } from '@/lib/utils'
 import {
   Loader2,
   AlertCircle,
@@ -221,7 +221,7 @@ export default function CitDashboardPage() {
                     {camp.call_time && (
                       <span className="flex items-center gap-1">
                         <Clock className="h-4 w-4" />
-                        Arrive: {camp.call_time}
+                        Arrive: {formatTime12h(camp.call_time)}
                       </span>
                     )}
                     {camp.location_name && (
@@ -275,10 +275,10 @@ export default function CitDashboardPage() {
                     <div>
                       <h4 className="font-bold text-white">{camp.name}</h4>
                       <p className="text-sm text-white/50">
-                        {new Date(camp.start_date).toLocaleDateString('en-US', {
+                        {parseDateSafe(camp.start_date).toLocaleDateString('en-US', {
                           month: 'short',
                           day: 'numeric',
-                        })} - {new Date(camp.end_date).toLocaleDateString('en-US', {
+                        })} - {parseDateSafe(camp.end_date).toLocaleDateString('en-US', {
                           month: 'short',
                           day: 'numeric',
                         })}

@@ -18,6 +18,7 @@ import {
   Star,
   Download,
 } from 'lucide-react'
+import { parseDateSafe } from '@/lib/utils'
 import { generateReportPDF } from '@/lib/utils/pdf-export'
 
 interface SessionReport {
@@ -57,7 +58,7 @@ export default function SessionReportPage() {
   const handleDownloadPDF = () => {
     if (!report) return
 
-    const dateRange = `${new Date(report.startDate).toLocaleDateString()} - ${new Date(report.endDate).toLocaleDateString()}`
+    const dateRange = `${parseDateSafe(report.startDate).toLocaleDateString()} - ${parseDateSafe(report.endDate).toLocaleDateString()}`
 
     const stats = [
       { label: 'Total Campers', value: report.stats.totalRegistrations },
@@ -109,7 +110,7 @@ export default function SessionReportPage() {
           headers: ['Day', 'Date', 'Word', 'Sport', 'Attended', 'Absent'],
           rows: report.daysSummary.map((day) => [
             `Day ${day.dayNumber}`,
-            new Date(day.date).toLocaleDateString('en-US', {
+            parseDateSafe(day.date).toLocaleDateString('en-US', {
               weekday: 'short',
               month: 'short',
               day: 'numeric',
@@ -202,7 +203,7 @@ export default function SessionReportPage() {
           </h1>
           <p className="text-white/50 mt-1">
             {report.campName} •{' '}
-            {new Date(report.startDate).toLocaleDateString()} - {new Date(report.endDate).toLocaleDateString()}
+            {parseDateSafe(report.startDate).toLocaleDateString()} - {parseDateSafe(report.endDate).toLocaleDateString()}
           </p>
         </div>
         <button
@@ -322,7 +323,7 @@ export default function SessionReportPage() {
                 <tr key={day.dayNumber} className="hover:bg-white/5">
                   <td className="py-3 px-4 font-medium text-white">Day {day.dayNumber}</td>
                   <td className="py-3 px-4 text-white/70">
-                    {new Date(day.date).toLocaleDateString('en-US', {
+                    {parseDateSafe(day.date).toLocaleDateString('en-US', {
                       weekday: 'short',
                       month: 'short',
                       day: 'numeric',

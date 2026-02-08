@@ -9,7 +9,7 @@
 import { useState, useEffect, use } from 'react'
 import Link from 'next/link'
 import { PortalPageHeader, PortalCard } from '@/components/portal'
-import { cn } from '@/lib/utils'
+import { cn, formatTime12h, parseDateSafe } from '@/lib/utils'
 import {
   Loader2,
   AlertCircle,
@@ -20,18 +20,6 @@ import {
   ChevronDown,
   ChevronUp,
 } from 'lucide-react'
-
-/** Convert "HH:MM" or "HH:MM:SS" 24h time to "H:MM AM/PM" */
-function formatTime12h(time?: string | null): string {
-  if (!time) return ''
-  const [hStr, mStr] = time.split(':')
-  let h = parseInt(hStr, 10)
-  const m = mStr || '00'
-  const ampm = h >= 12 ? 'PM' : 'AM'
-  if (h === 0) h = 12
-  else if (h > 12) h -= 12
-  return `${h}:${m} ${ampm}`
-}
 
 interface ScheduleBlock {
   id: string
@@ -185,10 +173,10 @@ export default function CitCampSchedulePage({
         <div className="flex flex-wrap items-center gap-6 text-sm">
           <span className="flex items-center gap-2 text-white">
             <Calendar className="h-4 w-4 text-orange-400" />
-            {new Date(data.camp.start_date).toLocaleDateString('en-US', {
+            {parseDateSafe(data.camp.start_date).toLocaleDateString('en-US', {
               month: 'long',
               day: 'numeric',
-            })} - {new Date(data.camp.end_date).toLocaleDateString('en-US', {
+            })} - {parseDateSafe(data.camp.end_date).toLocaleDateString('en-US', {
               month: 'long',
               day: 'numeric',
               year: 'numeric',
@@ -261,7 +249,7 @@ export default function CitCampSchedulePage({
                         {isToday && <span className="text-orange-400 ml-2">(Today)</span>}
                       </h3>
                       <p className="text-sm text-white/50">
-                        {new Date(day.date).toLocaleDateString('en-US', {
+                        {parseDateSafe(day.date).toLocaleDateString('en-US', {
                           weekday: 'long',
                           month: 'long',
                           day: 'numeric',

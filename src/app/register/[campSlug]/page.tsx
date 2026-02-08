@@ -14,6 +14,7 @@ import {
   AccountCreationStep,
   PaymentStep,
   ConfirmationStep,
+  WaitlistConfirmationStep,
 } from '@/components/registration'
 import type { CampSession, AddOn, CampWithAddOns } from '@/types/registration'
 
@@ -201,7 +202,7 @@ const DEFAULT_ADDONS: AddOn[] = [
 
 function RegistrationContent({ camp, addons }: { camp: CampSession; addons: AddOn[] }) {
   const router = useRouter()
-  const { state, setStep, setCamp, setSquad, nextStep, prevStep } = useCheckout()
+  const { state, setStep, setCamp, setSquad, setWaitlistMode, nextStep, prevStep } = useCheckout()
   const { user: authUser, loading: authLoading } = useAuth()
   const [confirmationNumber, setConfirmationNumber] = useState<string | null>(null)
 
@@ -225,10 +226,13 @@ function RegistrationContent({ camp, addons }: { camp: CampSession; addons: AddO
     router.push('/camps')
   }
 
-  // Set camp on mount
+  // Set camp on mount and detect waitlist mode
   useEffect(() => {
     setCamp(camp)
-  }, [camp, setCamp])
+    if (camp.isFull) {
+      setWaitlistMode(true)
+    }
+  }, [camp, setCamp, setWaitlistMode])
 
   // Auto-advance from camp step since we're already on a specific camp page
   useEffect(() => {
@@ -340,6 +344,14 @@ function RegistrationContent({ camp, addons }: { camp: CampSession; addons: AddO
           />
         )
 
+      case 'waitlist-confirm':
+        return (
+          <WaitlistConfirmationStep
+            campSession={camp}
+            onBack={prevStep}
+          />
+        )
+
       case 'confirmation':
         return (
           <ConfirmationStep
@@ -359,6 +371,7 @@ function RegistrationContent({ camp, addons }: { camp: CampSession; addons: AddO
       campSession={camp}
       availableAddOns={addons}
       hideAccountStep={isAuthenticated === true}
+      isWaitlistMode={state.isWaitlistMode}
     >
       {renderStep()}
     </RegistrationLayout>

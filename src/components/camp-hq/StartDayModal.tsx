@@ -9,7 +9,7 @@
 
 import { useState, useEffect } from 'react'
 import { X, Loader2, Play, AlertTriangle, Users, Calendar, Clock, CheckCircle } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn, parseDateSafe } from '@/lib/utils'
 
 interface StartDayWarning {
   type: 'warning' | 'error'
@@ -146,7 +146,7 @@ export function StartDayModal({ campId, onClose, onSuccess }: StartDayModalProps
                     <div>
                       <div className="font-bold text-white">Day {dayInfo.day_number}</div>
                       <div className="text-sm text-white/50">
-                        {new Date(dayInfo.date).toLocaleDateString('en-US', {
+                        {parseDateSafe(dayInfo.date).toLocaleDateString('en-US', {
                           weekday: 'long',
                           month: 'long',
                           day: 'numeric',

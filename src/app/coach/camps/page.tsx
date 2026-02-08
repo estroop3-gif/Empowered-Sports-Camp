@@ -10,7 +10,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { PortalPageHeader, PortalCard, LmsGate } from '@/components/portal'
-import { cn } from '@/lib/utils'
+import { cn, parseDateSafe, formatTime12h } from '@/lib/utils'
 import {
   Calendar,
   MapPin,
@@ -177,10 +177,10 @@ function CampCard({ camp }: { camp: CoachCampSummary }) {
         <div className="flex items-center gap-2">
           <Calendar className="h-3 w-3" />
           <span>
-            {new Date(camp.start_date).toLocaleDateString('en-US', {
+            {parseDateSafe(camp.start_date).toLocaleDateString('en-US', {
               month: 'short',
               day: 'numeric',
-            })} - {new Date(camp.end_date).toLocaleDateString('en-US', {
+            })} - {parseDateSafe(camp.end_date).toLocaleDateString('en-US', {
               month: 'short',
               day: 'numeric',
             })}
@@ -294,7 +294,7 @@ function CampDetailView({ camp }: { camp: any }) {
                     <div className="flex items-center justify-between mb-3">
                       <h4 className="font-bold text-white">Day {day.day_number}</h4>
                       <span className="text-xs text-white/40">
-                        {day.date && new Date(day.date).toLocaleDateString()}
+                        {day.date && parseDateSafe(day.date).toLocaleDateString()}
                       </span>
                     </div>
                     {day.schedule_blocks.length > 0 ? (
@@ -310,7 +310,7 @@ function CampDetailView({ camp }: { camp: any }) {
                             )}
                           >
                             <span className="text-white/50 w-28 flex-shrink-0">
-                              {block.start_time} - {block.end_time}
+                              {formatTime12h(block.start_time)} - {formatTime12h(block.end_time)}
                             </span>
                             <span className={cn(
                               'font-medium',
@@ -338,15 +338,15 @@ function CampDetailView({ camp }: { camp: any }) {
               <div className="flex items-center gap-2 text-sm">
                 <Calendar className="h-4 w-4 text-white/40" />
                 <span className="text-white">
-                  {new Date(camp.camp.start_date).toLocaleDateString()} -{' '}
-                  {new Date(camp.camp.end_date).toLocaleDateString()}
+                  {parseDateSafe(camp.camp.start_date).toLocaleDateString()} -{' '}
+                  {parseDateSafe(camp.camp.end_date).toLocaleDateString()}
                 </span>
               </div>
               {camp.camp.start_time && camp.camp.end_time && (
                 <div className="flex items-center gap-2 text-sm">
                   <Clock className="h-4 w-4 text-white/40" />
                   <span className="text-white">
-                    {camp.camp.start_time} - {camp.camp.end_time}
+                    {formatTime12h(camp.camp.start_time)} - {formatTime12h(camp.camp.end_time)}
                   </span>
                 </div>
               )}

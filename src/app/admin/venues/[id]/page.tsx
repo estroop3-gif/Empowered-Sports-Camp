@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { AdminLayout, PageHeader, ContentCard } from '@/components/admin/admin-layout'
 import ContractList from '@/components/admin/venues/ContractList'
 import { cn } from '@/lib/utils'
+import { AddSportModal } from '@/components/admin/camps/AddSportModal'
 import { COUNTRIES, getRegionLabelForCountry, countryHasRegions } from '@/lib/constants/locations'
 import { RegionInput } from '@/components/ui/RegionInput'
 import {
@@ -107,22 +108,6 @@ interface FormData {
   hero_image_url: string
 }
 
-const SPORTS = [
-  'Multi-Sport',
-  'Basketball',
-  'Soccer',
-  'Volleyball',
-  'Flag Football',
-  'Softball',
-  'Tennis',
-  'Track & Field',
-  'Swimming',
-  'Lacrosse',
-  'Gymnastics',
-  'Dance',
-  'Cheerleading',
-]
-
 const FACILITY_TYPES: { value: FacilityType; label: string }[] = [
   { value: 'school', label: 'School' },
   { value: 'park', label: 'Park' },
@@ -167,6 +152,8 @@ export default function VenueDetailPage({ params }: { params: Promise<{ id: stri
 
   // Contracts modal trigger
   const [showAddContractTrigger, setShowAddContractTrigger] = useState(false)
+  const [sportTagOptions, setSportTagOptions] = useState<string[]>([])
+  const [showAddSportModal, setShowAddSportModal] = useState(false)
 
   const [formData, setFormData] = useState<FormData>({
     tenant_id: '',
@@ -209,9 +196,10 @@ export default function VenueDetailPage({ params }: { params: Promise<{ id: stri
   useEffect(() => {
     async function fetchData() {
       try {
-        const [venueRes, territoriesRes] = await Promise.all([
+        const [venueRes, territoriesRes, sportRes] = await Promise.all([
           fetch(`/api/admin/venues/${venueId}`, { credentials: 'include' }),
           fetch('/api/admin/camps/territories', { credentials: 'include' }),
+          fetch('/api/sport-tags'),
         ])
 
         const venueData = await venueRes.json()
@@ -228,6 +216,11 @@ export default function VenueDetailPage({ params }: { params: Promise<{ id: stri
 
         const territoriesList = territoriesData.territories || []
         setTerritories(territoriesList)
+
+        if (sportRes.ok) {
+          const sportData = await sportRes.json()
+          setSportTagOptions((sportData.data || []).map((t: { name: string }) => t.name))
+        }
 
         // Find territory that matches the venue's tenant_id
         if (v.tenant_id) {
@@ -481,6 +474,14 @@ export default function VenueDetailPage({ params }: { params: Promise<{ id: stri
 
   return (
     <AdminLayout userRole="hq_admin" userName="Admin">
+      <AddSportModal
+        open={showAddSportModal}
+        onClose={() => setShowAddSportModal(false)}
+        onCreated={(tag) => {
+          setSportTagOptions(prev => [...prev, tag.name])
+          setFormData(prev => ({ ...prev, sports_supported: [...prev.sports_supported, tag.name] }))
+        }}
+      />
       <div className="mb-6">
         <Link
           href="/admin/venues"
@@ -803,7 +804,7 @@ export default function VenueDetailPage({ params }: { params: Promise<{ id: stri
                       Sports Supported
                     </label>
                     <div className="flex flex-wrap gap-2">
-                      {SPORTS.map((sport) => (
+                      {sportTagOptions.map((sport) => (
                         <button
                           key={sport}
                           type="button"
@@ -818,6 +819,13 @@ export default function VenueDetailPage({ params }: { params: Promise<{ id: stri
                           {sport}
                         </button>
                       ))}
+                      <button
+                        type="button"
+                        onClick={() => setShowAddSportModal(true)}
+                        className="px-3 py-1.5 border border-dashed border-white/20 text-white/30 hover:border-purple hover:text-purple transition-colors"
+                      >
+                        <Plus className="h-4 w-4" />
+                      </button>
                     </div>
                   </div>
 

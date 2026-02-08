@@ -12,7 +12,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useAuth } from '@/lib/auth/context'
 import { PortalPageHeader, PortalCard, LmsGate } from '@/components/portal'
-import { cn } from '@/lib/utils'
+import { cn, formatTime12h } from '@/lib/utils'
 import {
   Calendar,
   MapPin,
@@ -281,7 +281,7 @@ function CampDayCard({ camp }: { camp: DirectorTodayCamp }) {
         {camp.start_time && camp.end_time && (
           <span className="flex items-center gap-1">
             <Clock className="h-3 w-3" />
-            {camp.start_time} - {camp.end_time}
+            {formatTime12h(camp.start_time)} - {formatTime12h(camp.end_time)}
           </span>
         )}
       </div>

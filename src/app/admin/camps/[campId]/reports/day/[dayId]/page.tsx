@@ -17,6 +17,7 @@ import {
   Mic,
   Download,
 } from 'lucide-react'
+import { parseDateSafe } from '@/lib/utils'
 import { generateReportPDF } from '@/lib/utils/pdf-export'
 
 interface DayReport {
@@ -52,7 +53,7 @@ export default function DayReportPage() {
   const handleDownloadPDF = () => {
     if (!report) return
 
-    const dateFormatted = new Date(report.date).toLocaleDateString('en-US', {
+    const dateFormatted = parseDateSafe(report.date).toLocaleDateString('en-US', {
       weekday: 'long',
       month: 'long',
       day: 'numeric',
@@ -171,7 +172,7 @@ export default function DayReportPage() {
           </h1>
           <p className="text-white/50 mt-1">
             {report.campName} •{' '}
-            {new Date(report.date).toLocaleDateString('en-US', {
+            {parseDateSafe(report.date).toLocaleDateString('en-US', {
               weekday: 'long',
               month: 'long',
               day: 'numeric',

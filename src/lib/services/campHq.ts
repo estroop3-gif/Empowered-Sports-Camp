@@ -43,6 +43,7 @@ export interface CampHqOverview {
     percent_full: number
     total_staff: number
     total_groups: number
+    total_waitlisted: number
     days_total: number
     days_completed: number
     days_remaining: number
@@ -137,8 +138,8 @@ export async function getCampHqOverview(
         },
         location: true,
         registrations: {
-          where: { status: { not: 'cancelled' } },
-          select: { id: true },
+          where: { status: { in: ['confirmed', 'pending'] } },
+          select: { id: true, status: true },
         },
         staffAssignments: {
           select: { id: true },
@@ -222,6 +223,11 @@ export async function getCampHqOverview(
     })
     const totalCampers = camp.registrations.length
 
+    // Count waitlisted registrations
+    const totalWaitlisted = await prisma.registration.count({
+      where: { campId, status: 'waitlisted' },
+    })
+
     if (camperWithGroups > 0 && camperWithGroups === totalCampers) {
       groupingStatusValue = 'finalized'
     } else if (camperWithGroups > 0) {
@@ -262,6 +268,7 @@ export async function getCampHqOverview(
           : 0,
         total_staff: camp.staffAssignments.length,
         total_groups: camp.campGroups.length,
+        total_waitlisted: totalWaitlisted,
         days_total: daysTotal,
         days_completed: daysCompleted,
         days_remaining: daysRemaining,

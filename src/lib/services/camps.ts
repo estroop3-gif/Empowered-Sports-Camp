@@ -7,6 +7,7 @@
 import prisma from '@/lib/db/client'
 import { Prisma } from '@/generated/prisma'
 import { lookupZipCode, haversineDistanceMiles } from '@/lib/geo'
+import { parseDateSafe } from '@/lib/utils'
 import { getProgramTagMap } from '@/lib/services/program-tags'
 import { fetchActiveProgramTags } from '@/lib/services/program-tags'
 import type { VenueGroupData, CampProgramData, NearZipSearchResult, CampListingItem, CampBadge, ProgramTypeSection, ProgramTypeGroupedResult } from '@/types'
@@ -105,7 +106,7 @@ export interface CampSearchResult {
  * Supports both legacy location and new venue fields
  */
 function transformCampToCard(camp: Prisma.CampGetPayload<{
-  include: { location: true; venue: true; tenant: true; registrations: { select: { id: true } } }
+  include: { location: true; venue: true; tenant: true; registrations: { where: { status: { in: ['confirmed', 'pending'] } }; select: { id: true } } }
 }>, tagMap?: Map<string, string>): PublicCampCard {
   const registrationCount = camp.registrations?.length || 0
   const maxCapacity = camp.capacity || 60
@@ -317,7 +318,7 @@ export async function fetchPublicCamps(
       location: true,
       venue: true,
       tenant: true,
-      registrations: { select: { id: true } },
+      registrations: { where: { status: { in: ['confirmed', 'pending'] } }, select: { id: true } },
     },
     orderBy: [
       { featured: 'desc' },
@@ -360,7 +361,7 @@ export async function fetchCampBySlug(slug: string): Promise<PublicCampCard | nu
       location: true,
       venue: true,
       tenant: true,
-      registrations: { select: { id: true } },
+      registrations: { where: { status: { in: ['confirmed', 'pending'] } }, select: { id: true } },
     },
     orderBy: [
       { tenantId: 'asc' },   // nulls last — camps with a real tenant come first
@@ -383,7 +384,7 @@ export async function fetchCampById(id: string): Promise<PublicCampCard | null> 
       location: true,
       venue: true,
       tenant: true,
-      registrations: { select: { id: true } },
+      registrations: { where: { status: { in: ['confirmed', 'pending'] } }, select: { id: true } },
     },
   })
 
@@ -416,7 +417,7 @@ export async function fetchFeaturedCamps(limit: number = 3): Promise<PublicCampC
       location: true,
       venue: true,
       tenant: true,
-      registrations: { select: { id: true } },
+      registrations: { where: { status: { in: ['confirmed', 'pending'] } }, select: { id: true } },
     },
     orderBy: { startDate: 'asc' },
     take: limit,
@@ -487,7 +488,7 @@ export async function fetchCampsByLocation(
       location: true,
       venue: true,
       tenant: true,
-      registrations: { select: { id: true } },
+      registrations: { where: { status: { in: ['confirmed', 'pending'] } }, select: { id: true } },
     },
     orderBy: { startDate: 'asc' },
     take: limit,
@@ -711,7 +712,7 @@ export async function fetchCampsNearZip(
           },
         },
       },
-      registrations: { select: { id: true } },
+      registrations: { where: { status: { in: ['confirmed', 'pending'] } }, select: { id: true } },
     },
     orderBy: { startDate: 'asc' },
   })
@@ -895,7 +896,7 @@ export async function fetchAllPublicCamps(
           },
         },
       },
-      registrations: { select: { id: true } },
+      registrations: { where: { status: { in: ['confirmed', 'pending'] } }, select: { id: true } },
     },
     orderBy: { startDate: 'asc' },
   })
@@ -1096,7 +1097,7 @@ export async function fetchCampsGroupedByProgramType(
       location: true,
       venue: true,
       tenant: true,
-      registrations: { select: { id: true } },
+      registrations: { where: { status: { in: ['confirmed', 'pending'] } }, select: { id: true } },
     },
     orderBy: { startDate: 'asc' },
   })
@@ -1439,8 +1440,8 @@ export function formatPrice(cents: number): string {
  * Format date range for display
  */
 export function formatDateRange(startDate: Date | string, endDate: Date | string): string {
-  const start = new Date(startDate)
-  const end = new Date(endDate)
+  const start = parseDateSafe(startDate)
+  const end = parseDateSafe(endDate)
 
   const options: Intl.DateTimeFormatOptions = {
     month: 'short',

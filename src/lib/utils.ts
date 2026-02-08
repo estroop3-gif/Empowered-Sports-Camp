@@ -12,15 +12,27 @@ export function formatPrice(cents: number): string {
   }).format(cents / 100)
 }
 
-// Parse a date string safely: YYYY-MM-DD strings are treated as noon local time
-// to avoid UTC midnight rolling back a day in US timezones
-function parseDateSafe(date: string | Date): Date {
+// Parse a date string safely: extracts the YYYY-MM-DD portion and treats it as
+// local time to avoid UTC midnight rolling back a day in US timezones.
+// Handles "2026-06-15", "2026-06-15T00:00:00.000Z", and Date objects.
+export function parseDateSafe(date: string | Date): Date {
   if (date instanceof Date) return date
-  // If it's a date-only string (YYYY-MM-DD), append noon to avoid timezone shift
-  if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-    return new Date(`${date}T12:00:00`)
-  }
-  return new Date(date)
+  // Extract just the date part (before any 'T') and construct as local
+  const datePart = date.split('T')[0]
+  const [y, m, d] = datePart.split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
+
+/** Convert "HH:MM" or "HH:MM:SS" 24h time to "9:00 AM" 12h format */
+export function formatTime12h(time?: string | null): string {
+  if (!time) return ''
+  const [hStr, mStr] = time.split(':')
+  let h = parseInt(hStr, 10)
+  const m = mStr || '00'
+  const ampm = h >= 12 ? 'PM' : 'AM'
+  if (h === 0) h = 12
+  else if (h > 12) h -= 12
+  return `${h}:${m} ${ampm}`
 }
 
 export function formatDate(date: string | Date): string {

@@ -9,7 +9,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react'
-import { cn } from '@/lib/utils'
+import { cn, parseDateSafe } from '@/lib/utils'
 import {
   Mic,
   Plus,
@@ -489,7 +489,7 @@ export function GuestSpeakerManager({
 
                   {speaker.speakerDate && (
                     <div className="text-xs text-white/30 mt-1">
-                      {new Date(speaker.speakerDate).toLocaleDateString('en-US', {
+                      {parseDateSafe(speaker.speakerDate).toLocaleDateString('en-US', {
                         weekday: 'short',
                         month: 'short',
                         day: 'numeric',

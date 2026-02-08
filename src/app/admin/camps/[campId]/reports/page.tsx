@@ -21,6 +21,7 @@ import {
   ChevronDown,
   ChevronUp,
 } from 'lucide-react'
+import { parseDateSafe } from '@/lib/utils'
 import { generateReportPDF } from '@/lib/utils/pdf-export'
 
 interface GuestSpeaker {
@@ -125,7 +126,7 @@ export default function ComprehensiveReportPage() {
   const handleDownloadPDF = () => {
     if (!report) return
 
-    const dateRange = `${new Date(report.startDate).toLocaleDateString()} - ${new Date(report.endDate).toLocaleDateString()}`
+    const dateRange = `${parseDateSafe(report.startDate).toLocaleDateString()} - ${parseDateSafe(report.endDate).toLocaleDateString()}`
 
     const stats = [
       { label: 'Total Registrations', value: report.registration.total },
@@ -201,7 +202,7 @@ export default function ComprehensiveReportPage() {
           headers: ['Day', 'Date', 'Word', 'Sport', 'Attended', 'Absent', 'Rate'],
           rows: completedDays.map((day) => [
             `Day ${day.dayNumber}`,
-            new Date(day.date).toLocaleDateString('en-US', {
+            parseDateSafe(day.date).toLocaleDateString('en-US', {
               weekday: 'short',
               month: 'short',
               day: 'numeric',
@@ -297,7 +298,7 @@ export default function ComprehensiveReportPage() {
             </h1>
             <p className="text-white/50 mt-1">
               {report.campName} |{' '}
-              {new Date(report.startDate).toLocaleDateString()} - {new Date(report.endDate).toLocaleDateString()}
+              {parseDateSafe(report.startDate).toLocaleDateString()} - {parseDateSafe(report.endDate).toLocaleDateString()}
             </p>
           </div>
           <button
@@ -523,7 +524,7 @@ export default function ComprehensiveReportPage() {
                             {day.title && <span className="text-white/50"> - {day.title}</span>}
                           </div>
                           <div className="text-sm text-white/50">
-                            {new Date(day.date).toLocaleDateString('en-US', {
+                            {parseDateSafe(day.date).toLocaleDateString('en-US', {
                               weekday: 'long',
                               month: 'short',
                               day: 'numeric',

@@ -124,7 +124,7 @@ export interface CampSessionCurriculum {
   camp?: {
     id: string
     name: string
-    sport: string
+    sports: string[]
     start_date: string
     end_date: string
     tenant_id: string | null
@@ -1204,7 +1204,7 @@ export async function getCurriculumAssignments(): Promise<{
         camp: a.camp ? {
           id: a.camp.id,
           name: a.camp.name,
-          sport: a.camp.sportsOffered?.[0] || a.camp.programType || '',
+          sports: a.camp.sportsOffered || [],
           start_date: a.camp.startDate.toISOString().split('T')[0],
           end_date: a.camp.endDate.toISOString().split('T')[0],
           tenant_id: a.camp.tenantId,
@@ -1315,7 +1315,7 @@ export async function getCampsForAssignment(): Promise<{
   data: Array<{
     id: string
     name: string
-    sport: string
+    sports: string[]
     start_date: string
     end_date: string
     tenant_id: string | null
@@ -1348,7 +1348,7 @@ export async function getCampsForAssignment(): Promise<{
       data: camps.map(c => ({
         id: c.id,
         name: c.name,
-        sport: c.sportsOffered?.[0] || c.programType || '',
+        sports: c.sportsOffered || [],
         start_date: c.startDate.toISOString().split('T')[0],
         end_date: c.endDate.toISOString().split('T')[0],
         tenant_id: c.tenantId,

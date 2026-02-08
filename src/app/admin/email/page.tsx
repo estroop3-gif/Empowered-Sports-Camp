@@ -3,12 +3,11 @@
 /**
  * Automated Email Admin Page - Email Logs Tab
  *
- * Admin view for monitoring sent emails with filtering and search.
+ * Admin view for monitoring sent emails with filtering, search, and preview.
  */
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
 import { AdminLayout, PageHeader, ContentCard } from '@/components/admin/admin-layout'
 import { useAuth } from '@/lib/auth/context'
 import {
@@ -22,6 +21,11 @@ import {
   RefreshCw,
   FileText,
   History,
+  X,
+  RotateCcw,
+  Plus,
+  Calendar,
+  Filter,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
@@ -42,6 +46,7 @@ interface EmailLog {
   createdAt: string
   tenantName: string | null
   userName: string | null
+  htmlBody?: string | null
 }
 
 interface EmailCounts {
@@ -70,10 +75,29 @@ const EMAIL_TYPE_LABELS: Record<string, string> = {
   season_followup_mar: 'March Follow-up',
   season_followup_apr: 'April Follow-up',
   season_followup_may: 'May Follow-up',
-  welcome: 'Welcome Email',
+  camp_confirmation: 'Camp Confirmation',
+  camp_reminder: 'Camp Reminder',
+  daily_recap: 'Daily Recap',
+  post_camp: 'Post Camp',
+  staff_message: 'Staff Message',
   password_reset: 'Password Reset',
-  notification: 'Notification',
+  welcome: 'Welcome Email',
+  payment_receipt: 'Payment Receipt',
+  payment_failed: 'Payment Failed',
+  licensee_application: 'Licensee Application',
+  licensee_status_update: 'Licensee Status Update',
+  cit_application: 'CIT Application',
+  cit_status_update: 'CIT Status Update',
+  royalty_invoice: 'Royalty Invoice',
+  royalty_status_update: 'Royalty Status Update',
+  system_alert: 'System Alert',
+  broadcast: 'Broadcast',
 }
+
+const EMAIL_TYPE_OPTIONS = Object.entries(EMAIL_TYPE_LABELS).map(([value, label]) => ({
+  value,
+  label,
+}))
 
 const STATUS_TABS = [
   { value: 'all', label: 'All' },
@@ -90,14 +114,19 @@ export default function EmailLogsPage() {
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [typeFilter, setTypeFilter] = useState<string>('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
   const [total, setTotal] = useState(0)
+  const [selectedLog, setSelectedLog] = useState<EmailLog | null>(null)
+  const [resending, setResending] = useState(false)
 
   const userName = user?.firstName || user?.email?.split('@')[0] || 'Admin'
 
   useEffect(() => {
     loadLogs()
     loadCounts()
-  }, [statusFilter])
+  }, [statusFilter, typeFilter, dateFrom, dateTo])
 
   const loadLogs = async () => {
     setLoading(true)
@@ -107,8 +136,17 @@ export default function EmailLogsPage() {
       if (statusFilter !== 'all') {
         params.append('status', statusFilter)
       }
+      if (typeFilter) {
+        params.append('type', typeFilter)
+      }
       if (searchQuery) {
         params.append('search', searchQuery)
+      }
+      if (dateFrom) {
+        params.append('from', dateFrom)
+      }
+      if (dateTo) {
+        params.append('to', dateTo)
       }
       params.append('limit', '100')
 
@@ -154,6 +192,29 @@ export default function EmailLogsPage() {
     }
   }
 
+  const handleResend = async (logId: string) => {
+    setResending(true)
+    try {
+      const res = await fetch(`/api/admin/email-logs/${logId}/resend`, {
+        method: 'POST',
+      })
+      const json = await res.json()
+
+      if (!res.ok) {
+        alert(`Resend failed: ${json.error}`)
+      } else {
+        alert('Email resent successfully!')
+        setSelectedLog(null)
+        loadLogs()
+        loadCounts()
+      }
+    } catch {
+      alert('Failed to resend email')
+    } finally {
+      setResending(false)
+    }
+  }
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       month: 'short',
@@ -180,27 +241,37 @@ export default function EmailLogsPage() {
         ]}
       />
 
-      {/* Section Tabs */}
-      <div className="flex gap-1 mb-6 bg-dark-100 border border-white/10 p-1 w-fit">
-        {SECTION_TABS.map(tab => {
-          const Icon = tab.icon
-          const isActive = tab.value === 'logs'
-          return (
-            <Link
-              key={tab.value}
-              href={tab.href}
-              className={cn(
-                'flex items-center gap-2 px-6 py-3 text-sm font-bold uppercase tracking-wider transition-colors',
-                isActive
-                  ? 'bg-purple text-white'
-                  : 'text-white/60 hover:text-white hover:bg-white/5'
-              )}
-            >
-              <Icon className="h-4 w-4" />
-              {tab.label}
-            </Link>
-          )
-        })}
+      {/* Section Tabs + Compose Button */}
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex gap-1 bg-dark-100 border border-white/10 p-1 w-fit">
+          {SECTION_TABS.map(tab => {
+            const Icon = tab.icon
+            const isActive = tab.value === 'logs'
+            return (
+              <Link
+                key={tab.value}
+                href={tab.href}
+                className={cn(
+                  'flex items-center gap-2 px-6 py-3 text-sm font-bold uppercase tracking-wider transition-colors',
+                  isActive
+                    ? 'bg-purple text-white'
+                    : 'text-white/60 hover:text-white hover:bg-white/5'
+                )}
+              >
+                <Icon className="h-4 w-4" />
+                {tab.label}
+              </Link>
+            )
+          })}
+        </div>
+
+        <Link
+          href="/admin/email/compose"
+          className="flex items-center gap-2 px-4 py-2 bg-neon text-black font-bold uppercase tracking-wider text-sm hover:bg-neon/80 transition-colors"
+        >
+          <Plus className="h-4 w-4" />
+          Compose
+        </Link>
       </div>
 
       {/* Stats Cards */}
@@ -252,8 +323,9 @@ export default function EmailLogsPage() {
         ))}
       </div>
 
-      {/* Search */}
-      <div className="flex flex-col sm:flex-row gap-4 mb-6">
+      {/* Filters Row */}
+      <div className="flex flex-col lg:flex-row gap-4 mb-6">
+        {/* Search */}
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-white/30" />
           <Input
@@ -265,6 +337,49 @@ export default function EmailLogsPage() {
             className="pl-12"
           />
         </div>
+
+        {/* Type Filter */}
+        <div className="relative">
+          <Filter className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30 pointer-events-none" />
+          <select
+            value={typeFilter}
+            onChange={e => setTypeFilter(e.target.value)}
+            className="pl-9 pr-8 py-2 bg-dark-100 border border-white/10 text-white text-sm appearance-none cursor-pointer focus:outline-none focus:border-purple/50 min-w-[180px]"
+          >
+            <option value="">All Types</option>
+            {EMAIL_TYPE_OPTIONS.map(opt => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Date From */}
+        <div className="relative">
+          <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30 pointer-events-none" />
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={e => setDateFrom(e.target.value)}
+            placeholder="From"
+            className="pl-9 pr-3 py-2 bg-dark-100 border border-white/10 text-white text-sm focus:outline-none focus:border-purple/50"
+          />
+        </div>
+
+        {/* Date To */}
+        <div className="relative">
+          <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30 pointer-events-none" />
+          <input
+            type="date"
+            value={dateTo}
+            onChange={e => setDateTo(e.target.value)}
+            placeholder="To"
+            className="pl-9 pr-3 py-2 bg-dark-100 border border-white/10 text-white text-sm focus:outline-none focus:border-purple/50"
+          />
+        </div>
+
+        {/* Action Buttons */}
         <button
           onClick={handleSearch}
           className="flex items-center gap-2 px-4 py-2 bg-purple hover:bg-purple/80 text-white font-medium transition-colors"
@@ -292,7 +407,7 @@ export default function EmailLogsPage() {
             <Mail className="h-12 w-12 text-white/20 mx-auto mb-3" />
             <p className="text-lg font-bold text-white/60">No Email Logs Found</p>
             <p className="text-sm text-white/40 mt-1">
-              {searchQuery || statusFilter !== 'all'
+              {searchQuery || statusFilter !== 'all' || typeFilter || dateFrom || dateTo
                 ? 'Try adjusting your search or filters'
                 : 'Email logs will appear here as emails are sent'}
             </p>
@@ -316,7 +431,11 @@ export default function EmailLogsPage() {
                   const StatusIcon = statusConfig.icon
 
                   return (
-                    <tr key={log.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                    <tr
+                      key={log.id}
+                      onClick={() => setSelectedLog(log)}
+                      className="border-b border-white/5 hover:bg-white/5 transition-colors cursor-pointer"
+                    >
                       <td className="px-4 py-4">
                         <div className="flex items-center gap-3">
                           <div className="h-8 w-8 bg-purple/10 border border-purple/30 flex items-center justify-center flex-shrink-0">
@@ -374,6 +493,126 @@ export default function EmailLogsPage() {
         <p>Showing {logs.length} of {total} emails</p>
         <p>Last updated: just now</p>
       </div>
+
+      {/* Preview Drawer */}
+      {selectedLog && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/60"
+            onClick={() => setSelectedLog(null)}
+          />
+
+          {/* Panel */}
+          <div className="relative w-full max-w-2xl bg-dark-100 border-l border-white/10 overflow-y-auto">
+            {/* Header */}
+            <div className="sticky top-0 z-10 bg-dark-100 border-b border-white/10 p-4 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-white">Email Details</h3>
+              <button
+                onClick={() => setSelectedLog(null)}
+                className="p-2 hover:bg-white/10 transition-colors"
+              >
+                <X className="h-5 w-5 text-white/60" />
+              </button>
+            </div>
+
+            {/* Metadata */}
+            <div className="p-4 space-y-3 border-b border-white/10">
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <span className="text-white/40 text-xs uppercase">To</span>
+                  <p className="text-white">{selectedLog.toEmail}</p>
+                </div>
+                <div>
+                  <span className="text-white/40 text-xs uppercase">From</span>
+                  <p className="text-white">{selectedLog.fromEmail || 'Default'}</p>
+                </div>
+                <div>
+                  <span className="text-white/40 text-xs uppercase">Subject</span>
+                  <p className="text-white">{selectedLog.subject}</p>
+                </div>
+                <div>
+                  <span className="text-white/40 text-xs uppercase">Type</span>
+                  <p className="text-white">
+                    {EMAIL_TYPE_LABELS[selectedLog.emailType] || selectedLog.emailType}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-white/40 text-xs uppercase">Status</span>
+                  <p className={cn(
+                    'font-bold uppercase text-sm',
+                    selectedLog.status === 'sent' ? 'text-blue-400' :
+                    selectedLog.status === 'delivered' ? 'text-neon' :
+                    selectedLog.status === 'failed' ? 'text-red-400' :
+                    'text-orange-400'
+                  )}>
+                    {selectedLog.status}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-white/40 text-xs uppercase">Sent At</span>
+                  <p className="text-white">{formatDate(selectedLog.createdAt)}</p>
+                </div>
+                {selectedLog.userName && (
+                  <div>
+                    <span className="text-white/40 text-xs uppercase">Recipient Name</span>
+                    <p className="text-white">{selectedLog.userName}</p>
+                  </div>
+                )}
+                {selectedLog.tenantName && (
+                  <div>
+                    <span className="text-white/40 text-xs uppercase">Tenant</span>
+                    <p className="text-white">{selectedLog.tenantName}</p>
+                  </div>
+                )}
+              </div>
+              {selectedLog.errorMessage && (
+                <div className="p-3 bg-red-400/10 border border-red-400/30">
+                  <span className="text-red-400 text-xs uppercase font-bold">Error</span>
+                  <p className="text-red-300 text-sm mt-1">{selectedLog.errorMessage}</p>
+                </div>
+              )}
+
+              {/* Resend button for failed emails */}
+              {(selectedLog.status === 'failed' || selectedLog.status === 'bounced') && (
+                <button
+                  onClick={() => handleResend(selectedLog.id)}
+                  disabled={resending}
+                  className="flex items-center gap-2 px-4 py-2 bg-purple hover:bg-purple/80 text-white font-bold text-sm uppercase tracking-wider transition-colors disabled:opacity-50"
+                >
+                  {resending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <RotateCcw className="h-4 w-4" />
+                  )}
+                  {resending ? 'Resending...' : 'Resend Email'}
+                </button>
+              )}
+            </div>
+
+            {/* HTML Preview */}
+            <div className="p-4">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-white/40 mb-3">
+                Email Preview
+              </h4>
+              {selectedLog.htmlBody ? (
+                <div className="bg-white rounded overflow-hidden">
+                  <iframe
+                    srcDoc={selectedLog.htmlBody}
+                    className="w-full min-h-[500px] border-0"
+                    sandbox="allow-same-origin"
+                    title="Email Preview"
+                  />
+                </div>
+              ) : (
+                <div className="text-center py-8 text-white/30 text-sm">
+                  No HTML preview available for this email
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </AdminLayout>
   )
 }

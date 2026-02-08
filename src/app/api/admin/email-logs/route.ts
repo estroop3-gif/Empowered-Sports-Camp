@@ -28,6 +28,8 @@ export async function GET(request: NextRequest) {
     const emailType = searchParams.get('type') as EmailType | null
     const status = searchParams.get('status') as EmailStatus | null
     const search = searchParams.get('search')
+    const from = searchParams.get('from')
+    const to = searchParams.get('to')
     const countsOnly = searchParams.get('counts') === 'true'
     const limit = parseInt(searchParams.get('limit') || '50')
     const offset = parseInt(searchParams.get('offset') || '0')
@@ -37,6 +39,7 @@ export async function GET(request: NextRequest) {
       tenantId?: string
       emailType?: EmailType
       status?: EmailStatus
+      createdAt?: { gte?: Date; lte?: Date }
       OR?: { toEmail?: { contains: string; mode: 'insensitive' }; subject?: { contains: string; mode: 'insensitive' } }[]
     } = {}
 
@@ -58,6 +61,17 @@ export async function GET(request: NextRequest) {
         { toEmail: { contains: search, mode: 'insensitive' } },
         { subject: { contains: search, mode: 'insensitive' } },
       ]
+    }
+
+    // Date range filtering
+    if (from || to) {
+      where.createdAt = {}
+      if (from) {
+        where.createdAt.gte = new Date(from)
+      }
+      if (to) {
+        where.createdAt.lte = new Date(to + 'T23:59:59.999Z')
+      }
     }
 
     // If just counts requested
@@ -103,18 +117,32 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       data: {
-        logs: logs.map(log => ({
-          id: log.id,
-          toEmail: log.toEmail,
-          fromEmail: log.fromEmail,
-          subject: log.subject,
-          emailType: log.emailType,
-          status: log.status,
-          errorMessage: log.errorMessage,
-          createdAt: log.createdAt.toISOString(),
-          tenantName: log.tenant?.name || null,
-          userName: log.user ? `${log.user.firstName} ${log.user.lastName}` : null,
-        })),
+        logs: logs.map(log => {
+          // Extract htmlBody from payload for preview drawer
+          let htmlBody: string | null = null
+          if (log.payload && typeof log.payload === 'object') {
+            const payload = log.payload as Record<string, unknown>
+            if (typeof payload.htmlBody === 'string') {
+              htmlBody = payload.htmlBody
+            } else if (typeof payload.html === 'string') {
+              htmlBody = payload.html
+            }
+          }
+
+          return {
+            id: log.id,
+            toEmail: log.toEmail,
+            fromEmail: log.fromEmail,
+            subject: log.subject,
+            emailType: log.emailType,
+            status: log.status,
+            errorMessage: log.errorMessage,
+            createdAt: log.createdAt.toISOString(),
+            tenantName: log.tenant?.name || null,
+            userName: log.user ? `${log.user.firstName} ${log.user.lastName}` : null,
+            htmlBody,
+          }
+        }),
         total,
         limit,
         offset,

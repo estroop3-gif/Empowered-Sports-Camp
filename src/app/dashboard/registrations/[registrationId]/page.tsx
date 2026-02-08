@@ -21,6 +21,7 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/lib/auth/context'
+import { parseDateSafe } from '@/lib/utils'
 
 interface ReceiptAddon {
   name: string
@@ -208,10 +209,10 @@ export default function RegistrationDetailPage() {
           day: 'numeric',
         })
 
-    const campDates = `${new Date(registration.camp.start_date).toLocaleDateString('en-US', {
+    const campDates = `${parseDateSafe(registration.camp.start_date).toLocaleDateString('en-US', {
       month: 'long',
       day: 'numeric',
-    })} - ${new Date(registration.camp.end_date).toLocaleDateString('en-US', {
+    })} - ${parseDateSafe(registration.camp.end_date).toLocaleDateString('en-US', {
       month: 'long',
       day: 'numeric',
       year: 'numeric',
@@ -427,8 +428,8 @@ export default function RegistrationDetailPage() {
   }
 
   const formatDateRange = (startDate: string, endDate: string) => {
-    const start = new Date(startDate)
-    const end = new Date(endDate)
+    const start = parseDateSafe(startDate)
+    const end = parseDateSafe(endDate)
     const options: Intl.DateTimeFormatOptions = { month: 'long', day: 'numeric' }
     const yearOptions: Intl.DateTimeFormatOptions = { year: 'numeric' }
     return `${start.toLocaleDateString('en-US', options)} - ${end.toLocaleDateString('en-US', options)}, ${end.toLocaleDateString('en-US', yearOptions)}`
@@ -443,7 +444,7 @@ export default function RegistrationDetailPage() {
   }
 
   const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('en-US', {
+    return parseDateSafe(dateStr).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'long',
       day: 'numeric',

@@ -10,7 +10,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useAuth } from '@/lib/auth/context'
 import { PortalPageHeader, PortalCard, LmsGate } from '@/components/portal'
-import { cn } from '@/lib/utils'
+import { cn, parseDateSafe } from '@/lib/utils'
 import {
   DollarSign,
   Loader2,
@@ -357,7 +357,7 @@ function RoyaltyRow({
           <div className="flex flex-wrap items-center gap-4 text-sm text-white/50">
             <span className="flex items-center gap-1">
               <Calendar className="h-3 w-3" />
-              {new Date(camp.start_date).toLocaleDateString()} - {new Date(camp.end_date).toLocaleDateString()}
+              {parseDateSafe(camp.start_date).toLocaleDateString()} - {parseDateSafe(camp.end_date).toLocaleDateString()}
             </span>
             <span className="flex items-center gap-1">
               <Users className="h-3 w-3" />

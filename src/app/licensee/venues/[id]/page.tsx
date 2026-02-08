@@ -46,24 +46,6 @@ const INDOOR_OUTDOOR_OPTIONS = [
   { value: 'both', label: 'Both' },
 ]
 
-const AVAILABLE_SPORTS = [
-  'Soccer',
-  'Basketball',
-  'Football',
-  'Baseball',
-  'Softball',
-  'Volleyball',
-  'Tennis',
-  'Swimming',
-  'Track & Field',
-  'Lacrosse',
-  'Field Hockey',
-  'Wrestling',
-  'Gymnastics',
-  'Cheerleading',
-  'Multi-Sport',
-]
-
 interface Venue {
   id: string
   tenant_id: string | null
@@ -102,6 +84,7 @@ export default function LicenseeVenueDetailPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
+  const [sportTagOptions, setSportTagOptions] = useState<string[]>([])
 
   // Form state
   const [formData, setFormData] = useState({
@@ -140,6 +123,12 @@ export default function LicenseeVenueDetailPage() {
         if (!res.ok) {
           throw new Error(json.error || 'Failed to fetch venue')
         }
+
+        // Fetch sport tags
+        fetch('/api/sport-tags')
+          .then(r => r.ok ? r.json() : null)
+          .then(sj => { if (sj?.data) setSportTagOptions(sj.data.map((t: { name: string }) => t.name)) })
+          .catch(() => {})
 
         const v = json.data
         setVenue(v)
@@ -598,7 +587,7 @@ export default function LicenseeVenueDetailPage() {
                   Sports Supported
                 </label>
                 <div className="flex flex-wrap gap-2">
-                  {AVAILABLE_SPORTS.map((sport) => (
+                  {sportTagOptions.map((sport) => (
                     <button
                       key={sport}
                       type="button"

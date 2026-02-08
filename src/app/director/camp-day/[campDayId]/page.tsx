@@ -14,7 +14,7 @@ import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { QRCodeSVG } from 'qrcode.react'
 import { PortalPageHeader, PortalCard, LmsGate } from '@/components/portal'
-import { cn } from '@/lib/utils'
+import { cn, parseDateSafe } from '@/lib/utils'
 import {
   Loader2,
   CheckCircle,
@@ -469,7 +469,7 @@ export default function CampDayControlPanel({
                 {campDay.camp_name}
               </h1>
               <p className="text-white/50">
-                Day {campDay.day_number} - {new Date(campDay.date).toLocaleDateString('en-US', {
+                Day {campDay.day_number} - {parseDateSafe(campDay.date).toLocaleDateString('en-US', {
                   weekday: 'long',
                   month: 'long',
                   day: 'numeric',
