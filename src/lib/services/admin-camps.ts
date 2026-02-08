@@ -389,10 +389,20 @@ function mapStatusFromDb(status: string): string {
  * Create a new camp
  */
 export async function createCamp(formData: CampFormData): Promise<AdminCamp> {
-  const slug = formData.slug || formData.name
+  let slug = formData.slug || formData.name
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '')
+
+  // Ensure slug is unique — append numeric suffix if needed
+  const existing = await prisma.camp.findUnique({ where: { slug } })
+  if (existing) {
+    let suffix = 2
+    while (await prisma.camp.findUnique({ where: { slug: `${slug}-${suffix}` } })) {
+      suffix++
+    }
+    slug = `${slug}-${suffix}`
+  }
 
   try {
     // Handle empty string tenant_id as null

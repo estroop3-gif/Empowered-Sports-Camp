@@ -237,7 +237,7 @@ export default async function CampDetailPage({ params }: PageProps) {
 
                 {/* CTA Buttons */}
                 <Link
-                  href={`/register/${camp.slug}`}
+                  href={`/register/${camp.id}`}
                   className={`block w-full py-4 text-center font-bold uppercase tracking-widest transition-all ${
                     camp.is_full
                       ? 'bg-transparent border-2 border-magenta text-magenta hover:bg-magenta/10'
@@ -407,7 +407,7 @@ export default async function CampDetailPage({ params }: PageProps) {
               </p>
             </div>
             <Link
-              href={`/register/${camp.slug}`}
+              href={`/register/${camp.id}`}
               className={`px-8 py-4 font-bold uppercase tracking-widest transition-all ${
                 camp.is_full
                   ? 'bg-transparent border-2 border-magenta text-magenta hover:bg-magenta/10'

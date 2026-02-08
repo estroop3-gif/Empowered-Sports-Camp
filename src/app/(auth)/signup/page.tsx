@@ -180,26 +180,18 @@ export default function SignUpPage() {
       // Get the user ID from Cognito
       const userId = result.userSub
 
+      // Store form data in sessionStorage so the confirm page can create the profile after verification
       if (userId) {
-        // Create profile and role in database via API
-        const response = await fetch('/api/auth/create-user', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userId,
-            email: formData.email,
-            firstName: formData.firstName,
-            lastName: formData.lastName,
-            phone: formData.phone,
-            city: formData.city,
-            state: formData.state,
-            zipCode: formData.zipCode,
-          }),
-        })
-
-        if (!response.ok) {
-          console.error('Failed to create user profile:', await response.text())
-        }
+        sessionStorage.setItem('signupProfileData', JSON.stringify({
+          userId,
+          email: formData.email,
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          phone: formData.phone,
+          city: formData.city,
+          state: formData.state,
+          zipCode: formData.zipCode,
+        }))
       }
 
       // Cognito will send a verification email

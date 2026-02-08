@@ -44,7 +44,7 @@ interface PublicCampCard {
   image_url: string | null
   highlights: string[]
   sports_offered: string[]
-  tenant_id: string
+  tenant_id: string | null
   location_id: string | null
   location_name: string | null
   location_address: string | null
@@ -379,9 +379,19 @@ export default function RegisterPage() {
       setError(null)
 
       try {
-        // Fetch camp data from API
-        const campResponse = await fetch(`/api/camps?action=bySlug&slug=${params.campSlug}`)
-        const campResult = await campResponse.json()
+        // The param can be a camp ID (from detail page) or a slug (from shared URLs)
+        const param = params.campSlug as string
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(param)
+
+        let campResult: { data: PublicCampCard | null }
+
+        if (isUUID) {
+          const res = await fetch(`/api/camps?action=byId&id=${param}`)
+          campResult = await res.json()
+        } else {
+          const res = await fetch(`/api/camps?action=bySlug&slug=${param}`)
+          campResult = await res.json()
+        }
 
         if (!campResult.data) {
           setError('Camp not found')

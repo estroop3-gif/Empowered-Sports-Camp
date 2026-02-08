@@ -31,6 +31,27 @@ function ConfirmContent() {
 
     try {
       await confirmSignUp(email, code)
+
+      // Create DB profile now that email is verified
+      const storedData = sessionStorage.getItem('signupProfileData')
+      if (storedData) {
+        try {
+          const profileData = JSON.parse(storedData)
+          const response = await fetch('/api/auth/create-user', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(profileData),
+          })
+          if (!response.ok) {
+            console.error('Failed to create user profile:', await response.text())
+          }
+        } catch (profileErr) {
+          console.error('Error creating profile after verification:', profileErr)
+        } finally {
+          sessionStorage.removeItem('signupProfileData')
+        }
+      }
+
       setMessage('Account verified successfully! Redirecting to login...')
       setTimeout(() => {
         router.push('/login')

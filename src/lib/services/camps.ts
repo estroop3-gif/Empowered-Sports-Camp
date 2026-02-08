@@ -362,6 +362,10 @@ export async function fetchCampBySlug(slug: string): Promise<PublicCampCard | nu
       tenant: true,
       registrations: { select: { id: true } },
     },
+    orderBy: [
+      { tenantId: 'asc' },   // nulls last — camps with a real tenant come first
+      { createdAt: 'desc' }, // newest first as tiebreaker
+    ],
   })
 
   if (!camp) return null

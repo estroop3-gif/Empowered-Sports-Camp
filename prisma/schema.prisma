@@ -179,7 +179,7 @@ model Camp {
   tenantId                 String?                       @map("tenant_id") @db.Uuid
   locationId               String?                       @map("location_id") @db.Uuid
   name                     String
-  slug                     String
+  slug                     String                        @unique
   description              String?
   startDate                DateTime                      @map("start_date") @db.Date
   endDate                  DateTime                      @map("end_date") @db.Date

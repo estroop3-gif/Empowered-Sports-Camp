@@ -4,7 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
-import { signIn, forgotPassword } from '@/lib/auth/cognito-client'
+import { signIn, forgotPassword, resendConfirmationCode } from '@/lib/auth/cognito-client'
 import { useAuth } from '@/lib/auth/context'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -72,8 +72,13 @@ export default function LoginPage() {
       if (error.code === 'NotAuthorizedException' || error.message?.includes('Incorrect')) {
         setError('Invalid email or password. Please try again.')
       } else if (error.code === 'UserNotConfirmedException') {
-        setError('Please verify your email address before signing in.')
-        // Could redirect to confirmation page
+        // Resend verification code and redirect to confirm page
+        try {
+          await resendConfirmationCode(formData.email)
+        } catch (resendErr) {
+          console.error('Failed to resend confirmation code:', resendErr)
+        }
+        router.push('/signup/confirm?email=' + encodeURIComponent(formData.email))
       } else if (error.code === 'UserNotFoundException') {
         setError('No account found with this email address.')
       } else {
