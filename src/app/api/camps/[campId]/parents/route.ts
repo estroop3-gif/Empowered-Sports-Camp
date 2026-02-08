@@ -31,7 +31,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const registrations = await prisma.registration.findMany({
       where: {
         campId,
-        status: { in: ['confirmed', 'checked_in'] },
+        status: { in: ['confirmed'] },
       },
       include: {
         parent: {
