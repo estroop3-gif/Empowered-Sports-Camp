@@ -91,7 +91,7 @@ export default function CampSchedulePage({ params }: PageProps) {
         end_date: data.end_date,
         start_time: data.start_time,
         end_time: data.end_time,
-        sports: data.sports || [],
+        sports: data.sport ? [data.sport] : [],
       })
 
       // If no days exist yet, create them
