@@ -56,7 +56,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         where: {
           campId,
           parentId: { in: recipientIds },
-          status: { in: ['confirmed', 'checked_in'] },
+          status: { in: ['confirmed'] },
         },
         include: {
           parent: { select: { id: true, email: true, firstName: true } },
@@ -86,7 +86,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       const registrations = await prisma.registration.findMany({
         where: {
           campId,
-          status: { in: ['confirmed', 'checked_in'] },
+          status: { in: ['confirmed'] },
         },
         include: {
           parent: { select: { id: true, email: true, firstName: true } },
