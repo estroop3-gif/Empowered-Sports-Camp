@@ -102,7 +102,7 @@ function transformApiCampToSession(apiCamp: PublicCampCard): CampSession {
     sportsOffered: apiCamp.sports_offered || [],
     isEarlyBird: isEarlyBird || false,
     isFull: apiCamp.is_full,
-    tenantId: apiCamp.tenant_id,
+    tenantId: apiCamp.tenant_id || '',
   }
 }
 
