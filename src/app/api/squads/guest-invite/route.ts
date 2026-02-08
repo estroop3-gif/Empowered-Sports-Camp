@@ -7,7 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/client'
-import { sendEmail } from '@/lib/email/ses-client'
+import { sendCampInviteEmail } from '@/lib/email'
 
 export async function POST(request: NextRequest) {
   try {
@@ -87,58 +87,40 @@ export async function POST(request: NextRequest) {
         startDate: true,
         endDate: true,
         slug: true,
+        location: {
+          select: {
+            name: true,
+            city: true,
+            state: true,
+          },
+        },
       },
     })
 
-    // Send invite email
+    // Send branded invite email
     try {
-      const registerUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://empoweredathletes.com'}/register/${camp?.slug || campId}?squadInvite=${invite.id}`
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://empoweredathletes.com'
+      const registerUrl = `${baseUrl}/register/${camp?.slug || campId}?squadInvite=${invite.id}`
 
-      const emailHtml = `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <div style="background: #000; padding: 20px; text-align: center;">
-            <h1 style="color: #CCFF00; margin: 0; font-size: 24px;">EMPOWERED ATHLETES</h1>
-          </div>
-          <div style="padding: 30px; background: #1a1a1a; color: #fff;">
-            <h2 style="color: #CCFF00; margin-top: 0;">You're Invited to Build Her Squad!</h2>
-            <p style="color: #ccc; line-height: 1.6;">
-              <strong style="color: #fff;">${inviterName || 'A friend'}</strong> is registering their athlete(s) for
-              <strong style="color: #CCFF00;">${campName || camp?.name || 'camp'}</strong> and wants your daughter to be in the same group!
-            </p>
-            ${athleteNames && athleteNames.length > 0 ? `
-              <p style="color: #ccc;">Athletes being registered: <strong style="color: #fff;">${athleteNames.join(', ')}</strong></p>
-            ` : ''}
-            <p style="color: #ccc; line-height: 1.6;">
-              When athletes are in the same squad, they'll be placed in the same activity groups during camp.
-              Perfect for friends who want to stick together!
-            </p>
-            <div style="text-align: center; margin: 30px 0;">
-              <a href="${registerUrl}"
-                 style="display: inline-block; background: #CCFF00; color: #000; padding: 15px 30px; text-decoration: none; font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">
-                Register & Join Squad
-              </a>
-            </div>
-            <p style="color: #666; font-size: 12px; text-align: center;">
-              This invite expires in 30 days.
-            </p>
-          </div>
-          <div style="background: #000; padding: 15px; text-align: center;">
-            <p style="color: #666; margin: 0; font-size: 12px;">
-              © ${new Date().getFullYear()} Empowered Athletes. All rights reserved.
-            </p>
-          </div>
-        </div>
-      `
+      // Format dates
+      const dateOpts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric' }
+      const campDates = camp
+        ? `${new Date(camp.startDate).toLocaleDateString('en-US', dateOpts)} – ${new Date(camp.endDate).toLocaleDateString('en-US', dateOpts)}`
+        : ''
 
-      const result = await sendEmail({
+      const campLocation = camp?.location
+        ? `${camp.location.name}${camp.location.city ? `, ${camp.location.city}` : ''}${camp.location.state ? `, ${camp.location.state}` : ''}`
+        : null
+
+      await sendCampInviteEmail({
         to: inviteeEmail,
-        subject: `${inviterName || 'A friend'} wants your daughter to join their camp squad!`,
-        html: emailHtml,
+        inviterName: inviterName || 'A friend',
+        friendName: '',
+        campName: campName || camp?.name || 'Camp',
+        campDates,
+        campLocation,
+        registerUrl,
       })
-
-      if (!result.success) {
-        console.error('SES error sending guest squad invite:', result.error)
-      }
     } catch (emailError) {
       console.error('Failed to send squad invite email:', emailError)
       // Don't fail the request if email fails - invite is still created

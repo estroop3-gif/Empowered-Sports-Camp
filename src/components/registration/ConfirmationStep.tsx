@@ -1,10 +1,13 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
-import { CheckCircle2, Calendar, MapPin, Mail, Download, Share2 } from 'lucide-react'
+import { CheckCircle2, Calendar, MapPin, Mail, Download, UserPlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useCheckout } from '@/lib/checkout/context'
+import { parseDateSafe, formatTime12h } from '@/lib/utils'
 import type { CampSession } from '@/types/registration'
+import { InviteFriendModal } from '@/components/camps/InviteFriendModal'
 
 /**
  * ConfirmationStep
@@ -22,7 +25,7 @@ interface ConfirmationStepProps {
 }
 
 function formatDate(dateString: string): string {
-  return new Date(dateString).toLocaleDateString('en-US', {
+  return parseDateSafe(dateString).toLocaleDateString('en-US', {
     weekday: 'long',
     month: 'long',
     day: 'numeric',
@@ -30,16 +33,11 @@ function formatDate(dateString: string): string {
   })
 }
 
-function formatTime(timeString: string): string {
-  const [hours, minutes] = timeString.split(':')
-  const hour = parseInt(hours, 10)
-  const ampm = hour >= 12 ? 'PM' : 'AM'
-  const displayHour = hour % 12 || 12
-  return `${displayHour}:${minutes} ${ampm}`
-}
+const formatTime = formatTime12h
 
 export function ConfirmationStep({ campSession, confirmationNumber }: ConfirmationStepProps) {
   const { state, totals } = useCheckout()
+  const [inviteOpen, setInviteOpen] = useState(false)
 
   const handleAddToCalendar = () => {
     if (!campSession) return
@@ -208,9 +206,9 @@ export function ConfirmationStep({ campSession, confirmationNumber }: Confirmati
           <Download className="h-4 w-4 mr-2" />
           Download Receipt
         </Button>
-        <Button variant="outline-neon">
-          <Share2 className="h-4 w-4 mr-2" />
-          Share
+        <Button variant="outline-neon" onClick={() => setInviteOpen(true)}>
+          <UserPlus className="h-4 w-4 mr-2" />
+          Invite a Friend
         </Button>
       </div>
 
@@ -235,6 +233,19 @@ export function ConfirmationStep({ campSession, confirmationNumber }: Confirmati
           info@empoweredathletes.com
         </a>
       </p>
+
+      {campSession && (
+        <InviteFriendModal
+          campId={campSession.id}
+          campName={campSession.name}
+          tenantId={campSession.tenantId}
+          isOpen={inviteOpen}
+          onClose={() => setInviteOpen(false)}
+          inviterName={`${state.parentInfo.firstName} ${state.parentInfo.lastName}`.trim()}
+          inviterEmail={state.parentInfo.email}
+          athleteNames={state.campers.map(c => `${c.firstName} ${c.lastName}`)}
+        />
+      )}
     </div>
   )
 }

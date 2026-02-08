@@ -408,6 +408,11 @@ model Registration {
   waiverSignedAt          DateTime?              @map("waiver_signed_at") @db.Timestamptz(6)
   waiverSignedBy          String?                @map("waiver_signed_by")
   status                  RegistrationStatus     @default(pending)
+  waitlistPosition        Int?                   @map("waitlist_position")
+  waitlistJoinedAt        DateTime?              @map("waitlist_joined_at") @db.Timestamptz(6)
+  waitlistOfferSentAt     DateTime?              @map("waitlist_offer_sent_at") @db.Timestamptz(6)
+  waitlistOfferExpiresAt  DateTime?              @map("waitlist_offer_expires_at") @db.Timestamptz(6)
+  waitlistOfferToken      String?                @map("waitlist_offer_token")
   cancelledAt             DateTime?              @map("cancelled_at") @db.Timestamptz(6)
   cancellationReason      String?                @map("cancellation_reason")
   createdAt               DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -430,6 +435,7 @@ model Registration {
   @@index([athleteId])
   @@index([parentId])
   @@index([status])
+  @@index([campId, waitlistPosition])
   @@map("registrations")
 }
 
@@ -3142,6 +3148,11 @@ enum EmailType {
   royalty_status_update
   system_alert
   broadcast
+  waitlist_confirmation
+  waitlist_offer
+  waitlist_offer_expired
+  waitlist_nearby_camps
+  camp_invite
 }
 
 enum EmailStatus {
@@ -3212,4 +3223,17 @@ model ProgramTag {
   updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@map("program_tags")
+}
+
+model SportTag {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  slug        String   @unique
+  name        String
+  description String?
+  sortOrder   Int      @default(0) @map("sort_order")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("sport_tags")
 }

@@ -1,17 +1,10 @@
 /**
- * Email Service - AWS SES Integration
+ * Email Service
  *
- * Uses Amazon SES for transactional email delivery.
- *
- * SETUP:
- * 1. Configure AWS credentials (via environment variables or IAM role)
- * 2. Verify your sending domain in AWS SES console
- * 3. Request production access to send to non-verified emails
- *
- * @see https://docs.aws.amazon.com/ses/latest/dg/Welcome.html
+ * Uses Resend for transactional email delivery.
  */
 
-import { sendEmail, isEmailConfigured, DEFAULT_FROM } from './ses-client'
+import { sendEmail, isEmailConfigured, DEFAULT_FROM, logEmail } from './resend-client'
 
 // Placeholder type for email result
 export interface EmailResult {
@@ -187,16 +180,26 @@ export async function sendLicenseeApplicationEmail(
   options: LicenseeApplicationEmailOptions
 ): Promise<EmailResult> {
   const { to, firstName, lastName, territoryName, applicationUrl } = options
+  const subject = options.subject || `Complete Your Licensee Application - ${territoryName}`
 
   const result = await sendEmail({
     to,
-    subject: options.subject || `Complete Your Licensee Application - ${territoryName}`,
+    subject,
     html: generateLicenseeApplicationHtml(options),
     text: generateLicenseeApplicationText(options),
   })
 
+  await logEmail({
+    toEmail: to,
+    subject,
+    emailType: 'licensee_application',
+    status: result.success ? 'sent' : 'failed',
+    providerMessageId: result.messageId,
+    errorMessage: result.error,
+  })
+
   if (!result.success) {
-    console.error('SES error:', result.error)
+    console.error('Email send error:', result.error)
   }
 
   return result
@@ -282,15 +285,25 @@ export async function sendLicenseeWelcomeEmail(
   options: LicenseeWelcomeEmailOptions
 ): Promise<EmailResult> {
   const { to, firstName, territoryName, loginUrl } = options
+  const subject = options.subject || `Welcome to Empowered Sports Camp - ${territoryName}`
 
   const result = await sendEmail({
     to,
-    subject: options.subject || `Welcome to Empowered Sports Camp - ${territoryName}`,
+    subject,
     html: generateLicenseeWelcomeHtml(options),
   })
 
+  await logEmail({
+    toEmail: to,
+    subject,
+    emailType: 'welcome',
+    status: result.success ? 'sent' : 'failed',
+    providerMessageId: result.messageId,
+    errorMessage: result.error,
+  })
+
   if (!result.success) {
-    console.error('SES error:', result.error)
+    console.error('Email send error:', result.error)
   }
 
   return result
@@ -425,16 +438,26 @@ export async function sendCitApplicantConfirmationEmail(
   options: CitApplicantConfirmationEmailOptions
 ): Promise<EmailResult> {
   const { to, applicantName } = options
+  const subject = 'Your CIT Application Has Been Received'
 
   const result = await sendEmail({
     to,
-    subject: 'Your CIT Application Has Been Received',
+    subject,
     html: generateCitApplicantConfirmationHtml(applicantName),
     text: generateCitApplicantConfirmationText(applicantName),
   })
 
+  await logEmail({
+    toEmail: to,
+    subject,
+    emailType: 'cit_application',
+    status: result.success ? 'sent' : 'failed',
+    providerMessageId: result.messageId,
+    errorMessage: result.error,
+  })
+
   if (!result.success) {
-    console.error('SES error (CIT applicant):', result.error)
+    console.error('Email send error (CIT applicant):', result.error)
   }
 
   return result
@@ -614,15 +637,26 @@ export async function sendCitAdminNotificationEmail(
     }
   }
 
+  const subject = `New CIT Application - ${application.firstName} ${application.lastName}`
+
   const result = await sendEmail({
     to: CIT_NOTIFICATIONS_EMAIL,
-    subject: `New CIT Application - ${application.firstName} ${application.lastName}`,
+    subject,
     html: generateCitAdminNotificationHtml(application),
     text: generateCitAdminNotificationText(application),
   })
 
+  await logEmail({
+    toEmail: CIT_NOTIFICATIONS_EMAIL,
+    subject,
+    emailType: 'cit_application',
+    status: result.success ? 'sent' : 'failed',
+    providerMessageId: result.messageId,
+    errorMessage: result.error,
+  })
+
   if (!result.success) {
-    console.error('SES error (CIT admin notification):', result.error)
+    console.error('Email send error (CIT admin notification):', result.error)
   }
 
   return result
@@ -756,16 +790,190 @@ export async function sendSquadInviteEmail(
   options: SquadInviteEmailOptions
 ): Promise<EmailResult> {
   const { to, inviterName, campName, signupUrl } = options
+  const subject = `${inviterName} invited you to join their squad!`
 
   const result = await sendEmail({
     to,
-    subject: `${inviterName} invited you to join their squad!`,
+    subject,
     html: generateSquadInviteHtml(options),
     text: generateSquadInviteText(options),
   })
 
+  await logEmail({
+    toEmail: to,
+    subject,
+    emailType: 'system_alert',
+    status: result.success ? 'sent' : 'failed',
+    providerMessageId: result.messageId,
+    errorMessage: result.error,
+  })
+
   if (!result.success) {
-    console.error('SES error (squad invite):', result.error)
+    console.error('Email send error (squad invite):', result.error)
+  }
+
+  return result
+}
+
+// ============================================
+// Camp Invite (Invite a Friend) Email Functions
+// ============================================
+
+export interface CampInviteEmailOptions {
+  to: string
+  inviterName: string
+  friendName: string
+  campName: string
+  campDates: string
+  campLocation: string | null
+  registerUrl: string
+}
+
+function generateCampInviteHtml(options: CampInviteEmailOptions): string {
+  const locationBlock = options.campLocation
+    ? `<tr>
+                      <td style="padding: 4px 0; color: rgba(255,255,255,0.7); font-size: 14px;">
+                        📍 ${options.campLocation}
+                      </td>
+                    </tr>`
+    : ''
+
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${options.inviterName} invited you to register for ${options.campName}!</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #000000; font-family: 'Poppins', Arial, sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #000000; padding: 40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background-color: #0a0a0a; border: 1px solid rgba(255,255,255,0.1);">
+          <!-- Header -->
+          <tr>
+            <td style="padding: 40px 40px 20px; border-bottom: 2px solid #00ff88;">
+              <h1 style="margin: 0; color: #00ff88; font-size: 24px; font-weight: 900; text-transform: uppercase; letter-spacing: 2px;">
+                Empowered Sports Camp
+              </h1>
+            </td>
+          </tr>
+
+          <!-- Content -->
+          <tr>
+            <td style="padding: 40px;">
+              <h2 style="margin: 0 0 20px; color: #ffffff; font-size: 20px; font-weight: 700;">
+                Hi${options.friendName ? ` ${options.friendName}` : ' there'},
+              </h2>
+
+              <p style="margin: 0 0 20px; color: rgba(255,255,255,0.7); font-size: 16px; line-height: 1.6;">
+                <strong style="color: #ffffff;">${options.inviterName}</strong> thinks your athlete would love <strong style="color: #00ff88;">${options.campName}</strong>!
+              </p>
+
+              <p style="margin: 0 0 30px; color: rgba(255,255,255,0.7); font-size: 16px; line-height: 1.6;">
+                Register now to secure your spot and join the fun.
+              </p>
+
+              <!-- Camp Details Box -->
+              <table cellpadding="0" cellspacing="0" style="margin: 0 0 30px; width: 100%;">
+                <tr>
+                  <td style="padding: 20px; background-color: rgba(0, 255, 136, 0.05); border-left: 3px solid #00ff88;">
+                    <table cellpadding="0" cellspacing="0" style="width: 100%;">
+                      <tr>
+                        <td style="padding: 4px 0; color: #ffffff; font-size: 16px; font-weight: 700;">
+                          ${options.campName}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 4px 0; color: rgba(255,255,255,0.7); font-size: 14px;">
+                          📅 ${options.campDates}
+                        </td>
+                      </tr>
+                      ${locationBlock}
+                    </table>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- CTA Button -->
+              <table cellpadding="0" cellspacing="0" style="margin: 0 0 30px;">
+                <tr>
+                  <td style="background-color: #00ff88; padding: 16px 32px;">
+                    <a href="${options.registerUrl}" style="color: #000000; text-decoration: none; font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;">
+                      Register Your Athlete
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin: 0 0 20px; color: rgba(255,255,255,0.5); font-size: 14px;">
+                Or copy and paste this link into your browser:
+              </p>
+              <p style="margin: 0 0 30px; color: #00ff88; font-size: 14px; word-break: break-all;">
+                ${options.registerUrl}
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 30px 40px; border-top: 1px solid rgba(255,255,255,0.1); background-color: rgba(0,0,0,0.5);">
+              <p style="margin: 0; color: rgba(255,255,255,0.4); font-size: 12px; text-align: center;">
+                &copy; ${new Date().getFullYear()} Empowered Sports Camp. All rights reserved.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+  `.trim()
+}
+
+function generateCampInviteText(options: CampInviteEmailOptions): string {
+  const greeting = options.friendName ? `Hi ${options.friendName},` : 'Hi there,'
+  return `
+${greeting}
+
+${options.inviterName} thinks your athlete would love ${options.campName}!
+
+Camp Details:
+- Dates: ${options.campDates}${options.campLocation ? `\n- Location: ${options.campLocation}` : ''}
+
+Register your athlete here: ${options.registerUrl}
+
+---
+Empowered Sports Camp
+  `.trim()
+}
+
+export async function sendCampInviteEmail(
+  options: CampInviteEmailOptions
+): Promise<EmailResult> {
+  const { to, inviterName, friendName, campName, campDates, campLocation, registerUrl } = options
+  const subject = `${inviterName} invited you to register for ${campName}!`
+
+  const result = await sendEmail({
+    to,
+    subject,
+    html: generateCampInviteHtml(options),
+    text: generateCampInviteText(options),
+  })
+
+  await logEmail({
+    toEmail: to,
+    subject,
+    emailType: 'camp_invite',
+    status: result.success ? 'sent' : 'failed',
+    providerMessageId: result.messageId,
+    errorMessage: result.error,
+  })
+
+  if (!result.success) {
+    console.error('Email send error (camp invite):', result.error)
   }
 
   return result

@@ -20,18 +20,8 @@ import {
   type PublicCampCard,
 } from '@/lib/services/camps'
 import { ShareCampButton } from '@/components/camps/ShareCampButton'
-
-/** Convert "HH:MM" or "HH:MM:SS" 24h time to "H:MM AM/PM" */
-function formatTime12h(time?: string | null): string {
-  if (!time) return '9:00 AM'
-  const [hStr, mStr] = time.split(':')
-  let h = parseInt(hStr, 10)
-  const m = mStr || '00'
-  const ampm = h >= 12 ? 'PM' : 'AM'
-  if (h === 0) h = 12
-  else if (h > 12) h -= 12
-  return `${h}:${m} ${ampm}`
-}
+import { InviteFriendButton } from '@/components/camps/InviteFriendButton'
+import { formatTime12h } from '@/lib/utils'
 
 interface PageProps {
   params: Promise<{ slug: string }>
@@ -258,6 +248,10 @@ export default async function CampDetailPage({ params }: PageProps) {
                       : null
                   }
                 />
+
+                {camp.tenant_id && (
+                  <InviteFriendButton campId={camp.id} campName={camp.name} tenantId={camp.tenant_id} />
+                )}
 
                 {isEarlyBird && camp.early_bird_deadline && (
                   <p className="text-center text-sm text-white/40">
