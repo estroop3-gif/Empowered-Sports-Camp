@@ -13,6 +13,7 @@
  */
 
 import { sendEmail as sesSendEmail, isEmailConfigured } from '@/lib/email/resend-client'
+import { brandWrap, BRAND, emailLabel, emailHeading, emailSubheading, emailParagraph, emailButton, emailDetailsCard, emailHighlight, emailCallout } from '@/lib/email/brand-layout'
 import { prisma } from '@/lib/db/client'
 import type { EmailType, EmailStatus, Prisma, EmailTemplate } from '@/generated/prisma'
 
@@ -969,585 +970,422 @@ export async function sendBroadcastEmail(params: {
 // =============================================================================
 
 function buildEmailContent(templateCode: EmailTemplateCode, context: EmailContext): string {
-  const baseStyle = `
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; background-color: #f5f5f5; }
-    .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; }
-    .header { background: linear-gradient(135deg, #000000 0%, #1a1a1a 100%); color: #ffffff; padding: 30px 40px; text-align: center; }
-    .header h1 { margin: 0; font-size: 24px; font-weight: 700; letter-spacing: 1px; }
-    .header .tagline { color: #00ff88; font-size: 12px; letter-spacing: 2px; margin-top: 8px; text-transform: uppercase; }
-    .content { padding: 40px; color: #333333; line-height: 1.6; }
-    .content h2 { color: #000000; margin-top: 0; font-size: 22px; }
-    .content h3 { color: #000000; margin-top: 24px; font-size: 18px; }
-    .content p { margin: 16px 0; }
-    .content ul { margin: 16px 0; padding-left: 24px; }
-    .content li { margin: 8px 0; }
-    .highlight { background: linear-gradient(135deg, #00ff88 0%, #00cc6a 100%); color: #000000; padding: 20px; border-radius: 8px; margin: 24px 0; text-align: center; }
-    .highlight strong { font-size: 18px; }
-    .button { display: inline-block; background: #00ff88; color: #000000 !important; text-decoration: none; padding: 14px 28px; border-radius: 6px; font-weight: 600; margin: 20px 0; }
-    .button:hover { background: #00cc6a; }
-    .details { background: #f8f8f8; padding: 20px; border-radius: 8px; margin: 24px 0; }
-    .details-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #eeeeee; }
-    .details-row:last-child { border-bottom: none; }
-    .details-label { color: #666666; font-weight: 500; }
-    .details-value { color: #000000; font-weight: 600; text-align: right; }
-    .footer { background: #1a1a1a; color: #888888; padding: 30px 40px; text-align: center; font-size: 12px; }
-    .footer a { color: #00ff88; text-decoration: none; }
-    .pink-box { background: #FF2DCE20; border-left: 4px solid #FF2DCE; padding: 16px; margin: 16px 0; border-radius: 4px; }
-    .purple-box { background: #8B5CF620; border-left: 4px solid #8B5CF6; padding: 16px; margin: 16px 0; border-radius: 4px; }
-    .info-box { background: #E0F2FE; border-left: 4px solid #0EA5E9; padding: 16px; margin: 16px 0; border-radius: 4px; }
-    .success-box { background: #d4edda; border-left: 4px solid #00ff88; padding: 16px; margin: 16px 0; border-radius: 4px; }
-    .warning-box { background: #fff3cd; border-left: 4px solid #ffc107; padding: 16px; margin: 16px 0; border-radius: 4px; }
-    table { width: 100%; border-collapse: collapse; margin: 16px 0; }
-    table th, table td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
-    table th { background: #f8f8f8; font-weight: 600; }
-  `
+  const F = `font-family: 'Poppins', Arial, sans-serif;`
+  const listItem = (text: string) => `<tr><td style="padding: 6px 0 6px 20px; color: ${BRAND.textSecondary}; font-size: 14px; line-height: 1.6; ${F}"><span style="color: ${BRAND.neon};">&#9679;</span>&nbsp; ${text}</td></tr>`
 
   let bodyContent = ''
 
   switch (templateCode) {
-    // =========================================================================
-    // PARENT-FACING CAMP COMMUNICATIONS
-    // =========================================================================
-
     case 'REGISTRATION_CONFIRMATION':
       bodyContent = `
-        <h2>You're All Set!</h2>
-        <p>Hi ${context.parentName},</p>
-        <p>We're thrilled to welcome <strong>${context.camperName}</strong> to the <strong>${context.campName}</strong> program! Get ready for a week of fun, skill-building, and empowerment.</p>
-
-        <div class="highlight">
-          <strong>Registration Confirmed!</strong>
-        </div>
-
-        <h3>Your Registration Details</h3>
-        <div class="details">
-          <div class="details-row"><span class="details-label">Camper Name</span><span class="details-value">${context.camperName}</span></div>
-          <div class="details-row"><span class="details-label">Camp Session</span><span class="details-value">${context.sessionDates}</span></div>
-          <div class="details-row"><span class="details-label">Location</span><span class="details-value">${context.facilityName}</span></div>
-          <div class="details-row"><span class="details-label">Address</span><span class="details-value">${context.facilityAddress} ${context.facilityCity}, ${context.facilityState}</span></div>
-          <div class="details-row"><span class="details-label">Total Paid</span><span class="details-value">${context.totalPaid}</span></div>
-          <div class="details-row"><span class="details-label">Confirmation #</span><span class="details-value">${context.confirmationNumber}</span></div>
-        </div>
-
-        <h3>What Happens Next?</h3>
-        <p>You will receive a detailed preparation email <strong>two weeks before</strong> the camp start date with packing lists, check-in instructions, and the final schedule.</p>
-
-        <p>Thank you for trusting us with your athlete. We can't wait to see them on the field!</p>
-
-        <p>Best regards,<br/>
-        <strong>${context.directorName}</strong><br/>
-        ${context.directorPhone ? `📞 ${context.directorPhone}` : ''}</p>
+        ${emailLabel('Confirmed')}
+        ${emailHeading(`You're<br/><span style="color: ${BRAND.neon};">All Set!</span>`)}
+        ${emailParagraph(`Hi ${context.parentName},`)}
+        ${emailParagraph(`We're thrilled to welcome <strong style="color: ${BRAND.textPrimary};">${context.camperName}</strong> to the <strong style="color: ${BRAND.neon};">${context.campName}</strong> program! Get ready for a week of fun, skill-building, and empowerment.`)}
+        ${emailHighlight('Registration Confirmed!')}
+        ${emailDetailsCard([
+          { label: 'Camper Name', value: String(context.camperName) },
+          { label: 'Camp Session', value: String(context.sessionDates) },
+          { label: 'Location', value: String(context.facilityName) },
+          { label: 'Address', value: `${context.facilityAddress} ${context.facilityCity}, ${context.facilityState}` },
+          { label: 'Total Paid', value: String(context.totalPaid) },
+          { label: 'Confirmation #', value: String(context.confirmationNumber) },
+        ], 'Registration Details')}
+        ${emailSubheading('What Happens Next?')}
+        ${emailParagraph(`You will receive a detailed preparation email <strong style="color: ${BRAND.textPrimary};">two weeks before</strong> the camp start date with packing lists, check-in instructions, and the final schedule.`)}
+        ${emailParagraph(`Thank you for trusting us with your athlete. We can't wait to see them on the field!`)}
+        ${emailParagraph(`Best regards,<br/><strong style="color: ${BRAND.textPrimary};">${context.directorName}</strong>${context.directorPhone ? `<br/>${context.directorPhone}` : ''}`)}
       `
       break
 
     case 'CAMP_TWO_WEEKS_OUT':
       bodyContent = `
-        <h2>Two Weeks to Go!</h2>
-        <p>Hi ${context.parentName},</p>
-        <p>We're just two weeks away from a great week of <strong>${context.campName}</strong>! Here is everything you need to prepare for a successful session for <strong>${context.camperName}</strong>.</p>
-
-        <h3>📋 Logistics Checklist</h3>
-        <div class="details">
-          <div class="details-row"><span class="details-label">Start Date</span><span class="details-value">${context.campStartDate}</span></div>
-          <div class="details-row"><span class="details-label">Check-In Time</span><span class="details-value">8:45 AM (Camp starts at 9:00 AM)</span></div>
-          <div class="details-row"><span class="details-label">Address</span><span class="details-value">${context.facilityAddress}</span></div>
-        </div>
-
-        <h3>🎒 What to Pack Daily</h3>
-        <ul>
-          <li>Water bottle (labeled with camper's name)</li>
-          <li>Athletic shoes (no sandals or open-toe)</li>
-          <li>Sunscreen (applied before arrival)</li>
-          <li>A light snack</li>
-          <li>Weather-appropriate activewear</li>
-        </ul>
-
-        <div class="info-box">
-          <strong>Note:</strong> If you purchased a Daily Fuel Pack, lunch and snacks are covered!
-        </div>
-
-        <h3>📝 Important: Waivers & Safety</h3>
-        <p>Please confirm your online waiver submission. Review the safety guidelines for drop-off and pickup procedures in your parent portal.</p>
-
-        <p style="text-align: center;">
-          <a href="/portal" class="button">Review in Parent Portal</a>
-        </p>
-
-        <p>We look forward to meeting you both soon!</p>
-        <p>Sincerely,<br/><strong>The ${context.campName} Team</strong></p>
+        ${emailLabel('2 Weeks Out')}
+        ${emailHeading(`Two Weeks<br/><span style="color: ${BRAND.neon};">To Go!</span>`)}
+        ${emailParagraph(`Hi ${context.parentName},`)}
+        ${emailParagraph(`We're just two weeks away from a great week of <strong style="color: ${BRAND.neon};">${context.campName}</strong>! Here is everything you need to prepare for <strong style="color: ${BRAND.textPrimary};">${context.camperName}</strong>.`)}
+        ${emailDetailsCard([
+          { label: 'Start Date', value: String(context.campStartDate) },
+          { label: 'Check-In Time', value: '8:45 AM (Camp starts at 9:00 AM)' },
+          { label: 'Address', value: String(context.facilityAddress) },
+        ], 'Logistics')}
+        ${emailSubheading('What to Pack Daily')}
+        <table cellpadding="0" cellspacing="0" style="margin: 0 0 20px;">
+          ${listItem('Water bottle (labeled with camper\'s name)')}
+          ${listItem('Athletic shoes (no sandals or open-toe)')}
+          ${listItem('Sunscreen (applied before arrival)')}
+          ${listItem('A light snack')}
+          ${listItem('Weather-appropriate activewear')}
+        </table>
+        ${emailCallout(`<strong style="color: ${BRAND.textPrimary};">Note:</strong> If you purchased a Daily Fuel Pack, lunch and snacks are covered!`)}
+        ${emailSubheading('Waivers & Safety')}
+        ${emailParagraph('Please confirm your online waiver submission. Review the safety guidelines for drop-off and pickup procedures in your parent portal.')}
+        ${emailButton('Review in Parent Portal', '/portal')}
+        ${emailParagraph(`We look forward to meeting you both soon!<br/><strong style="color: ${BRAND.textPrimary};">The ${context.campName} Team</strong>`)}
       `
       break
 
     case 'CAMP_TWO_DAYS_BEFORE':
       bodyContent = `
-        <h2>Final Countdown!</h2>
-        <p>Hi ${context.parentName},</p>
-        <p>Just <strong>two days</strong> until we kick off the <strong>${context.campName}</strong> session! This is the last reminder before we get started.</p>
-
-        <h3>📍 Check-In Information</h3>
-        <div class="details">
-          <div class="details-row"><span class="details-label">Location</span><span class="details-value">${context.facilityName}</span></div>
-          <div class="details-row"><span class="details-label">Meeting Spot</span><span class="details-value">${context.meetingSpot}</span></div>
-          <div class="details-row"><span class="details-label">Camp Director</span><span class="details-value">${context.directorName}</span></div>
-          <div class="details-row"><span class="details-label">Parking</span><span class="details-value">${context.parkingArea}</span></div>
-        </div>
-
-        <div class="warning-box">
-          <strong>Reminder:</strong> Please remain patient and follow staff directions during the busy 8:45 AM drop-off window.
-        </div>
-
-        <h3>👟 What to Wear</h3>
-        <p>${context.whatToWear}</p>
-
-        <h3>🎒 What to Bring</h3>
-        <p>${context.whatToBring}</p>
-
-        <p>If you have any last-minute questions, please call us directly at <strong>${context.directorPhone}</strong>.</p>
-
-        <div class="highlight">
-          <strong>See you bright and early on ${context.campStartDate}!</strong>
-        </div>
-
-        <p>Best,<br/><strong>The ${context.campName} Team</strong></p>
+        ${emailLabel('Final Countdown', BRAND.magenta)}
+        ${emailHeading(`Camp Starts<br/><span style="color: ${BRAND.magenta};">In 2 Days!</span>`)}
+        ${emailParagraph(`Hi ${context.parentName},`)}
+        ${emailParagraph(`Just <strong style="color: ${BRAND.textPrimary};">two days</strong> until we kick off <strong style="color: ${BRAND.neon};">${context.campName}</strong>! This is the last reminder before we get started.`)}
+        ${emailDetailsCard([
+          { label: 'Location', value: String(context.facilityName) },
+          { label: 'Meeting Spot', value: String(context.meetingSpot) },
+          { label: 'Camp Director', value: String(context.directorName) },
+          { label: 'Parking', value: String(context.parkingArea) },
+        ], 'Check-In Info')}
+        ${emailCallout(`<strong style="color: ${BRAND.textPrimary};">Reminder:</strong> Please remain patient and follow staff directions during the busy 8:45 AM drop-off window.`, 'warning')}
+        ${emailSubheading('What to Wear')}
+        ${emailParagraph(String(context.whatToWear))}
+        ${emailSubheading('What to Bring')}
+        ${emailParagraph(String(context.whatToBring))}
+        ${emailParagraph(`If you have any last-minute questions, please call us directly at <strong style="color: ${BRAND.textPrimary};">${context.directorPhone}</strong>.`)}
+        ${emailHighlight(`See you bright and early on ${context.campStartDate}!`)}
       `
       break
 
-    case 'CAMP_DAILY_RECAP':
-      bodyContent = `
-        <h2>Day ${context.dayNumber} Recap: ${context.wordOfTheDay || 'Great Day'}!</h2>
-        <p>Hi ${context.parentName},</p>
-        <p>What a great day for <strong>${context.camperName}</strong>! ${context.dayTheme ? `Today was all about <strong>${context.dayTheme}</strong>.` : ''}</p>
+    case 'CAMP_DAILY_RECAP': {
+      const sportsRow = context.primarySport ? `<tr><td style="padding: 8px 0; color: ${BRAND.textMuted}; font-size: 14px; ${F} width: 40%;">Sports</td><td style="padding: 8px 0; color: ${BRAND.textPrimary}; font-size: 14px; font-weight: 600; ${F} text-align: right;"><strong>${context.primarySport}</strong>${context.primarySportFocus ? ` (${context.primarySportFocus})` : ''}${context.secondarySport ? `, <strong>${context.secondarySport}</strong>${context.secondarySportFocus ? ` (${context.secondarySportFocus})` : ''}` : ''}</td></tr>` : ''
+      const speakerRow = context.guestSpeakerName ? `<tr><td style="padding: 8px 0; color: ${BRAND.textMuted}; font-size: 14px; ${F} width: 40%;">Guest Speaker</td><td style="padding: 8px 0; color: ${BRAND.textPrimary}; font-size: 14px; font-weight: 600; ${F} text-align: right;">${context.guestSpeakerName}, ${context.guestSpeakerTitle}</td></tr>` : ''
+      const wordRow = context.wordOfTheDay ? `<tr><td style="padding: 8px 0; color: ${BRAND.textMuted}; font-size: 14px; ${F} width: 40%;">Word of the Day</td><td style="padding: 8px 0; color: ${BRAND.neon}; font-size: 14px; font-weight: 600; ${F} text-align: right;">${context.wordOfTheDay}</td></tr>` : ''
 
-        <h3>🏆 Today's Highlights</h3>
-        <table>
-          <tr><th>Category</th><th>Details</th></tr>
-          ${context.primarySport ? `<tr><td>Sports Played</td><td><strong>${context.primarySport}</strong>${context.primarySportFocus ? ` (${context.primarySportFocus})` : ''}${context.secondarySport ? ` and <strong>${context.secondarySport}</strong>${context.secondarySportFocus ? ` (${context.secondarySportFocus})` : ''}` : ''}</td></tr>` : ''}
-          ${context.guestSpeakerName ? `<tr><td>Guest Speaker</td><td><strong>${context.guestSpeakerName}</strong>, ${context.guestSpeakerTitle}, spoke about ${context.guestSpeakerTopic}</td></tr>` : ''}
-          ${context.wordOfTheDay ? `<tr><td>Word of the Day</td><td><strong>${context.wordOfTheDay}</strong>${context.wordOfTheDayExample ? ` – ${context.wordOfTheDayExample}` : ''}</td></tr>` : ''}
+      bodyContent = `
+        ${emailLabel(`Day ${context.dayNumber} Recap`)}
+        ${emailHeading(`Day ${context.dayNumber}:<br/><span style="color: ${BRAND.neon};">${context.wordOfTheDay || 'Great Day'}!</span>`)}
+        ${emailParagraph(`Hi ${context.parentName},`)}
+        ${emailParagraph(`What a great day for <strong style="color: ${BRAND.textPrimary};">${context.camperName}</strong>! ${context.dayTheme ? `Today was all about <strong style="color: ${BRAND.neon};">${context.dayTheme}</strong>.` : ''}`)}
+
+        <table cellpadding="0" cellspacing="0" style="margin: 16px 0 24px; width: 100%; border-radius: 6px; overflow: hidden;">
+          <tr><td style="background-color: rgba(204,255,0,0.04); border: 1px solid rgba(204,255,0,0.12); border-radius: 6px; padding: 20px 24px;">
+            <table cellpadding="0" cellspacing="0" style="width: 100%;">
+              <tr><td colspan="2" style="padding: 0 0 12px; color: ${BRAND.neon}; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; ${F}">Today's Highlights</td></tr>
+              ${sportsRow}${speakerRow}${wordRow}
+            </table>
+          </td></tr>
         </table>
 
-        ${context.pinkPointSkill || context.purplePointSkill ? `
-        <h3>💖 Values Section</h3>
-        <p><strong>Today's Camp Value Highlight:</strong> We don't just teach skills; we teach leadership.</p>
-        ${context.pinkPointSkill ? `<div class="pink-box"><strong>Pink Points:</strong> Every athlete practiced <strong>${context.pinkPointSkill}</strong> to earn their Pink Points today!</div>` : ''}
-        ${context.purplePointSkill ? `<div class="purple-box"><strong>Purple Points:</strong> Athletes worked on <strong>${context.purplePointSkill}</strong> for their Purple Points!</div>` : ''}
-        ` : ''}
+        ${context.pinkPointSkill ? emailCallout(`<strong style="color: ${BRAND.magenta};">Pink Points:</strong> Every athlete practiced <strong style="color: ${BRAND.textPrimary};">${context.pinkPointSkill}</strong> today!`, 'purple') : ''}
+        ${context.purplePointSkill ? emailCallout(`<strong style="color: ${BRAND.purple};">Purple Points:</strong> Athletes worked on <strong style="color: ${BRAND.textPrimary};">${context.purplePointSkill}</strong>!`, 'purple') : ''}
 
-        ${context.tomorrowSport1 ? `
-        <h3>👀 Looking Ahead to Tomorrow (Day ${Number(context.dayNumber) + 1})</h3>
-        <p>We will be focusing on <strong>${context.tomorrowSport1}</strong>${context.tomorrowSport2 ? ` and <strong>${context.tomorrowSport2}</strong>` : ''}${context.tomorrowWordOfTheDay ? `, with the Word of the Day being <strong>${context.tomorrowWordOfTheDay}</strong>` : ''}.</p>
-        ` : ''}
+        ${context.tomorrowSport1 ? `${emailSubheading('Looking Ahead')}${emailParagraph(`Tomorrow we'll focus on <strong style="color: ${BRAND.textPrimary};">${context.tomorrowSport1}</strong>${context.tomorrowSport2 ? ` and <strong style="color: ${BRAND.textPrimary};">${context.tomorrowSport2}</strong>` : ''}${context.tomorrowWordOfTheDay ? `, with the Word of the Day being <strong style="color: ${BRAND.neon};">${context.tomorrowWordOfTheDay}</strong>` : ''}.`)}` : ''}
 
-        ${context.highlights ? `<div class="info-box">${context.highlights}</div>` : ''}
-
-        <p>See you tomorrow!</p>
-        <p><strong>The ${context.campName} Team</strong></p>
+        ${context.highlights ? emailCallout(String(context.highlights)) : ''}
+        ${emailParagraph(`See you tomorrow!<br/><strong style="color: ${BRAND.textPrimary};">The ${context.campName} Team</strong>`)}
       `
       break
+    }
 
     case 'CAMP_SESSION_RECAP':
       bodyContent = `
-        <h2>Thank You for an Amazing Week!</h2>
-        <p>Hi ${context.parentName},</p>
-        <p>The <strong>${context.sessionDates}</strong> camp session has officially wrapped up, and we had an incredible week with <strong>${context.camperName}</strong>! We hope your athlete came home inspired, exhausted, and ready to take on the world.</p>
-
-        <div class="highlight">
-          <strong>What an amazing week!</strong>
-        </div>
-
-        <h3>📝 Your Feedback is Essential</h3>
-        <p>Please take 60 seconds to complete our Parent Satisfaction Survey. Your input helps us make next year even better, and it helps our director, <strong>${context.directorName}</strong>, earn their performance bonus!</p>
-        <p style="text-align: center;">
-          <a href="${context.surveyUrl}" class="button">Take the Survey</a>
-        </p>
-
-        <h3>🤝 Stay Connected</h3>
-        <ul>
-          <li><strong>Follow us on social media</strong> for highlights: <a href="${context.socialUrl}">@empoweredsportscamp</a></li>
-          <li><strong>Want to inspire the next generation?</strong> Learn about <a href="${context.employmentUrl}">employment opportunities</a> as a Camp Director or Coach</li>
-          <li><strong>Interested in running your own camp?</strong> Learn about <a href="${context.licensingUrl}">licensing opportunities</a></li>
-        </ul>
-
-        <p>We hope to see you next year!</p>
-        <p>Best regards,<br/><strong>The ${context.campName} Team</strong></p>
+        ${emailLabel('Session Complete')}
+        ${emailHeading(`What an<br/><span style="color: ${BRAND.neon};">Amazing Week!</span>`)}
+        ${emailParagraph(`Hi ${context.parentName},`)}
+        ${emailParagraph(`The <strong style="color: ${BRAND.textPrimary};">${context.sessionDates}</strong> camp session has officially wrapped up, and we had an incredible week with <strong style="color: ${BRAND.neon};">${context.camperName}</strong>! We hope your athlete came home inspired, exhausted, and ready to take on the world.`)}
+        ${emailHighlight('Thank You!')}
+        ${emailSubheading('Your Feedback is Essential')}
+        ${emailParagraph(`Please take 60 seconds to complete our Parent Satisfaction Survey. Your input helps us make next year even better!`)}
+        ${emailButton('Take the Survey', String(context.surveyUrl))}
+        ${emailSubheading('Stay Connected')}
+        <table cellpadding="0" cellspacing="0" style="margin: 0 0 20px;">
+          ${listItem(`<a href="${context.socialUrl}" style="color: ${BRAND.neon}; text-decoration: underline;">Follow us on social media</a> for highlights`)}
+          ${listItem(`<a href="${context.employmentUrl}" style="color: ${BRAND.neon}; text-decoration: underline;">Employment opportunities</a> as a Camp Director or Coach`)}
+          ${listItem(`<a href="${context.licensingUrl}" style="color: ${BRAND.neon}; text-decoration: underline;">Licensing opportunities</a> to run your own camp`)}
+        </table>
+        ${emailParagraph(`We hope to see you next year!<br/><strong style="color: ${BRAND.textPrimary};">The ${context.campName} Team</strong>`)}
       `
       break
 
-    // =========================================================================
-    // SEASONAL FOLLOW-UP EMAILS
-    // =========================================================================
-
     case 'SEASON_FOLLOWUP_JAN':
       bodyContent = `
-        <h2>New Year, New Camp Dates!</h2>
-        <p>Hi ${context.parentName},</p>
-        <p>Happy New Year! We hope ${context.year} is off to a great start for your family.</p>
-        <p>We're excited to announce that our <strong>${context.year} summer camp dates</strong> are now available! Get a head start on your summer planning and secure your spot early.</p>
-
-        <div class="highlight">
-          <strong>${context.year} Summer Dates Are Here!</strong>
-        </div>
-
-        <p style="text-align: center;">
-          <a href="${context.registrationUrl}" class="button">See All ${context.year} Dates</a>
-        </p>
-
-        <p>Reserve your spot early for the best selection!</p>
-        <p><strong>The Empowered Sports Camp Team</strong></p>
+        ${emailLabel('New Season')}
+        ${emailHeading(`New Year,<br/><span style="color: ${BRAND.neon};">New Camp Dates!</span>`)}
+        ${emailParagraph(`Hi ${context.parentName},`)}
+        ${emailParagraph(`Happy New Year! We're excited to announce that our <strong style="color: ${BRAND.neon};">${context.year} summer camp dates</strong> are now available!`)}
+        ${emailHighlight(`${context.year} Summer Dates Are Here!`)}
+        ${emailButton(`See All ${context.year} Dates`, String(context.registrationUrl))}
+        ${emailParagraph('Reserve your spot early for the best selection!')}
       `
       break
 
     case 'SEASON_FOLLOWUP_FEB':
       bodyContent = `
-        <h2>Early Bird Registration is OPEN!</h2>
-        <p>Hi ${context.parentName},</p>
-        <p>Great news – <strong>Early Bird registration</strong> for our ${context.year} summer camps is now open!</p>
-
-        <div class="highlight">
-          <strong>Use code ${context.earlyBirdCode} for early bird savings!</strong>
-        </div>
-
-        <p>Don't miss out on this limited-time offer. Secure your athlete's spot at the best price of the season.</p>
-
-        <p style="text-align: center;">
-          <a href="${context.registrationUrl}" class="button">Register Now</a>
-        </p>
-
-        <p>See you this summer!</p>
-        <p><strong>The Empowered Sports Camp Team</strong></p>
+        ${emailLabel('Early Bird')}
+        ${emailHeading(`Early Bird<br/><span style="color: ${BRAND.neon};">Registration Open!</span>`)}
+        ${emailParagraph(`Hi ${context.parentName},`)}
+        ${emailParagraph(`Great news — <strong style="color: ${BRAND.textPrimary};">Early Bird registration</strong> for our ${context.year} summer camps is now open!`)}
+        ${emailHighlight(`Use code ${context.earlyBirdCode} for early bird savings!`)}
+        ${emailButton('Register Now', String(context.registrationUrl))}
       `
       break
 
     case 'SEASON_FOLLOWUP_MAR':
       bodyContent = `
-        <h2>Summer Spots Are Filling Up Fast!</h2>
-        <p>Hi ${context.parentName},</p>
-        <p>Spring is here, and that means summer is right around the corner! Our most popular camp weeks are <strong>already filling up</strong>.</p>
-
-        <div class="warning-box">
-          <strong>High-demand weeks are going fast!</strong> Don't wait to register.
-        </div>
-
-        <p>Give your athlete the gift of an unforgettable summer experience – reserve their spot today before it's too late.</p>
-
-        <p style="text-align: center;">
-          <a href="${context.registrationUrl}" class="button">Check Availability</a>
-        </p>
-
-        <p><strong>The Empowered Sports Camp Team</strong></p>
+        ${emailLabel('Filling Up', BRAND.warning)}
+        ${emailHeading(`Spots Are<br/><span style="color: ${BRAND.magenta};">Filling Fast!</span>`)}
+        ${emailParagraph(`Hi ${context.parentName},`)}
+        ${emailParagraph('Spring is here, and our most popular camp weeks are <strong style="color: ' + BRAND.textPrimary + ';">already filling up</strong>.')}
+        ${emailCallout(`<strong style="color: ${BRAND.textPrimary};">High-demand weeks are going fast!</strong> Don't wait to register.`, 'warning')}
+        ${emailButton('Check Availability', String(context.registrationUrl))}
       `
       break
 
     case 'SEASON_FOLLOWUP_APR':
       bodyContent = `
-        <h2>The Final Countdown!</h2>
-        <p>Hi ${context.parentName},</p>
-        <p>With school winding down, now is the perfect time to finalize your summer plans. <strong>Registration closes soon</strong> for many of our sessions!</p>
-
-        <p>At Empowered Sports Camp, we don't just teach sports – we build <strong>confidence, leadership, and lifelong skills</strong>. Your athlete deserves this experience.</p>
-
-        <div class="highlight">
-          <strong>Limited spots remaining!</strong>
-        </div>
-
-        <p style="text-align: center;">
-          <a href="${context.registrationUrl}" class="button">Secure Your Spot</a>
-        </p>
-
-        <p><strong>The Empowered Sports Camp Team</strong></p>
+        ${emailLabel('Closing Soon', BRAND.magenta)}
+        ${emailHeading(`The Final<br/><span style="color: ${BRAND.magenta};">Countdown!</span>`)}
+        ${emailParagraph(`Hi ${context.parentName},`)}
+        ${emailParagraph(`<strong style="color: ${BRAND.textPrimary};">Registration closes soon</strong> for many of our sessions! At Empowered Sports Camp, we build <strong style="color: ${BRAND.neon};">confidence, leadership, and lifelong skills</strong>.`)}
+        ${emailHighlight('Limited Spots Remaining!')}
+        ${emailButton('Secure Your Spot', String(context.registrationUrl))}
       `
       break
 
     case 'SEASON_FOLLOWUP_MAY':
       bodyContent = `
-        <h2>School's Out, Camp is IN!</h2>
-        <p>Hi ${context.parentName},</p>
-        <p>The school year is almost over, and summer is HERE! This is your <strong>last call</strong> to register for any remaining open sessions.</p>
-
-        <div class="highlight">
-          <strong>🚨 Last Call for Registration! 🚨</strong>
-        </div>
-
-        <p>Don't let your athlete miss out on the fun, friendships, and growth that come with an Empowered Sports Camp experience.</p>
-
-        <p style="text-align: center;">
-          <a href="${context.registrationUrl}" class="button">Register Now – Final Chance!</a>
-        </p>
-
-        <p>See you on the field!</p>
-        <p><strong>The Empowered Sports Camp Team</strong></p>
+        ${emailLabel('Last Call', BRAND.magenta)}
+        ${emailHeading(`School's Out,<br/><span style="color: ${BRAND.neon};">Camp is IN!</span>`)}
+        ${emailParagraph(`Hi ${context.parentName},`)}
+        ${emailParagraph(`The school year is almost over, and summer is HERE! This is your <strong style="color: ${BRAND.magenta};">last call</strong> to register.`)}
+        ${emailHighlight('Last Call for Registration!', BRAND.magenta)}
+        ${emailButton('Register Now — Final Chance!', String(context.registrationUrl), BRAND.magenta)}
       `
       break
 
-    // =========================================================================
-    // EXISTING TEMPLATES (maintained for backward compatibility)
-    // =========================================================================
-
     case 'CAMP_CONFIRMATION':
       bodyContent = `
-        <h2>Registration Confirmed!</h2>
-        <p>Hi ${context.parentName},</p>
-        <p>Great news! <strong>${context.athleteName}</strong> is officially registered for camp.</p>
-        <div class="highlight"><strong>${context.campName}</strong></div>
-        <div class="details">
-          <div class="details-row"><span class="details-label">Dates</span><span class="details-value">${context.campStartDate} - ${context.campEndDate}</span></div>
-          <div class="details-row"><span class="details-label">Location</span><span class="details-value">${context.campLocation || 'TBA'}</span></div>
-          ${context.campAddress ? `<div class="details-row"><span class="details-label">Address</span><span class="details-value">${context.campAddress}</span></div>` : ''}
-        </div>
-        <p>We'll send you a reminder before camp starts with all the details you need.</p>
-        <p>Get ready for an amazing experience!</p>
+        ${emailLabel('Confirmed')}
+        ${emailHeading(`Registration<br/><span style="color: ${BRAND.neon};">Confirmed!</span>`)}
+        ${emailParagraph(`Hi ${context.parentName},`)}
+        ${emailParagraph(`Great news! <strong style="color: ${BRAND.textPrimary};">${context.athleteName}</strong> is officially registered for <strong style="color: ${BRAND.neon};">${context.campName}</strong>.`)}
+        ${emailDetailsCard([
+          { label: 'Dates', value: `${context.campStartDate} - ${context.campEndDate}` },
+          { label: 'Location', value: String(context.campLocation || 'TBA') },
+          ...(context.campAddress ? [{ label: 'Address', value: String(context.campAddress) }] : []),
+        ])}
+        ${emailParagraph(`We'll send you a reminder before camp starts. Get ready for an amazing experience!`)}
       `
       break
 
     case 'CAMP_REMINDER':
       bodyContent = `
-        <h2>Camp Starts Tomorrow!</h2>
-        <p>Hi ${context.parentName},</p>
-        <p>This is a friendly reminder that <strong>${context.athleteName}</strong>'s camp starts tomorrow!</p>
-        <div class="highlight"><strong>${context.campName}</strong></div>
-        <div class="details">
-          <div class="details-row"><span class="details-label">When</span><span class="details-value">${context.campStartDate}</span></div>
-          <div class="details-row"><span class="details-label">Check-in Time</span><span class="details-value">${context.checkInTime || '8:45 AM'}</span></div>
-          <div class="details-row"><span class="details-label">Location</span><span class="details-value">${context.campLocation}</span></div>
-        </div>
-        <p><strong>What to bring:</strong></p>
-        <ul>
-          <li>Water bottle</li>
-          <li>Athletic shoes</li>
-          <li>Positive attitude!</li>
-        </ul>
+        ${emailLabel('Tomorrow!', BRAND.magenta)}
+        ${emailHeading(`Camp Starts<br/><span style="color: ${BRAND.magenta};">Tomorrow!</span>`)}
+        ${emailParagraph(`Hi ${context.parentName},`)}
+        ${emailParagraph(`<strong style="color: ${BRAND.textPrimary};">${context.athleteName}</strong>'s camp starts tomorrow!`)}
+        ${emailDetailsCard([
+          { label: 'When', value: String(context.campStartDate) },
+          { label: 'Check-in Time', value: String(context.checkInTime || '8:45 AM') },
+          { label: 'Location', value: String(context.campLocation) },
+        ])}
+        <table cellpadding="0" cellspacing="0" style="margin: 0 0 20px;">
+          ${listItem('Water bottle')}
+          ${listItem('Athletic shoes')}
+          ${listItem('Positive attitude!')}
+        </table>
       `
       break
 
     case 'DAILY_RECAP':
       bodyContent = `
-        <h2>Day ${context.dayNumber} Recap</h2>
-        <p>Hi ${context.parentName},</p>
-        <p>Here's what happened today at <strong>${context.campName}</strong>!</p>
-        ${context.summary ? `<div class="details"><p>${context.summary}</p></div>` : ''}
-        <p>Your camper${String(context.athleteNames || '').includes(',') ? 's' : ''} (<strong>${context.athleteNames}</strong>) had a great day!</p>
-        <p>See you tomorrow!</p>
+        ${emailLabel(`Day ${context.dayNumber}`)}
+        ${emailHeading(`Day ${context.dayNumber}<br/><span style="color: ${BRAND.neon};">Recap</span>`)}
+        ${emailParagraph(`Hi ${context.parentName},`)}
+        ${emailParagraph(`Here's what happened today at <strong style="color: ${BRAND.neon};">${context.campName}</strong>!`)}
+        ${context.summary ? emailCallout(String(context.summary)) : ''}
+        ${emailParagraph(`Your camper${String(context.athleteNames || '').includes(',') ? 's' : ''} (<strong style="color: ${BRAND.textPrimary};">${context.athleteNames}</strong>) had a great day!`)}
+        ${emailParagraph('See you tomorrow!')}
       `
       break
 
     case 'POST_CAMP':
       bodyContent = `
-        <h2>Thanks for Joining Us!</h2>
-        <p>Hi ${context.parentName},</p>
-        <p>What an amazing week! Thank you for trusting us with <strong>${context.athleteNames}</strong> at ${context.campName}.</p>
-        <p>We'd love to hear your feedback:</p>
-        <p style="text-align: center;"><a href="${context.feedbackUrl}" class="button">Share Your Experience</a></p>
-        <p>We hope to see you again soon!</p>
+        ${emailLabel('Thank You')}
+        ${emailHeading(`Thanks for<br/><span style="color: ${BRAND.neon};">Joining Us!</span>`)}
+        ${emailParagraph(`Hi ${context.parentName},`)}
+        ${emailParagraph(`What an amazing week! Thank you for trusting us with <strong style="color: ${BRAND.textPrimary};">${context.athleteNames}</strong> at ${context.campName}.`)}
+        ${emailButton('Share Your Experience', String(context.feedbackUrl))}
+        ${emailParagraph('We hope to see you again soon!')}
       `
       break
 
     case 'STAFF_MESSAGE':
       bodyContent = `
-        <h2>New Message</h2>
-        <p>Hi ${context.recipientName},</p>
-        <p>You have a new message from <strong>${context.senderName}</strong>.</p>
-        ${context.messagePreview ? `<div class="details"><p>"${context.messagePreview}..."</p></div>` : ''}
-        <p style="text-align: center;"><a href="${context.messageUrl}" class="button">View Message</a></p>
+        ${emailLabel('New Message')}
+        ${emailHeading('New Message')}
+        ${emailParagraph(`Hi ${context.recipientName},`)}
+        ${emailParagraph(`You have a new message from <strong style="color: ${BRAND.textPrimary};">${context.senderName}</strong>.`)}
+        ${context.messagePreview ? emailCallout(`"${context.messagePreview}..."`) : ''}
+        ${emailButton('View Message', String(context.messageUrl))}
       `
       break
 
     case 'WELCOME':
       bodyContent = `
-        <h2>Welcome to Empowered Sports Camp!</h2>
-        <p>Hi ${context.userName},</p>
-        <p>We're thrilled to have you join us${context.role ? ` as a <strong>${context.role}</strong>` : ''}!</p>
-        <p>Here's what you can do next:</p>
-        <ul>
-          <li>Complete your profile</li>
-          <li>Explore available camps</li>
-          <li>Connect with our community</li>
-        </ul>
-        <p style="text-align: center;"><a href="/dashboard" class="button">Go to Dashboard</a></p>
+        ${emailLabel('Welcome')}
+        ${emailHeading(`Welcome to<br/><span style="color: ${BRAND.neon};">Empowered!</span>`)}
+        ${emailParagraph(`Hi ${context.userName},`)}
+        ${emailParagraph(`We're thrilled to have you join us${context.role ? ` as a <strong style="color: ${BRAND.neon};">${context.role}</strong>` : ''}!`)}
+        ${emailSubheading("What's Next")}
+        <table cellpadding="0" cellspacing="0" style="margin: 0 0 20px;">
+          ${listItem('Complete your profile')}
+          ${listItem('Explore available camps')}
+          ${listItem('Connect with our community')}
+        </table>
+        ${emailButton('Go to Dashboard', '/dashboard')}
       `
       break
 
     case 'PASSWORD_RESET':
       bodyContent = `
-        <h2>Reset Your Password</h2>
-        <p>Hi,</p>
-        <p>We received a request to reset your password. Click the button below to set a new password:</p>
-        <p style="text-align: center;"><a href="${context.resetUrl}" class="button">Reset Password</a></p>
-        <p style="font-size: 12px; color: #666;">If you didn't request this, you can safely ignore this email.</p>
+        ${emailLabel('Security')}
+        ${emailHeading('Reset Your<br/>Password')}
+        ${emailParagraph('We received a request to reset your password. Click the button below to set a new password:')}
+        ${emailButton('Reset Password', String(context.resetUrl))}
+        <p style="margin: 16px 0 0; color: ${BRAND.textMuted}; font-size: 13px; ${F}">If you didn't request this, you can safely ignore this email.</p>
       `
       break
 
     case 'PAYMENT_RECEIPT':
     case 'ROYALTY_INVOICE':
       bodyContent = `
-        <h2>${context.type === 'royalty_invoice' ? 'Royalty Invoice' : 'Payment Receipt'}</h2>
-        <p>Hi,</p>
-        <div class="highlight"><strong>Invoice ${context.invoiceNumber}</strong></div>
-        <div class="details">
-          <div class="details-row"><span class="details-label">Amount</span><span class="details-value">$${context.amount}</span></div>
-          ${context.dueDate ? `<div class="details-row"><span class="details-label">Due Date</span><span class="details-value">${context.dueDate}</span></div>` : ''}
-          ${context.campName ? `<div class="details-row"><span class="details-label">Camp</span><span class="details-value">${context.campName}</span></div>` : ''}
-        </div>
-        <p style="text-align: center;"><a href="/admin/revenue/royalties" class="button">View Invoice</a></p>
+        ${emailLabel(context.type === 'royalty_invoice' ? 'Invoice' : 'Receipt')}
+        ${emailHeading(context.type === 'royalty_invoice' ? 'Royalty Invoice' : 'Payment Receipt')}
+        ${emailHighlight(`Invoice ${context.invoiceNumber}`)}
+        ${emailDetailsCard([
+          { label: 'Amount', value: `$${context.amount}` },
+          ...(context.dueDate ? [{ label: 'Due Date', value: String(context.dueDate) }] : []),
+          ...(context.campName ? [{ label: 'Camp', value: String(context.campName) }] : []),
+        ])}
+        ${emailButton('View Invoice', '/admin/revenue/royalties')}
       `
       break
 
     case 'PAYMENT_FAILED':
       bodyContent = `
-        <h2>Payment Issue</h2>
-        <p>Hi,</p>
-        <div class="warning-box"><p>We were unable to process your payment. Please update your payment method to avoid service interruption.</p></div>
-        <p style="text-align: center;"><a href="/settings/billing" class="button">Update Payment Method</a></p>
+        ${emailLabel('Action Required', BRAND.error)}
+        ${emailHeading('Payment Issue')}
+        ${emailCallout(`We were unable to process your payment. Please update your payment method to avoid service interruption.`, 'warning')}
+        ${emailButton('Update Payment Method', '/settings/billing', BRAND.warning)}
       `
       break
 
     case 'LICENSEE_APPLICATION':
       bodyContent = `
-        <h2>New Licensee Application</h2>
-        <p>A new licensee application has been submitted:</p>
-        <div class="details">
-          <div class="details-row"><span class="details-label">Applicant</span><span class="details-value">${context.applicantName}</span></div>
-          <div class="details-row"><span class="details-label">Location</span><span class="details-value">${context.city}, ${context.state}</span></div>
-        </div>
-        <p style="text-align: center;"><a href="/admin/licensee-applications/${context.applicationId}" class="button">Review Application</a></p>
+        ${emailLabel('New Application')}
+        ${emailHeading('New Licensee<br/>Application')}
+        ${emailDetailsCard([
+          { label: 'Applicant', value: String(context.applicantName) },
+          { label: 'Location', value: `${context.city}, ${context.state}` },
+        ])}
+        ${emailButton('Review Application', `/admin/licensee-applications/${context.applicationId}`)}
       `
       break
 
     case 'LICENSEE_STATUS_UPDATE':
       bodyContent = `
-        <h2>Application Status Update</h2>
-        <p>Hi ${context.applicantName},</p>
-        <div class="${context.status === 'approved' ? 'success-box' : context.status === 'rejected' ? 'warning-box' : 'details'}">
-          <p>Your licensee application status has been updated to: <strong>${context.status}</strong></p>
-        </div>
-        ${context.status === 'approved' ? '<p>Congratulations! Welcome to the Empowered Sports Camp family. Our team will be in touch soon with next steps.</p>' : ''}
-        <p style="text-align: center;"><a href="/dashboard" class="button">View Details</a></p>
+        ${emailLabel('Status Update')}
+        ${emailHeading('Application<br/>Update')}
+        ${emailParagraph(`Hi ${context.applicantName},`)}
+        ${emailCallout(`Your licensee application status has been updated to: <strong style="color: ${BRAND.textPrimary};">${context.status}</strong>`, context.status === 'approved' ? 'success' : 'warning')}
+        ${context.status === 'approved' ? emailParagraph('Congratulations! Welcome to the Empowered Sports Camp family. Our team will be in touch soon with next steps.') : ''}
+        ${emailButton('View Details', '/dashboard')}
       `
       break
 
     case 'CIT_APPLICATION':
       bodyContent = `
-        <h2>New CIT Application</h2>
-        <p>A new Counselor-in-Training application has been submitted:</p>
-        <div class="details">
-          <div class="details-row"><span class="details-label">Applicant</span><span class="details-value">${context.applicantName}</span></div>
-          <div class="details-row"><span class="details-label">Age</span><span class="details-value">${context.age}</span></div>
-        </div>
-        <p style="text-align: center;"><a href="/admin/cit-applications/${context.applicationId}" class="button">Review Application</a></p>
+        ${emailLabel('New CIT', BRAND.magenta)}
+        ${emailHeading(`New CIT<br/><span style="color: ${BRAND.magenta};">Application</span>`)}
+        ${emailDetailsCard([
+          { label: 'Applicant', value: String(context.applicantName) },
+          { label: 'Age', value: String(context.age) },
+        ], undefined, BRAND.magenta)}
+        ${emailButton('Review Application', `/admin/cit-applications/${context.applicationId}`, BRAND.magenta)}
       `
       break
 
     case 'CIT_STATUS_UPDATE':
       bodyContent = `
-        <h2>CIT Application Update</h2>
-        <p>Hi ${context.applicantName},</p>
-        <div class="${context.status === 'approved' ? 'success-box' : 'details'}">
-          <p>Your CIT application status has been updated to: <strong>${context.status}</strong></p>
-        </div>
-        <p style="text-align: center;"><a href="/dashboard" class="button">View Details</a></p>
+        ${emailLabel('CIT Update', BRAND.magenta)}
+        ${emailHeading('CIT Application<br/>Update')}
+        ${emailParagraph(`Hi ${context.applicantName},`)}
+        ${emailCallout(`Your CIT application status has been updated to: <strong style="color: ${BRAND.textPrimary};">${context.status}</strong>`, context.status === 'approved' ? 'success' : 'info')}
+        ${emailButton('View Details', '/dashboard')}
       `
       break
 
     case 'ROYALTY_STATUS_UPDATE':
       bodyContent = `
-        <h2>Invoice Status Update</h2>
-        <p>Invoice <strong>${context.invoiceNumber}</strong> status has been updated to: <strong>${context.status}</strong></p>
-        <p style="text-align: center;"><a href="/admin/revenue/royalties" class="button">View Invoice</a></p>
+        ${emailLabel('Invoice Update')}
+        ${emailHeading('Invoice Status<br/>Update')}
+        ${emailParagraph(`Invoice <strong style="color: ${BRAND.textPrimary};">${context.invoiceNumber}</strong> status: <strong style="color: ${BRAND.neon};">${context.status}</strong>`)}
+        ${emailButton('View Invoice', '/admin/revenue/royalties')}
       `
       break
 
     case 'LMS_COMPLETION':
       bodyContent = `
-        <h2>Congratulations!</h2>
-        <p>Hi ${context.userName},</p>
-        <div class="success-box"><p>You've successfully completed <strong>${context.moduleName}</strong>!</p></div>
-        ${context.score ? `<p>Your score: <strong>${context.score}%</strong></p>` : ''}
-        <p>Keep up the great work! Check out what's next in your training journey.</p>
-        <p style="text-align: center;"><a href="/training" class="button">Continue Training</a></p>
+        ${emailLabel('Completed', BRAND.success)}
+        ${emailHeading('Congrats!')}
+        ${emailParagraph(`Hi ${context.userName},`)}
+        ${emailCallout(`You've successfully completed <strong style="color: ${BRAND.textPrimary};">${context.moduleName}</strong>!`, 'success')}
+        ${context.score ? emailParagraph(`Your score: <strong style="color: ${BRAND.neon};">${context.score}%</strong>`) : ''}
+        ${emailButton('Continue Training', '/training')}
       `
       break
 
     case 'CERTIFICATION_UPDATE':
       bodyContent = `
-        <h2>Certification Update</h2>
-        <p>Hi ${context.userName},</p>
-        <p>Your certification status has been updated:</p>
-        <div class="details">
-          <div class="details-row"><span class="details-label">Certification</span><span class="details-value">${context.certificationName}</span></div>
-          <div class="details-row"><span class="details-label">Status</span><span class="details-value">${context.status}</span></div>
-        </div>
-        <p style="text-align: center;"><a href="/certifications" class="button">View Certifications</a></p>
+        ${emailLabel('Certification')}
+        ${emailHeading('Certification<br/>Update')}
+        ${emailParagraph(`Hi ${context.userName},`)}
+        ${emailDetailsCard([
+          { label: 'Certification', value: String(context.certificationName) },
+          { label: 'Status', value: String(context.status) },
+        ])}
+        ${emailButton('View Certifications', '/certifications')}
       `
       break
 
     case 'INCENTIVE_UPDATE':
       bodyContent = `
-        <h2>Incentive Update</h2>
-        <p>Hi,</p>
-        <p>There's an update to your incentive program:</p>
-        <div class="highlight"><strong>${context.incentiveName || 'Incentive Program'}</strong></div>
-        ${context.amount ? `<p>Amount: <strong>$${context.amount}</strong></p>` : ''}
-        <p style="text-align: center;"><a href="/incentives" class="button">View Details</a></p>
+        ${emailLabel('Incentive')}
+        ${emailHeading('Incentive<br/>Update')}
+        ${emailHighlight(String(context.incentiveName || 'Incentive Program'))}
+        ${context.amount ? emailParagraph(`Amount: <strong style="color: ${BRAND.neon};">$${context.amount}</strong>`) : ''}
+        ${emailButton('View Details', '/incentives')}
       `
       break
 
     case 'JOB_APPLICATION':
       bodyContent = `
-        <h2>Application Update</h2>
-        <p>Hi ${context.applicantName},</p>
-        <p>There's an update on your application for <strong>${context.position}</strong>.</p>
-        <div class="details">
-          <div class="details-row"><span class="details-label">Status</span><span class="details-value">${context.status}</span></div>
-        </div>
-        <p style="text-align: center;"><a href="/jobs/applications" class="button">View Application</a></p>
+        ${emailLabel('Application')}
+        ${emailHeading('Application<br/>Update')}
+        ${emailParagraph(`Hi ${context.applicantName},`)}
+        ${emailParagraph(`There's an update on your application for <strong style="color: ${BRAND.neon};">${context.position}</strong>.`)}
+        ${emailDetailsCard([{ label: 'Status', value: String(context.status) }])}
+        ${emailButton('View Application', '/jobs/applications')}
       `
       break
 
     case 'SYSTEM_ALERT':
     case 'BROADCAST':
       bodyContent = `
-        <h2>${context.title || 'Message'}</h2>
-        <div class="${context.severity === 'error' ? 'warning-box' : context.severity === 'warning' ? 'warning-box' : 'info-box'}">
-          <p>${context.message}</p>
-        </div>
-        ${context.actionUrl ? `<p style="text-align: center;"><a href="${context.actionUrl}" class="button">Take Action</a></p>` : ''}
+        ${emailHeading(String(context.title || 'Message'))}
+        ${emailCallout(String(context.message), context.severity === 'error' || context.severity === 'warning' ? 'warning' : 'info')}
+        ${context.actionUrl ? emailButton('Take Action', String(context.actionUrl)) : ''}
       `
       break
 
     default:
       bodyContent = `
-        <h2>Notification</h2>
-        <p>${context.message || 'You have a new notification from Empowered Sports Camp.'}</p>
+        ${emailHeading('Notification')}
+        ${emailParagraph(String(context.message || 'You have a new notification from Empowered Sports Camp.'))}
       `
   }
 
-  return `
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Empowered Sports Camp</title>
-      <style>${baseStyle}</style>
-    </head>
-    <body>
-      <div class="container">
-        <div class="header">
-          <h1>EMPOWERED SPORTS CAMP</h1>
-          <div class="tagline">Building Champions On & Off The Field</div>
-        </div>
-        <div class="content">
-          ${bodyContent}
-        </div>
-        <div class="footer">
-          <p>&copy; ${new Date().getFullYear()} Empowered Sports Camp. All rights reserved.</p>
-          <p>
-            <a href="https://empoweredsportscamp.com">Website</a> |
-            <a href="https://empoweredsportscamp.com/privacy">Privacy Policy</a> |
-            <a href="https://empoweredsportscamp.com/unsubscribe">Unsubscribe</a>
-          </p>
-        </div>
-      </div>
-    </body>
-    </html>
-  `
+  return brandWrap(bodyContent)
 }

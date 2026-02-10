@@ -6,6 +6,7 @@
 
 import prisma from '@/lib/db/client'
 import { sendEmail, isEmailConfigured, logEmail } from './resend-client'
+import { brandWrap, BRAND, emailLabel, emailHeading, emailSubheading, emailParagraph, emailDetailsCard } from './brand-layout'
 import type { CompensationSummary } from '@/lib/services/incentives'
 
 // HQ email for licensor notifications
@@ -126,219 +127,74 @@ function buildCompensationReportHtml(summary: CompensationSummary, tenantName: s
       year: 'numeric',
     })
 
-  return `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Compensation Report</title>
-  <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      line-height: 1.6;
-      color: #1a1a1a;
-      background-color: #f5f5f5;
-      margin: 0;
-      padding: 20px;
-    }
-    .container {
-      max-width: 600px;
-      margin: 0 auto;
-      background-color: #ffffff;
-      border: 1px solid #e0e0e0;
-    }
-    .header {
-      background-color: #1a1a1a;
-      color: #CCFF00;
-      padding: 24px;
-      text-align: center;
-    }
-    .header h1 {
-      margin: 0;
-      font-size: 24px;
-      font-weight: bold;
-      text-transform: uppercase;
-      letter-spacing: 2px;
-    }
-    .content {
-      padding: 24px;
-    }
-    .section {
-      margin-bottom: 24px;
-    }
-    .section-title {
-      font-size: 14px;
-      font-weight: bold;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      color: #666;
-      margin-bottom: 12px;
-      padding-bottom: 8px;
-      border-bottom: 2px solid #CCFF00;
-    }
-    .info-row {
-      display: flex;
-      justify-content: space-between;
-      padding: 8px 0;
-      border-bottom: 1px solid #f0f0f0;
-    }
-    .info-label {
-      color: #666;
-    }
-    .info-value {
-      font-weight: 600;
-    }
-    .total-row {
-      background-color: #1a1a1a;
-      color: #CCFF00;
-      padding: 16px;
-      margin-top: 24px;
-    }
-    .total-row .label {
-      font-size: 14px;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-    }
-    .total-row .amount {
-      font-size: 28px;
-      font-weight: bold;
-    }
-    .bonus-earned {
-      color: #22c55e;
-    }
-    .bonus-not-earned {
-      color: #ef4444;
-    }
-    .footer {
-      background-color: #f5f5f5;
-      padding: 16px 24px;
-      font-size: 12px;
-      color: #666;
-      text-align: center;
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="header">
-      <h1>Compensation Report</h1>
-    </div>
+  const F = `font-family: 'Poppins', Arial, sans-serif;`
 
-    <div class="content">
-      <div class="section">
-        <div class="section-title">Camp Details</div>
-        <div class="info-row">
-          <span class="info-label">Camp Name</span>
-          <span class="info-value">${camp.name}</span>
-        </div>
-        <div class="info-row">
-          <span class="info-label">Dates</span>
-          <span class="info-value">${formatDate(camp.start_date)} - ${formatDate(camp.end_date)}</span>
-        </div>
-        <div class="info-row">
-          <span class="info-label">Licensee</span>
-          <span class="info-value">${tenantName}</span>
-        </div>
-      </div>
+  const bonusColor = (val: number | null | undefined) =>
+    val && val > 0 ? BRAND.success : BRAND.textMuted
 
-      <div class="section">
-        <div class="section-title">Staff Member</div>
-        <div class="info-row">
-          <span class="info-label">Name</span>
-          <span class="info-value">${staff.name}</span>
-        </div>
-        <div class="info-row">
-          <span class="info-label">Email</span>
-          <span class="info-value">${staff.email}</span>
-        </div>
-        <div class="info-row">
-          <span class="info-label">Compensation Plan</span>
-          <span class="info-value">${plan.name}</span>
-        </div>
-      </div>
+  const bonusRow = (label: string, value: number | null | undefined, detail: string) => `
+    <tr>
+      <td style="padding: 8px 0; color: ${BRAND.textMuted}; font-size: 14px; ${F} width: 50%;">${label}</td>
+      <td style="padding: 8px 0; color: ${bonusColor(value)}; font-size: 14px; font-weight: 600; ${F} text-align: right;">${formatCurrency(value ?? null)}</td>
+    </tr>
+    <tr>
+      <td colspan="2" style="padding: 0 0 8px; color: ${BRAND.textFaint}; font-size: 12px; ${F}">${detail}</td>
+    </tr>`
 
-      <div class="section">
-        <div class="section-title">Fixed Stipend</div>
-        <div class="info-row">
-          <span class="info-label">Pre-Camp Stipend</span>
-          <span class="info-value">${formatCurrency(session.pre_camp_stipend_amount)}</span>
-        </div>
-        <div class="info-row">
-          <span class="info-label">On-Site Stipend</span>
-          <span class="info-value">${formatCurrency(session.on_site_stipend_amount)}</span>
-        </div>
-        <div class="info-row">
-          <span class="info-label"><strong>Fixed Stipend Total</strong></span>
-          <span class="info-value"><strong>${formatCurrency(session.fixed_stipend_total)}</strong></span>
-        </div>
-      </div>
+  return brandWrap(`
+    ${emailLabel('Compensation Report')}
+    ${emailHeading('Compensation<br/><span style="color: ' + BRAND.neon + ';">Report</span>')}
 
-      <div class="section">
-        <div class="section-title">Variable Bonuses</div>
+    ${emailDetailsCard([
+      { label: 'Camp Name', value: camp.name },
+      { label: 'Dates', value: `${formatDate(camp.start_date)} - ${formatDate(camp.end_date)}` },
+      { label: 'Licensee', value: tenantName },
+    ], 'Camp Details')}
 
-        <div class="info-row">
-          <span class="info-label">Enrollment Bonus</span>
-          <span class="info-value ${session.enrollment_bonus_earned && session.enrollment_bonus_earned > 0 ? 'bonus-earned' : ''}">
-            ${formatCurrency(session.enrollment_bonus_earned)}
-          </span>
-        </div>
-        <div style="font-size: 12px; color: #666; padding: 4px 0 12px;">
-          ${session.total_enrolled_campers || 0} campers enrolled
-          ${session.enrollment_threshold ? `(threshold: ${session.enrollment_threshold})` : ''}
-        </div>
+    ${emailDetailsCard([
+      { label: 'Name', value: staff.name },
+      { label: 'Email', value: staff.email },
+      { label: 'Plan', value: plan.name },
+    ], 'Staff Member')}
 
-        <div class="info-row">
-          <span class="info-label">CSAT Bonus</span>
-          <span class="info-value ${session.csat_bonus_earned && session.csat_bonus_earned > 0 ? 'bonus-earned' : ''}">
-            ${formatCurrency(session.csat_bonus_earned)}
-          </span>
-        </div>
-        <div style="font-size: 12px; color: #666; padding: 4px 0 12px;">
-          Score: ${session.csat_avg_score?.toFixed(2) || '-'}
-          ${session.csat_required_score ? `(required: ${session.csat_required_score})` : ''}
-        </div>
+    ${emailSubheading('Fixed Stipend')}
+    ${emailDetailsCard([
+      { label: 'Pre-Camp Stipend', value: formatCurrency(session.pre_camp_stipend_amount) },
+      { label: 'On-Site Stipend', value: formatCurrency(session.on_site_stipend_amount) },
+      { label: 'Fixed Total', value: formatCurrency(session.fixed_stipend_total) },
+    ])}
 
-        <div class="info-row">
-          <span class="info-label">Budget Efficiency Bonus</span>
-          <span class="info-value ${session.budget_efficiency_bonus_earned && session.budget_efficiency_bonus_earned > 0 ? 'bonus-earned' : ''}">
-            ${formatCurrency(session.budget_efficiency_bonus_earned)}
-          </span>
-        </div>
-        <div style="font-size: 12px; color: #666; padding: 4px 0 12px;">
-          Savings: ${formatCurrency(session.budget_savings_amount)}
-          ${session.budget_efficiency_rate ? ` @ ${(session.budget_efficiency_rate * 100).toFixed(0)}%` : ''}
-        </div>
+    ${emailSubheading('Variable Bonuses')}
+    <table cellpadding="0" cellspacing="0" style="margin: 8px 0 24px; width: 100%; border-radius: 6px; overflow: hidden;">
+      <tr>
+        <td style="background-color: rgba(204,255,0,0.04); border: 1px solid rgba(204,255,0,0.12); border-radius: 6px; padding: 20px 24px;">
+          <table cellpadding="0" cellspacing="0" style="width: 100%;">
+            ${bonusRow('Enrollment Bonus', session.enrollment_bonus_earned, `${session.total_enrolled_campers || 0} campers enrolled${session.enrollment_threshold ? ` (threshold: ${session.enrollment_threshold})` : ''}`)}
+            ${bonusRow('CSAT Bonus', session.csat_bonus_earned, `Score: ${session.csat_avg_score?.toFixed(2) || '-'}${session.csat_required_score ? ` (required: ${session.csat_required_score})` : ''}`)}
+            ${bonusRow('Budget Efficiency', session.budget_efficiency_bonus_earned, `Savings: ${formatCurrency(session.budget_savings_amount)}${session.budget_efficiency_rate ? ` @ ${(session.budget_efficiency_rate * 100).toFixed(0)}%` : ''}`)}
+            ${bonusRow('Guest Speaker', session.guest_speaker_bonus_earned, `${session.guest_speaker_count || 0} speakers${session.guest_speaker_required_count ? ` (required: ${session.guest_speaker_required_count})` : ''}`)}
+            <tr>
+              <td colspan="2" style="height: 1px; background: ${BRAND.borderSubtle}; margin: 8px 0;"></td>
+            </tr>
+            <tr>
+              <td style="padding: 12px 0 0; color: ${BRAND.textPrimary}; font-size: 14px; font-weight: 700; ${F}">Total Variable Bonus</td>
+              <td style="padding: 12px 0 0; color: ${BRAND.textPrimary}; font-size: 14px; font-weight: 700; ${F} text-align: right;">${formatCurrency(session.total_variable_bonus)}</td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
 
-        <div class="info-row">
-          <span class="info-label">Guest Speaker Bonus</span>
-          <span class="info-value ${session.guest_speaker_bonus_earned && session.guest_speaker_bonus_earned > 0 ? 'bonus-earned' : ''}">
-            ${formatCurrency(session.guest_speaker_bonus_earned)}
-          </span>
-        </div>
-        <div style="font-size: 12px; color: #666; padding: 4px 0 12px;">
-          ${session.guest_speaker_count || 0} speakers
-          ${session.guest_speaker_required_count ? `(required: ${session.guest_speaker_required_count})` : ''}
-        </div>
+    <!-- Total Compensation -->
+    <table cellpadding="0" cellspacing="0" style="margin: 0 0 24px; width: 100%;">
+      <tr>
+        <td align="center" style="background-color: ${BRAND.neon}; padding: 20px 24px; border-radius: 6px;">
+          <p style="margin: 0 0 4px; color: #000000; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; ${F}">Total Compensation</p>
+          <p style="margin: 0; color: #000000; font-size: 32px; font-weight: 800; ${F}">${formatCurrency(session.total_compensation)}</p>
+        </td>
+      </tr>
+    </table>
 
-        <div class="info-row" style="border-top: 2px solid #e0e0e0; margin-top: 12px; padding-top: 12px;">
-          <span class="info-label"><strong>Total Variable Bonus</strong></span>
-          <span class="info-value"><strong>${formatCurrency(session.total_variable_bonus)}</strong></span>
-        </div>
-      </div>
-
-      <div class="total-row">
-        <div class="label">Total Compensation</div>
-        <div class="amount">${formatCurrency(session.total_compensation)}</div>
-      </div>
-    </div>
-
-    <div class="footer">
-      <p>This report was generated on ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}.</p>
-      <p>Empowered Sports Camp &bull; empoweredathletes.com</p>
-    </div>
-  </div>
-</body>
-</html>
-  `
+    <p style="margin: 0; color: ${BRAND.textFaint}; font-size: 12px; text-align: center; ${F}">Report generated on ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
+  `)
 }

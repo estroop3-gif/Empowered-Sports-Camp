@@ -6,28 +6,38 @@
 
 import { sendEmail, logEmail } from './resend-client'
 import { UserRole } from '@/generated/prisma'
+import {
+  brandWrap,
+  BRAND,
+  emailLabel,
+  emailHeading,
+  emailParagraph,
+  emailButton,
+  emailCallout,
+  emailFallbackUrl,
+} from './brand-layout'
 
 // Role display names and descriptions
 const ROLE_INFO: Record<string, { name: string; description: string; color: string }> = {
   licensee_owner: {
     name: 'Licensee Owner',
     description: 'Run your own Empowered Sports Camp franchise in your territory',
-    color: '#00ff88', // neon green
+    color: BRAND.neon,
   },
   director: {
     name: 'Camp Director',
     description: 'Lead and manage camp sessions, oversee staff and campers',
-    color: '#d946ef', // magenta
+    color: BRAND.magenta,
   },
   coach: {
     name: 'Coach',
     description: 'Coach young athletes and help them develop their skills',
-    color: '#8b5cf6', // purple
+    color: BRAND.purple,
   },
   cit_volunteer: {
     name: 'CIT Volunteer',
     description: 'Join our Coaches-in-Training program and develop leadership skills',
-    color: '#f59e0b', // amber
+    color: BRAND.warning,
   },
 }
 
@@ -55,97 +65,33 @@ function generateRoleInviteHtml(options: RoleInviteEmailOptions): string {
   const roleInfo = ROLE_INFO[options.targetRole] || {
     name: options.targetRole,
     description: 'Join our team',
-    color: '#00ff88',
+    color: BRAND.neon,
   }
 
-  return `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>You're Invited to Join Empowered Sports Camp</title>
-</head>
-<body style="margin: 0; padding: 0; background-color: #000000; font-family: 'Poppins', Arial, sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #000000; padding: 40px 20px;">
-    <tr>
-      <td align="center">
-        <table width="600" cellpadding="0" cellspacing="0" style="background-color: #0a0a0a; border: 1px solid rgba(255,255,255,0.1);">
-          <!-- Header -->
-          <tr>
-            <td style="padding: 40px 40px 20px; border-bottom: 2px solid ${roleInfo.color};">
-              <h1 style="margin: 0; color: ${roleInfo.color}; font-size: 24px; font-weight: 900; text-transform: uppercase; letter-spacing: 2px;">
-                Empowered Sports Camp
-              </h1>
-            </td>
-          </tr>
+  const expiryDate = options.expiresAt.toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  })
 
-          <!-- Content -->
-          <tr>
-            <td style="padding: 40px;">
-              <h2 style="margin: 0 0 20px; color: #ffffff; font-size: 20px; font-weight: 700;">
-                Hi ${options.firstName || 'there'},
-              </h2>
+  return brandWrap(`
+    ${emailLabel("You're Invited", roleInfo.color)}
+    ${emailHeading(`Join Us as a<br/><span style="color: ${roleInfo.color};">${roleInfo.name}</span>`)}
 
-              <p style="margin: 0 0 20px; color: rgba(255,255,255,0.7); font-size: 16px; line-height: 1.6;">
-                <strong style="color: #ffffff;">${options.inviterName}</strong> has invited you to join
-                <strong style="color: #ffffff;">Empowered Sports Camp</strong> as a
-                <strong style="color: ${roleInfo.color};">${roleInfo.name}</strong>.
-              </p>
+    ${emailParagraph(`Hi ${options.firstName || 'there'},`)}
+    ${emailParagraph(`<strong style="color: ${BRAND.textPrimary};">${options.inviterName}</strong> has invited you to join <strong style="color: ${BRAND.textPrimary};">Empowered Sports Camp</strong> as a <strong style="color: ${roleInfo.color};">${roleInfo.name}</strong>.`)}
 
-              <div style="margin: 0 0 30px; padding: 20px; background-color: rgba(255,255,255,0.05); border-left: 3px solid ${roleInfo.color};">
-                <p style="margin: 0; color: rgba(255,255,255,0.7); font-size: 14px; line-height: 1.6;">
-                  ${roleInfo.description}
-                </p>
-              </div>
+    ${emailCallout(roleInfo.description, 'purple')}
 
-              <p style="margin: 0 0 30px; color: rgba(255,255,255,0.7); font-size: 16px; line-height: 1.6;">
-                Click the button below to accept your invitation and create your account:
-              </p>
+    ${emailParagraph('Click the button below to accept your invitation and create your account:')}
 
-              <table cellpadding="0" cellspacing="0" style="margin: 0 0 30px;">
-                <tr>
-                  <td style="background-color: ${roleInfo.color}; padding: 16px 32px;">
-                    <a href="${options.inviteUrl}" style="color: #000000; text-decoration: none; font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;">
-                      Accept Invitation
-                    </a>
-                  </td>
-                </tr>
-              </table>
+    ${emailButton('Accept Invitation', options.inviteUrl, roleInfo.color)}
 
-              <p style="margin: 0 0 20px; color: rgba(255,255,255,0.5); font-size: 14px;">
-                Or copy and paste this link into your browser:
-              </p>
-              <p style="margin: 0 0 30px; color: ${roleInfo.color}; font-size: 14px; word-break: break-all;">
-                ${options.inviteUrl}
-              </p>
+    ${emailFallbackUrl(options.inviteUrl)}
 
-              <p style="margin: 0; color: rgba(255,255,255,0.5); font-size: 14px;">
-                This invitation expires on ${options.expiresAt.toLocaleDateString('en-US', {
-                  weekday: 'long',
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric',
-                })}.
-              </p>
-            </td>
-          </tr>
-
-          <!-- Footer -->
-          <tr>
-            <td style="padding: 30px 40px; border-top: 1px solid rgba(255,255,255,0.1); background-color: rgba(0,0,0,0.5);">
-              <p style="margin: 0; color: rgba(255,255,255,0.4); font-size: 12px; text-align: center;">
-                &copy; ${new Date().getFullYear()} Empowered Sports Camp. All rights reserved.
-              </p>
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>
-  `.trim()
+    <p style="margin: 16px 0 0; color: ${BRAND.textMuted}; font-size: 13px; font-family: 'Poppins', Arial, sans-serif;">This invitation expires on ${expiryDate}.</p>
+  `, { accentColor: roleInfo.color })
 }
 
 /**

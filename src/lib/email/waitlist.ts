@@ -10,60 +10,19 @@
 
 import { sendEmail, logEmail } from './resend-client'
 import type { EmailType } from '@/generated/prisma'
-
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://empoweredsportscamp.com'
-
-// Shared email styles matching the existing brand
-const baseStyles = `
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; background-color: #f5f5f5; }
-  .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; }
-  .header { background: linear-gradient(135deg, #000000 0%, #1a1a1a 100%); color: #ffffff; padding: 30px 40px; text-align: center; }
-  .header h1 { margin: 0; font-size: 24px; font-weight: 700; letter-spacing: 1px; }
-  .header .tagline { color: #00ff88; font-size: 12px; letter-spacing: 2px; margin-top: 8px; text-transform: uppercase; }
-  .content { padding: 40px; color: #333333; line-height: 1.6; }
-  .content h2 { color: #000000; margin-top: 0; font-size: 22px; }
-  .content h3 { color: #000000; margin-top: 24px; font-size: 18px; }
-  .content p { margin: 16px 0; }
-  .highlight { background: linear-gradient(135deg, #00ff88 0%, #00cc6a 100%); color: #000000; padding: 20px; border-radius: 8px; margin: 24px 0; text-align: center; }
-  .highlight strong { font-size: 18px; }
-  .button { display: inline-block; background: #00ff88; color: #000000 !important; text-decoration: none; padding: 14px 28px; border-radius: 6px; font-weight: 600; margin: 20px 0; }
-  .details { background: #f8f8f8; padding: 20px; border-radius: 8px; margin: 24px 0; }
-  .details-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #eeeeee; }
-  .details-row:last-child { border-bottom: none; }
-  .details-label { color: #666666; font-weight: 500; }
-  .details-value { color: #000000; font-weight: 600; text-align: right; }
-  .footer { background: #1a1a1a; color: #888888; padding: 30px 40px; text-align: center; font-size: 12px; }
-  .footer a { color: #00ff88; text-decoration: none; }
-  .info-box { background: #E0F2FE; border-left: 4px solid #0EA5E9; padding: 16px; margin: 16px 0; border-radius: 4px; }
-  .warning-box { background: #fff3cd; border-left: 4px solid #ffc107; padding: 16px; margin: 16px 0; border-radius: 4px; }
-  .purple-box { background: #8B5CF620; border-left: 4px solid #8B5CF6; padding: 16px; margin: 16px 0; border-radius: 4px; }
-  .camp-card { background: #f8f8f8; border: 1px solid #e5e5e5; border-radius: 8px; padding: 16px; margin: 12px 0; }
-  .camp-card h4 { margin: 0 0 8px; color: #000; }
-  .camp-card .meta { color: #666; font-size: 14px; }
-`
-
-function wrapInLayout(bodyContent: string): string {
-  return `
-<!DOCTYPE html>
-<html>
-<head><style>${baseStyles}</style></head>
-<body>
-  <div class="container">
-    <div class="header">
-      <h1>EMPOWERED ATHLETES</h1>
-      <div class="tagline">Build Her Confidence. Build Her Game.</div>
-    </div>
-    <div class="content">
-      ${bodyContent}
-    </div>
-    <div class="footer">
-      <p>&copy; ${new Date().getFullYear()} Empowered Sports Camp. All rights reserved.</p>
-      <p><a href="${APP_URL}">Visit Our Website</a> | <a href="${APP_URL}/camps">Browse Camps</a></p>
-    </div>
-  </div>
-</body>
-</html>`
-}
+import {
+  brandWrap,
+  BRAND,
+  APP_URL,
+  emailLabel,
+  emailHeading,
+  emailSubheading,
+  emailParagraph,
+  emailButton,
+  emailDetailsCard,
+  emailHighlight,
+  emailCallout,
+} from './brand-layout'
 
 // ============================================================================
 // WAITLIST CONFIRMATION
@@ -83,33 +42,29 @@ export async function sendWaitlistConfirmationEmail(params: {
   const { parentEmail, parentFirstName, camperFirstName, campName, campDates, location, waitlistPosition, tenantId, userId } = params
 
   const subject = `You're on the waitlist for ${campName}!`
-  const html = wrapInLayout(`
-    <h2>You're On the Waitlist!</h2>
-    <p>Hi ${parentFirstName},</p>
-    <p>We've added <strong>${camperFirstName}</strong> to the waitlist for <strong>${campName}</strong>. While the camp is currently full, spots do open up!</p>
+  const html = brandWrap(`
+    ${emailLabel("You're on the list")}
+    ${emailHeading(`Waitlist<br/><span style="color: ${BRAND.neon};">Confirmed</span>`)}
 
-    <div class="highlight">
-      <strong>Waitlist Position: #${waitlistPosition}</strong>
-    </div>
+    ${emailParagraph(`Hi ${parentFirstName},`)}
+    ${emailParagraph(`We've added <strong style="color: ${BRAND.textPrimary};">${camperFirstName}</strong> to the waitlist for <strong style="color: ${BRAND.neon};">${campName}</strong>. While the camp is currently full, spots do open up!`)}
 
-    <div class="details">
-      <div class="details-row"><span class="details-label">Camper</span><span class="details-value">${camperFirstName}</span></div>
-      <div class="details-row"><span class="details-label">Camp</span><span class="details-value">${campName}</span></div>
-      <div class="details-row"><span class="details-label">Dates</span><span class="details-value">${campDates}</span></div>
-      <div class="details-row"><span class="details-label">Location</span><span class="details-value">${location}</span></div>
-    </div>
+    ${emailHighlight(`Waitlist Position: #${waitlistPosition}`)}
 
-    <h3>How It Works</h3>
-    <div class="info-box">
-      <p style="margin: 0;">When a spot opens, we'll email you with a <strong>48-hour window</strong> to complete your registration and payment. If you don't respond in time, the spot will be offered to the next person in line.</p>
-    </div>
+    ${emailDetailsCard([
+      { label: 'Camper', value: camperFirstName },
+      { label: 'Camp', value: campName },
+      { label: 'Dates', value: campDates },
+      { label: 'Location', value: location },
+    ], 'Details')}
 
-    <p>In the meantime, check out our other available camps!</p>
-    <p style="text-align: center;">
-      <a href="${APP_URL}/camps" class="button">Browse Available Camps</a>
-    </p>
+    ${emailSubheading('How It Works')}
+    ${emailCallout(`When a spot opens, we'll email you with a <strong style="color: ${BRAND.textPrimary};">48-hour window</strong> to complete your registration and payment. If you don't respond in time, the spot will be offered to the next person in line.`)}
 
-    <p>Thank you for your interest in Empowered Athletes!</p>
+    ${emailParagraph('In the meantime, check out our other available camps!')}
+    ${emailButton('Browse Available Camps', `${APP_URL}/camps`)}
+
+    ${emailParagraph('Thank you for your interest in Empowered Sports Camp!')}
   `)
 
   const result = await sendEmail({ to: parentEmail, subject, html })
@@ -148,34 +103,30 @@ export async function sendWaitlistOfferEmail(params: {
   const { parentEmail, parentFirstName, camperFirstName, campName, campDates, location, price, offerExpiresAt, acceptUrl, declineUrl, tenantId, userId } = params
 
   const subject = `A spot opened at ${campName} — complete your registration!`
-  const html = wrapInLayout(`
-    <h2>Great News — A Spot Opened!</h2>
-    <p>Hi ${parentFirstName},</p>
-    <p>A spot has become available for <strong>${camperFirstName}</strong> at <strong>${campName}</strong>!</p>
+  const html = brandWrap(`
+    ${emailLabel('Great News')}
+    ${emailHeading(`A Spot<br/><span style="color: ${BRAND.neon};">Opened Up!</span>`)}
 
-    <div class="highlight">
-      <strong>You have 48 hours to claim this spot</strong>
-    </div>
+    ${emailParagraph(`Hi ${parentFirstName},`)}
+    ${emailParagraph(`A spot has become available for <strong style="color: ${BRAND.textPrimary};">${camperFirstName}</strong> at <strong style="color: ${BRAND.neon};">${campName}</strong>!`)}
 
-    <div class="details">
-      <div class="details-row"><span class="details-label">Camper</span><span class="details-value">${camperFirstName}</span></div>
-      <div class="details-row"><span class="details-label">Camp</span><span class="details-value">${campName}</span></div>
-      <div class="details-row"><span class="details-label">Dates</span><span class="details-value">${campDates}</span></div>
-      <div class="details-row"><span class="details-label">Location</span><span class="details-value">${location}</span></div>
-      <div class="details-row"><span class="details-label">Price</span><span class="details-value">${price}</span></div>
-      <div class="details-row"><span class="details-label">Offer Expires</span><span class="details-value">${offerExpiresAt}</span></div>
-    </div>
+    ${emailHighlight('You have 48 hours to claim this spot', BRAND.magenta)}
 
-    <p style="text-align: center;">
-      <a href="${acceptUrl}" class="button">Complete Registration & Pay</a>
-    </p>
+    ${emailDetailsCard([
+      { label: 'Camper', value: camperFirstName },
+      { label: 'Camp', value: campName },
+      { label: 'Dates', value: campDates },
+      { label: 'Location', value: location },
+      { label: 'Price', value: price },
+      { label: 'Offer Expires', value: offerExpiresAt },
+    ], 'Spot Details')}
 
-    <div class="warning-box">
-      <strong>Important:</strong> This offer expires on <strong>${offerExpiresAt}</strong>. If you don't complete payment by then, the spot will be offered to the next person on the waitlist.
-    </div>
+    ${emailButton('Complete Registration & Pay', acceptUrl)}
+
+    ${emailCallout(`<strong style="color: ${BRAND.textPrimary};">Important:</strong> This offer expires on <strong style="color: ${BRAND.textPrimary};">${offerExpiresAt}</strong>. If you don't complete payment by then, the spot will be offered to the next person on the waitlist.`, 'warning')}
 
     <p style="text-align: center; margin-top: 24px;">
-      <a href="${declineUrl}" style="color: #666; font-size: 14px;">No thanks, remove me from the waitlist</a>
+      <a href="${declineUrl}" style="color: ${BRAND.textMuted}; font-size: 13px; text-decoration: underline; font-family: 'Poppins', Arial, sans-serif;">No thanks, remove me from the waitlist</a>
     </p>
   `)
 
@@ -209,19 +160,17 @@ export async function sendWaitlistOfferExpiredEmail(params: {
   const { parentEmail, parentFirstName, camperFirstName, campName, tenantId, userId } = params
 
   const subject = `Your spot offer for ${campName} has expired`
-  const html = wrapInLayout(`
-    <h2>Offer Expired</h2>
-    <p>Hi ${parentFirstName},</p>
-    <p>Unfortunately, the 48-hour window to claim the spot for <strong>${camperFirstName}</strong> at <strong>${campName}</strong> has expired. The spot has been offered to the next person on the waitlist.</p>
+  const html = brandWrap(`
+    ${emailLabel('Offer Expired')}
+    ${emailHeading('Offer Expired')}
 
-    <div class="info-box">
-      <p style="margin: 0;">You've been moved to the back of the waitlist. If another spot opens up, we'll send you a new offer.</p>
-    </div>
+    ${emailParagraph(`Hi ${parentFirstName},`)}
+    ${emailParagraph(`Unfortunately, the 48-hour window to claim the spot for <strong style="color: ${BRAND.textPrimary};">${camperFirstName}</strong> at <strong style="color: ${BRAND.neon};">${campName}</strong> has expired. The spot has been offered to the next person on the waitlist.`)}
 
-    <p>In the meantime, check out other available camps near you:</p>
-    <p style="text-align: center;">
-      <a href="${APP_URL}/camps" class="button">Browse Available Camps</a>
-    </p>
+    ${emailCallout(`You've been moved to the back of the waitlist. If another spot opens up, we'll send you a new offer.`)}
+
+    ${emailParagraph('In the meantime, check out other available camps near you:')}
+    ${emailButton('Browse Available Camps', `${APP_URL}/camps`)}
   `)
 
   const result = await sendEmail({ to: parentEmail, subject, html })
@@ -262,25 +211,30 @@ export async function sendNearbyCampsEmail(params: {
 
   if (camps.length === 0) return
 
+  const F = `font-family: 'Poppins', Arial, sans-serif;`
   const campCards = camps.map(camp => `
-    <div class="camp-card">
-      <h4>${camp.name}</h4>
-      <div class="meta">${camp.dates} &bull; ${camp.location} &bull; ${camp.spotsLeft} spots left</div>
-      <p style="margin: 8px 0 0;"><a href="${camp.registerUrl}" style="color: #00ff88; font-weight: 600;">Register Now</a></p>
-    </div>
+    <table cellpadding="0" cellspacing="0" style="margin: 8px 0; width: 100%;">
+      <tr>
+        <td style="background-color: rgba(255,255,255,0.03); border: 1px solid ${BRAND.borderSubtle}; border-radius: 6px; padding: 16px 20px;">
+          <p style="margin: 0 0 6px; color: ${BRAND.textPrimary}; font-size: 15px; font-weight: 700; ${F}">${camp.name}</p>
+          <p style="margin: 0 0 8px; color: ${BRAND.textMuted}; font-size: 13px; ${F}">${camp.dates} &bull; ${camp.location} &bull; ${camp.spotsLeft} spots left</p>
+          <a href="${camp.registerUrl}" style="color: ${BRAND.neon}; font-weight: 700; font-size: 13px; text-decoration: none; text-transform: uppercase; letter-spacing: 1px; ${F}">Register Now &rarr;</a>
+        </td>
+      </tr>
+    </table>
   `).join('')
 
   const subject = 'More camps available near you!'
-  const html = wrapInLayout(`
-    <h2>More Camps Available!</h2>
-    <p>Hi ${parentFirstName},</p>
-    <p>While you're on the waitlist, here are some other camps with open spots:</p>
+  const html = brandWrap(`
+    ${emailLabel('More Options')}
+    ${emailHeading(`Camps<br/><span style="color: ${BRAND.neon};">Near You</span>`)}
+
+    ${emailParagraph(`Hi ${parentFirstName},`)}
+    ${emailParagraph(`While you're on the waitlist, here are some other camps with open spots:`)}
 
     ${campCards}
 
-    <p style="text-align: center; margin-top: 24px;">
-      <a href="${APP_URL}/camps" class="button">View All Camps</a>
-    </p>
+    ${emailButton('View All Camps', `${APP_URL}/camps`)}
   `)
 
   const result = await sendEmail({ to: parentEmail, subject, html })
