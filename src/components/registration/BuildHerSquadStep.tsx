@@ -99,6 +99,7 @@ export function BuildHerSquadStep({
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteError, setInviteError] = useState<string | null>(null)
   const [inviteSent, setInviteSent] = useState(false)
+  const [sentToSelf, setSentToSelf] = useState(false)
   const [sendingRequest, setSendingRequest] = useState(false)
   const [sendingInvite, setSendingInvite] = useState(false)
   const [existingSquad, setExistingSquad] = useState<{
@@ -228,83 +229,27 @@ export function BuildHerSquadStep({
       return
     }
 
-    if (inviteEmail.toLowerCase() === parentEmail.toLowerCase()) {
-      setInviteError("You can't invite yourself")
-      return
-    }
+    const isSelfInvite = inviteEmail.toLowerCase() === parentEmail.toLowerCase()
 
     setSendingInvite(true)
     setInviteError(null)
 
     try {
-      // Use guest invite API if not authenticated
-      if (!isAuthenticated) {
-        const athleteNames = registeredAthletes.map(a => `${a.firstName} ${a.lastName}`)
+      // Always use guest-invite API — works for both authenticated and guest users,
+      // doesn't require auth tokens, and handles the invite email directly.
+      const athleteNames = registeredAthletes.map(a => `${a.firstName} ${a.lastName}`)
 
-        const res = await fetch('/api/squads/guest-invite', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            inviterEmail: parentEmail,
-            inviterName: parentName,
-            inviteeEmail: inviteEmail,
-            campId,
-            campName,
-            tenantId,
-            athleteNames,
-          }),
-        })
-
-        const data = await res.json()
-
-        if (data.error) {
-          setInviteError(data.error)
-          return
-        }
-
-        setInviteEmail('')
-        setInviteSent(true)
-        setTimeout(() => setInviteSent(false), 3000)
-        return
-      }
-
-      // Authenticated flow - create squad if needed
-      let squadId = existingSquad?.id
-
-      if (!squadId) {
-        const createRes = await fetch('/api/squads', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'create',
-            campId,
-            tenantId,
-            label: `${parentName}'s Squad`,
-            athleteIds: registeredAthletes.map(a => a.id),
-          }),
-        })
-
-        const createData = await createRes.json()
-        if (createData.error) {
-          setInviteError(createData.error)
-          return
-        }
-        squadId = createData.data.id
-        onSquadUpdate?.(squadId ?? null)
-      }
-
-      // Send the invite
-      const res = await fetch('/api/squads', {
+      const res = await fetch('/api/squads/guest-invite', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'invite',
-          squadId,
-          inviteeEmail: inviteEmail,
+          inviterEmail: parentEmail,
           inviterName: parentName,
-          campName,
+          inviteeEmail: inviteEmail,
           campId,
+          campName,
           tenantId,
+          athleteNames,
         }),
       })
 
@@ -317,7 +262,11 @@ export function BuildHerSquadStep({
 
       setInviteEmail('')
       setInviteSent(true)
-      setTimeout(() => setInviteSent(false), 3000)
+      setSentToSelf(isSelfInvite)
+      setTimeout(() => {
+        setInviteSent(false)
+        setSentToSelf(false)
+      }, 5000)
     } catch (error) {
       console.error('Failed to send invite:', error)
       setInviteError('Failed to send invite. Please try again.')
@@ -592,6 +541,20 @@ export function BuildHerSquadStep({
           </Button>
         </div>
 
+        {/* Send to myself quick action */}
+        {parentEmail && (
+          <button
+            type="button"
+            onClick={() => {
+              setInviteEmail(parentEmail)
+              setInviteError(null)
+            }}
+            className="mt-2 text-xs text-magenta/80 hover:text-magenta transition-colors underline underline-offset-2"
+          >
+            Don&apos;t know their email? Send the invite link to yourself to forward.
+          </button>
+        )}
+
         {inviteError && (
           <p className="mt-2 text-sm text-red-500 flex items-center gap-2">
             <AlertCircle className="h-4 w-4" />
@@ -601,7 +564,9 @@ export function BuildHerSquadStep({
         {inviteSent && (
           <p className="mt-2 text-sm text-neon flex items-center gap-2">
             <CheckCircle2 className="h-4 w-4" />
-            Invitation sent successfully!
+            {sentToSelf
+              ? 'Invite sent to your email! Forward it to your friends.'
+              : 'Invitation sent successfully!'}
           </p>
         )}
         <p className="mt-3 text-xs text-white/40">

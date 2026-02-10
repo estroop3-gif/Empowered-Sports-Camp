@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/client'
 import { createRegistration, addRegistrationAddon } from '@/lib/services/registrations'
 import { createStripeCheckoutSession } from '@/lib/services/payments'
+import { markDraftCompleted } from '@/lib/services/registrationDrafts'
 import { getAuthenticatedUserFromRequest } from '@/lib/auth/cognito-server'
 import type { RegistrationPayload } from '@/types/registration'
 
@@ -412,6 +413,9 @@ export async function POST(request: NextRequest) {
         }
       }
     }
+
+    // Mark any saved draft as completed (non-blocking)
+    markDraftCompleted(parent.email, campId).catch(() => {})
 
     // Create Stripe checkout session for ALL registrations
     // This ensures all campers' prices, add-ons, and taxes are included

@@ -462,9 +462,17 @@ function CamperCard({
                 Authorized Pickup
               </h4>
             </div>
-            <p className="text-xs text-white/40 mb-4">
+            <p className="text-xs text-white/40 mb-2">
               People authorized to pick up this camper (required — at least one person)
             </p>
+            <div className="flex flex-col gap-1 mb-4">
+              <p className="text-xs text-magenta font-semibold">
+                All pickup persons MUST show a valid photo ID at pickup.
+              </p>
+              <p className="text-xs text-white/40">
+                You can edit authorized pickups anytime from your parent dashboard.
+              </p>
+            </div>
 
             {(camper.authorizedPickups || []).map((pickup: PickupPersonInput, pickupIndex: number) => (
               <div key={pickupIndex} className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_1fr_auto] gap-3 mb-3">
@@ -554,8 +562,12 @@ export function CamperForm({ campSession, onContinue, onBack }: CamperFormProps)
   const [isLoadingProfile, setIsLoadingProfile] = useState(true)
   const [profileLoaded, setProfileLoaded] = useState(false)
   const [isEditingParent, setIsEditingParent] = useState(false)
+  // Track if parent info has been explicitly confirmed (auto-filled from profile)
+  const [parentInfoConfirmed, setParentInfoConfirmed] = useState(false)
   // Track if emergency contact has been explicitly saved (not just filled)
   const [emergencyContactSaved, setEmergencyContactSaved] = useState(false)
+  // Track validation attempt to show errors
+  const [showValidationErrors, setShowValidationErrors] = useState(false)
 
   // Fetch user profile and athletes on mount
   useEffect(() => {
@@ -593,6 +605,10 @@ export function CamperForm({ campSession, onContinue, onBack }: CamperFormProps)
               }
               setParentFromProfile(profile)
               setProfileLoaded(true)
+              // If all core parent fields are already filled from profile, confirm automatically
+              if (data.first_name && data.last_name && data.email && data.phone) {
+                setParentInfoConfirmed(true)
+              }
               // If emergency contact is already filled from profile, mark as saved
               if (data.emergency_contact_name && data.emergency_contact_phone && data.emergency_contact_relationship) {
                 setEmergencyContactSaved(true)
@@ -621,6 +637,36 @@ export function CamperForm({ campSession, onContinue, onBack }: CamperFormProps)
     state.parentInfo.lastName &&
     state.parentInfo.email &&
     state.parentInfo.phone
+
+  // Compute specific validation errors
+  const getValidationErrors = (): string[] => {
+    const errors: string[] = []
+
+    state.campers.forEach((c, i) => {
+      const label = c.firstName || `Camper ${i + 1}`
+      if (!c.firstName.trim()) errors.push(`${label}: First name is required`)
+      if (!c.lastName.trim()) errors.push(`${label}: Last name is required`)
+      if (!c.dateOfBirth) errors.push(`${label}: Date of birth is required`)
+      if (c.dateOfBirth && !c.isEligible) errors.push(`${label}: Not eligible for this camp's age range`)
+      const pickups = c.authorizedPickups || []
+      const hasValidPickup = pickups.some(
+        (p) => p.name.trim() !== '' && p.phone.trim() !== ''
+      )
+      if (!hasValidPickup) errors.push(`${label}: At least one authorized pickup person with name & phone is required`)
+    })
+
+    if (!state.parentInfo.firstName.trim()) errors.push('Parent: First name is required')
+    if (!state.parentInfo.lastName.trim()) errors.push('Parent: Last name is required')
+    if (!state.parentInfo.email.trim()) errors.push('Parent: Email is required')
+    if (!state.parentInfo.phone.trim()) errors.push('Parent: Phone is required')
+    if (!state.parentInfo.emergencyContactName.trim()) errors.push('Emergency contact: Name is required')
+    if (!state.parentInfo.emergencyContactPhone.trim()) errors.push('Emergency contact: Phone is required')
+    if (!state.parentInfo.emergencyContactRelationship.trim()) errors.push('Emergency contact: Relationship is required')
+
+    return errors
+  }
+
+  const validationErrors = showValidationErrors ? getValidationErrors() : []
 
   if (isLoadingProfile) {
     return (
@@ -699,7 +745,7 @@ export function CamperForm({ campSession, onContinue, onBack }: CamperFormProps)
               Parent / Guardian
             </h2>
           </div>
-          {hasParentInfo && !isEditingParent && (
+          {parentInfoConfirmed && !isEditingParent && (
             <button
               onClick={() => setIsEditingParent(true)}
               className="flex items-center gap-1 text-sm text-white/60 hover:text-neon transition-colors"
@@ -711,7 +757,7 @@ export function CamperForm({ campSession, onContinue, onBack }: CamperFormProps)
         </div>
 
         {/* Show auto-filled info in read-only mode, with forms for missing fields */}
-        {hasParentInfo && !isEditingParent ? (
+        {parentInfoConfirmed && !isEditingParent ? (
           <div className="space-y-6">
             {/* Read-only auto-filled info */}
             <div className="bg-white/5 border border-white/10 p-6 space-y-4">
@@ -986,14 +1032,18 @@ export function CamperForm({ campSession, onContinue, onBack }: CamperFormProps)
               </div>
             </div>
 
-            {isEditingParent && (
+            {(isEditingParent || !parentInfoConfirmed) && hasParentInfo && (
               <div className="pt-4">
                 <Button
                   variant="outline-white"
-                  onClick={() => setIsEditingParent(false)}
+                  onClick={() => {
+                    setParentInfoConfirmed(true)
+                    setIsEditingParent(false)
+                  }}
                   className="w-full"
                 >
-                  Done Editing
+                  <CheckCircle2 className="h-4 w-4 mr-2" />
+                  {isEditingParent ? 'Done Editing' : 'Save Parent Info'}
                 </Button>
               </div>
             )}
@@ -1018,13 +1068,32 @@ export function CamperForm({ campSession, onContinue, onBack }: CamperFormProps)
             variant="neon"
             size="lg"
             className={onBack ? "flex-1" : "w-full"}
-            onClick={onContinue}
-            disabled={!canProceed()}
+            onClick={() => {
+              if (canProceed()) {
+                setShowValidationErrors(false)
+                onContinue()
+              } else {
+                setShowValidationErrors(true)
+              }
+            }}
           >
             Continue to Her Squad
           </Button>
         </div>
-        {!canProceed() && (
+        {showValidationErrors && validationErrors.length > 0 && (
+          <div className="bg-red-500/10 border border-red-500/30 p-4 space-y-2">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 text-red-400 shrink-0" />
+              <p className="text-sm font-semibold text-red-400">Please fix the following to continue:</p>
+            </div>
+            <ul className="space-y-1 pl-6">
+              {validationErrors.map((err, i) => (
+                <li key={i} className="text-xs text-red-400 list-disc">{err}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {!canProceed() && !showValidationErrors && (
           <p className="text-xs text-white/40 text-center">
             Please complete all required fields marked with *
           </p>

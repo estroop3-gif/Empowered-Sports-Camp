@@ -246,6 +246,7 @@ model Camp {
   groupingRuns             GroupingRun[]
   guestSpeakers            GuestSpeaker[]
   parentOnboarding         ParentOnboarding[]
+  registrationDrafts       RegistrationDraft[]
   registrations            Registration[]
   royaltyInvoices          RoyaltyInvoice[]
   sessionComplaints        SessionComplaint[]
@@ -3153,6 +3154,9 @@ enum EmailType {
   waitlist_offer_expired
   waitlist_nearby_camps
   camp_invite
+  draft_save_confirmation
+  draft_reminder_24h
+  draft_reminder_72h
 }
 
 enum EmailStatus {
@@ -3236,4 +3240,33 @@ model SportTag {
   updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@map("sport_tags")
+}
+
+model RegistrationDraft {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  parentEmail     String    @map("parent_email")
+  parentName      String?   @map("parent_name")
+  campId          String    @map("camp_id") @db.Uuid
+  campName        String    @map("camp_name")
+  campSlug        String    @map("camp_slug")
+  tenantId        String?   @map("tenant_id") @db.Uuid
+  checkoutState   Json      @map("checkout_state")
+  currentStep     String    @map("current_step")
+  camperCount     Int       @default(1) @map("camper_count")
+  totalEstimate   Float?    @map("total_estimate")
+  reminder24hSent Boolean   @default(false) @map("reminder_24h_sent")
+  reminder72hSent Boolean   @default(false) @map("reminder_72h_sent")
+  completedAt     DateTime? @map("completed_at") @db.Timestamptz(6)
+  expiresAt       DateTime  @map("expires_at") @db.Timestamptz(6)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  camp Camp @relation(fields: [campId], references: [id], onDelete: Cascade)
+
+  @@unique([parentEmail, campId])
+  @@index([parentEmail])
+  @@index([expiresAt])
+  @@index([reminder24hSent])
+  @@index([reminder72hSent])
+  @@map("registration_drafts")
 }

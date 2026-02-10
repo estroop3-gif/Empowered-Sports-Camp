@@ -39,29 +39,25 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Can't invite yourself
-    if (inviterEmail.toLowerCase() === inviteeEmail.toLowerCase()) {
-      return NextResponse.json(
-        { error: "You can't invite yourself" },
-        { status: 400 }
-      )
-    }
+    const isSelfInvite = inviterEmail.toLowerCase() === inviteeEmail.toLowerCase()
 
-    // Check if invite already exists
-    const existingInvite = await prisma.pendingSquadInvite.findFirst({
-      where: {
-        inviterEmail: inviterEmail.toLowerCase(),
-        invitedEmail: inviteeEmail.toLowerCase(),
-        campId: campId,
-        status: 'pending',
-      },
-    })
+    // Check if invite already exists (skip for self-invites so user can re-send)
+    if (!isSelfInvite) {
+      const existingInvite = await prisma.pendingSquadInvite.findFirst({
+        where: {
+          inviterEmail: inviterEmail.toLowerCase(),
+          invitedEmail: inviteeEmail.toLowerCase(),
+          campId: campId,
+          status: 'pending',
+        },
+      })
 
-    if (existingInvite) {
-      return NextResponse.json(
-        { error: 'You have already sent an invite to this email for this camp' },
-        { status: 400 }
-      )
+      if (existingInvite) {
+        return NextResponse.json(
+          { error: 'You have already sent an invite to this email for this camp' },
+          { status: 400 }
+        )
+      }
     }
 
     // Create pending squad invite

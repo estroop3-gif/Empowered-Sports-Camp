@@ -21,6 +21,8 @@ import {
   Users,
   Check,
   X,
+  Save,
+  Trash2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn, parseDateSafe } from '@/lib/utils'
@@ -94,6 +96,20 @@ interface SquadInvite {
   createdAt: string
 }
 
+interface SavedDraft {
+  id: string
+  parentEmail: string
+  parentName: string | null
+  campId: string
+  campName: string
+  campSlug: string
+  currentStep: string
+  camperCount: number
+  totalEstimate: number | null
+  createdAt: string
+  updatedAt: string
+}
+
 /**
  * Parent Dashboard
  *
@@ -113,6 +129,8 @@ export default function ParentDashboard() {
   const [athletes, setAthletes] = useState<Athlete[]>([])
   const [registrations, setRegistrations] = useState<Registration[]>([])
   const [squadInvites, setSquadInvites] = useState<SquadInvite[]>([])
+  const [savedDrafts, setSavedDrafts] = useState<SavedDraft[]>([])
+  const [deletingDraft, setDeletingDraft] = useState<string | null>(null)
   const [respondingToInvite, setRespondingToInvite] = useState<string | null>(null)
 
   useEffect(() => {
@@ -176,6 +194,19 @@ export default function ParentDashboard() {
 
       if (squadInvitesResult.data) {
         setSquadInvites(squadInvitesResult.data)
+      }
+
+      // Load saved registration drafts (non-blocking)
+      if (profileResult.data?.email) {
+        try {
+          const draftsRes = await fetch(`/api/registration-drafts?action=list&email=${encodeURIComponent(profileResult.data.email)}`)
+          const draftsResult = await draftsRes.json()
+          if (draftsResult.data) {
+            setSavedDrafts(draftsResult.data)
+          }
+        } catch {
+          // Non-critical — don't fail dashboard for draft fetch
+        }
       }
     } catch (err) {
       console.error('Failed to load dashboard data:', err)
@@ -258,6 +289,43 @@ export default function ParentDashboard() {
       console.error('Failed to respond to squad invite:', err)
     }
     setRespondingToInvite(null)
+  }
+
+  const handleDeleteDraft = async (draftId: string) => {
+    setDeletingDraft(draftId)
+    try {
+      const res = await fetch('/api/registration-drafts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete', id: draftId }),
+      })
+      if (res.ok) {
+        setSavedDrafts(prev => prev.filter(d => d.id !== draftId))
+      }
+    } catch (err) {
+      console.error('Failed to delete draft:', err)
+    }
+    setDeletingDraft(null)
+  }
+
+  const formatRelativeTime = (dateStr: string) => {
+    const date = new Date(dateStr)
+    const now = new Date()
+    const diffMs = now.getTime() - date.getTime()
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
+    const diffDays = Math.floor(diffHours / 24)
+    if (diffDays > 0) return `${diffDays}d ago`
+    if (diffHours > 0) return `${diffHours}h ago`
+    return 'Just now'
+  }
+
+  const stepLabels: Record<string, string> = {
+    campers: 'Camper Info',
+    squad: 'Squad Selection',
+    addons: 'Add-Ons',
+    waivers: 'Waivers',
+    account: 'Account',
+    payment: 'Payment',
   }
 
   const getUserName = () => {
@@ -423,6 +491,68 @@ export default function ParentDashboard() {
                           >
                             <X className="h-4 w-4 mr-1" />
                             Decline
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Saved Registrations Section */}
+            {savedDrafts.length > 0 && (
+              <div className="bg-dark-100 border border-white/10">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-orange-400/30">
+                  <div className="flex items-center gap-3">
+                    <Save className="h-5 w-5 text-orange-400" />
+                    <h2 className="text-sm font-bold uppercase tracking-widest text-white">
+                      Saved Registrations
+                    </h2>
+                    <span className="px-2 py-0.5 text-xs font-bold bg-orange-400/20 text-orange-400 border border-orange-400/30">
+                      {savedDrafts.length}
+                    </span>
+                  </div>
+                </div>
+                <div className="p-6 space-y-4">
+                  {savedDrafts.map((draft) => (
+                    <div
+                      key={draft.id}
+                      className="p-4 bg-black/50 border border-white/10"
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <h4 className="font-bold text-white">{draft.campName}</h4>
+                          <div className="flex items-center gap-3 mt-2 flex-wrap">
+                            <span className="text-xs text-white/40">
+                              {draft.camperCount} camper{draft.camperCount !== 1 ? 's' : ''}
+                            </span>
+                            <span className="text-xs text-orange-400">
+                              Stopped at: {stepLabels[draft.currentStep] || draft.currentStep}
+                            </span>
+                            <span className="text-xs text-white/30">
+                              Saved {formatRelativeTime(draft.updatedAt)}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Link href={`/register/${draft.campSlug}?resume=true`}>
+                            <Button variant="neon" size="sm">
+                              Continue
+                              <ArrowRight className="h-4 w-4 ml-1" />
+                            </Button>
+                          </Link>
+                          <Button
+                            variant="outline-white"
+                            size="sm"
+                            onClick={() => handleDeleteDraft(draft.id)}
+                            disabled={deletingDraft === draft.id}
+                          >
+                            {deletingDraft === draft.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-4 w-4" />
+                            )}
                           </Button>
                         </div>
                       </div>

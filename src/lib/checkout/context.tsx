@@ -137,6 +137,7 @@ type CheckoutAction =
   | { type: 'APPLY_PROMO'; promo: AppliedPromoCode }
   | { type: 'REMOVE_PROMO' }
   | { type: 'SET_WAITLIST_MODE'; isWaitlistMode: boolean }
+  | { type: 'LOAD_DRAFT'; state: CheckoutState }
   | { type: 'RESET' }
 
 // =====================================================
@@ -373,6 +374,9 @@ function checkoutReducer(state: CheckoutState, action: CheckoutAction): Checkout
     case 'SET_WAITLIST_MODE':
       return { ...state, isWaitlistMode: action.isWaitlistMode }
 
+    case 'LOAD_DRAFT':
+      return { ...action.state }
+
     case 'RESET':
       return initialState
 
@@ -433,6 +437,9 @@ interface CheckoutContextValue {
 
   // Waitlist
   setWaitlistMode: (isWaitlistMode: boolean) => void
+
+  // Draft resume
+  loadDraftState: (draftState: CheckoutState) => void
 
   // Reset
   reset: () => void
@@ -760,6 +767,11 @@ export function CheckoutProvider({ children, campSlug }: CheckoutProviderProps) 
     dispatch({ type: 'SET_WAITLIST_MODE', isWaitlistMode })
   }, [])
 
+  // Draft resume
+  const loadDraftState = useCallback((draftState: CheckoutState) => {
+    dispatch({ type: 'LOAD_DRAFT', state: draftState })
+  }, [])
+
   // Reset
   const reset = useCallback(() => {
     dispatch({ type: 'RESET' })
@@ -792,6 +804,7 @@ export function CheckoutProvider({ children, campSlug }: CheckoutProviderProps) 
     applyPromo,
     removePromo,
     setWaitlistMode,
+    loadDraftState,
     reset,
   }
 

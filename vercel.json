@@ -8,6 +8,7 @@
     { "path": "/api/cron/royalties", "schedule": "0 6 * * *" },
     { "path": "/api/cron/email/camp-reminders", "schedule": "0 7 * * *" },
     { "path": "/api/cron/email/seasonal-followups", "schedule": "0 8 1 1-5 *" },
-    { "path": "/api/cron/waitlist-offers", "schedule": "*/15 * * * *" }
+    { "path": "/api/cron/waitlist-offers", "schedule": "*/15 * * * *" },
+    { "path": "/api/cron/draft-reminders", "schedule": "0 */6 * * *" }
   ]
 }

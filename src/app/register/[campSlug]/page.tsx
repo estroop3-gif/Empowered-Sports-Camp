@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
 import { CheckoutProvider, useCheckout } from '@/lib/checkout/context'
 import { useAuth } from '@/lib/auth/context'
@@ -16,6 +16,7 @@ import {
   ConfirmationStep,
   WaitlistConfirmationStep,
 } from '@/components/registration'
+import { SaveExitBar } from '@/components/registration/SaveExitBar'
 import type { CampSession, AddOn, CampWithAddOns } from '@/types/registration'
 
 /**
@@ -54,6 +55,8 @@ interface PublicCampCard {
   zip_code: string | null
   latitude: number | null
   longitude: number | null
+  venue_id: string | null
+  venue_name: string | null
   spots_remaining: number
   current_price: number
   is_full: boolean
@@ -69,10 +72,10 @@ function transformApiCampToSession(apiCamp: PublicCampCard): CampSession {
     name: apiCamp.name,
     description: apiCamp.description,
     programType: apiCamp.program_type as CampSession['programType'],
-    locationId: apiCamp.location_id,
-    location: apiCamp.location_id ? {
-      id: apiCamp.location_id,
-      name: apiCamp.location_name || '',
+    locationId: apiCamp.location_id || apiCamp.venue_id,
+    location: (apiCamp.location_name || apiCamp.venue_name) ? {
+      id: apiCamp.location_id || apiCamp.venue_id || '',
+      name: apiCamp.location_name || apiCamp.venue_name || '',
       addressLine1: apiCamp.location_address || '',
       addressLine2: null,
       city: apiCamp.city || '',
@@ -202,9 +205,57 @@ const DEFAULT_ADDONS: AddOn[] = [
 
 function RegistrationContent({ camp, addons }: { camp: CampSession; addons: AddOn[] }) {
   const router = useRouter()
-  const { state, setStep, setCamp, setSquad, setWaitlistMode, nextStep, prevStep } = useCheckout()
+  const searchParams = useSearchParams()
+  const { state, setStep, setCamp, setSquad, setWaitlistMode, nextStep, prevStep, loadDraftState } = useCheckout()
   const { user: authUser, loading: authLoading } = useAuth()
   const [confirmationNumber, setConfirmationNumber] = useState<string | null>(null)
+  const draftLoadedRef = useRef(false)
+
+  // Resume from saved draft if ?resume=true
+  const isResume = searchParams.get('resume') === 'true'
+  const loadSavedDraft = useCallback(async () => {
+    if (!isResume || draftLoadedRef.current) return
+    draftLoadedRef.current = true
+
+    // Try to get parent email from localStorage state or auth user
+    const savedKey = 'empowered-checkout-state'
+    let email = ''
+    try {
+      const saved = localStorage.getItem(savedKey)
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        email = parsed.parentInfo?.email || ''
+      }
+    } catch { /* ignore */ }
+
+    if (!email && authUser) {
+      try {
+        const profileRes = await fetch(`/api/profiles?action=byId&profileId=${authUser.id}`)
+        const profileData = await profileRes.json()
+        email = profileData.data?.email || ''
+      } catch { /* ignore */ }
+    }
+
+    if (!email) return
+
+    try {
+      const res = await fetch('/api/registration-drafts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'load', parentEmail: email, campId: camp.id }),
+      })
+      const result = await res.json()
+      if (result.data?.checkoutState) {
+        loadDraftState(result.data.checkoutState)
+      }
+    } catch (err) {
+      console.error('[Resume] Failed to load draft:', err)
+    }
+  }, [isResume, camp.id, authUser, loadDraftState])
+
+  useEffect(() => {
+    loadSavedDraft()
+  }, [loadSavedDraft])
 
   // Reactive authentication check — updates when user logs in via modal
   const isAuthenticated = authLoading ? null : !!authUser
@@ -374,6 +425,7 @@ function RegistrationContent({ camp, addons }: { camp: CampSession; addons: AddO
       isWaitlistMode={state.isWaitlistMode}
     >
       {renderStep()}
+      <SaveExitBar camp={camp} />
     </RegistrationLayout>
   )
 }

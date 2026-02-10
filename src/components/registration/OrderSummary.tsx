@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Image from 'next/image'
-import { ChevronDown, ChevronUp, Calendar, MapPin, Tag, Percent, Sparkles } from 'lucide-react'
+import { ChevronDown, ChevronUp, Calendar, MapPin, Clock, Tag, Percent, Sparkles } from 'lucide-react'
 import { cn, parseDateSafe } from '@/lib/utils'
 import { useCheckout } from '@/lib/checkout/context'
 import type { CampSession, AddOn } from '@/types/registration'
@@ -31,6 +31,13 @@ function formatDate(dateString: string): string {
     month: 'short',
     day: 'numeric',
   })
+}
+
+function formatTime(time: string): string {
+  const [h, m] = time.split(':').map(Number)
+  const suffix = h >= 12 ? 'PM' : 'AM'
+  const hour = h % 12 || 12
+  return m ? `${hour}:${m.toString().padStart(2, '0')} ${suffix}` : `${hour} ${suffix}`
 }
 
 export function OrderSummary({ campSession, availableAddOns }: OrderSummaryProps) {
@@ -109,16 +116,24 @@ export function OrderSummary({ campSession, availableAddOns }: OrderSummaryProps
                     {campSession.name}
                   </h3>
                   <div className="mt-1 space-y-1">
+                    {campSession.location && (
+                      <div className="flex items-center gap-1.5 text-xs text-white/50">
+                        <MapPin className="h-3 w-3 shrink-0" />
+                        <span className="truncate">{campSession.location.name}</span>
+                      </div>
+                    )}
                     <div className="flex items-center gap-1.5 text-xs text-white/50">
-                      <Calendar className="h-3 w-3" />
+                      <Calendar className="h-3 w-3 shrink-0" />
                       <span>
                         {formatDate(campSession.startDate)} - {formatDate(campSession.endDate)}
                       </span>
                     </div>
-                    {campSession.location && (
+                    {campSession.dailyStartTime && campSession.dailyEndTime && (
                       <div className="flex items-center gap-1.5 text-xs text-white/50">
-                        <MapPin className="h-3 w-3" />
-                        <span className="truncate">{campSession.location.name}</span>
+                        <Clock className="h-3 w-3 shrink-0" />
+                        <span>
+                          {formatTime(campSession.dailyStartTime)} - {formatTime(campSession.dailyEndTime)}
+                        </span>
                       </div>
                     )}
                   </div>
