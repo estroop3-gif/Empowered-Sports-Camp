@@ -20,6 +20,8 @@ import {
   UserPlus,
   LogIn,
   X,
+  Eye,
+  EyeOff,
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -48,6 +50,9 @@ export function AccountCreationStep({ onContinue, onBack }: AccountCreationStepP
     lastName: '',
     phone: '',
   })
+
+  const [showPassword, setShowPassword] = useState(false)
+  const [showLoginPassword, setShowLoginPassword] = useState(false)
 
   // Confirmation code
   const [confirmationCode, setConfirmationCode] = useState('')
@@ -174,6 +179,8 @@ export function AccountCreationStep({ onContinue, onBack }: AccountCreationStepP
 
       if (error.code === 'UsernameExistsException') {
         setError('An account with this email already exists. Please log in instead.')
+        setShowLoginModal(true)
+        setLoginEmail(formData.email)
       } else if (error.code === 'InvalidPasswordException') {
         setError('Password must include uppercase, lowercase, numbers, and special characters.')
       } else if (error.code === 'InvalidParameterException') {
@@ -666,15 +673,22 @@ export function AccountCreationStep({ onContinue, onBack }: AccountCreationStepP
           <div className="relative">
             <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-white/30" />
             <Input
-              type="password"
+              type={showPassword ? 'text' : 'password'}
               name="password"
               value={formData.password}
               onChange={handleChange}
               required
               minLength={8}
-              className="pl-12"
+              className="pl-12 pr-12"
               placeholder="Min 8 characters"
             />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-4 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors"
+            >
+              {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+            </button>
           </div>
           <p className="mt-1 text-xs text-white/40">
             Must include uppercase, lowercase, number, and special character
@@ -689,7 +703,7 @@ export function AccountCreationStep({ onContinue, onBack }: AccountCreationStepP
           <div className="relative">
             <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-white/30" />
             <Input
-              type="password"
+              type={showPassword ? 'text' : 'password'}
               name="confirmPassword"
               value={formData.confirmPassword}
               onChange={handleChange}
@@ -818,16 +832,23 @@ export function AccountCreationStep({ onContinue, onBack }: AccountCreationStepP
                   <div className="relative">
                     <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-white/30" />
                     <Input
-                      type="password"
+                      type={showLoginPassword ? 'text' : 'password'}
                       value={loginPassword}
                       onChange={(e) => {
                         setLoginPassword(e.target.value)
                         setLoginError(null)
                       }}
                       required
-                      className="pl-12"
+                      className="pl-12 pr-12"
                       placeholder="Your password"
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowLoginPassword(!showLoginPassword)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors"
+                    >
+                      {showLoginPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                    </button>
                   </div>
                 </div>
 

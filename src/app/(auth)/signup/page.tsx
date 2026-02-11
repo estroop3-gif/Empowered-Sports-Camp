@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation'
 import { signUp } from '@/lib/auth/cognito-client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Zap, Mail, Lock, User, Phone, ArrowRight, Crown, MapPin, ChevronDown, Check } from 'lucide-react'
+import { Zap, Mail, Lock, User, Phone, ArrowRight, Crown, MapPin, ChevronDown, Check, Eye, EyeOff } from 'lucide-react'
 
 const HOW_HEARD_OPTIONS = [
   'Friend or family referral',
@@ -50,6 +50,7 @@ export default function SignUpPage() {
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showPassword, setShowPassword] = useState(false)
 
   // Location autocomplete state
   const [locations, setLocations] = useState<LocationOption[]>([])
@@ -295,6 +296,11 @@ export default function SignUpPage() {
               {error && (
                 <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
                   {error}
+                  {error.includes('already exists') && (
+                    <Link href="/login" className="block mt-2 text-neon font-bold hover:underline">
+                      Go to Sign In
+                    </Link>
+                  )}
                 </div>
               )}
 
@@ -477,15 +483,22 @@ export default function SignUpPage() {
                   <div className="relative">
                     <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-white/30" />
                     <Input
-                      type="password"
+                      type={showPassword ? 'text' : 'password'}
                       name="password"
                       value={formData.password}
                       onChange={handleChange}
                       required
                       minLength={8}
-                      className="pl-12"
+                      className="pl-12 pr-12"
                       placeholder="Min 8 characters"
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors"
+                    >
+                      {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                    </button>
                   </div>
                 </div>
 
@@ -496,7 +509,7 @@ export default function SignUpPage() {
                   <div className="relative">
                     <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-white/30" />
                     <Input
-                      type="password"
+                      type={showPassword ? 'text' : 'password'}
                       name="confirmPassword"
                       value={formData.confirmPassword}
                       onChange={handleChange}
