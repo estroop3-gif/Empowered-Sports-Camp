@@ -302,12 +302,11 @@ export async function createRegistration(params: {
 
     const totalPriceCents = basePriceCents - discountCents - promoDiscountCents + addonsTotalCents + taxCents
 
-    // Check if athlete is already registered for this camp
+    // Check if athlete is already registered for this camp (any status, to handle unique constraint)
     const existingRegistration = await prisma.registration.findFirst({
       where: {
         campId,
         athleteId,
-        status: { not: 'cancelled' },
       },
       include: {
         athlete: { select: { firstName: true, lastName: true } },
@@ -315,18 +314,26 @@ export async function createRegistration(params: {
     })
 
     if (existingRegistration) {
-      // If the existing registration is pending (unpaid), clean it up and allow re-registration
-      if (existingRegistration.status === 'pending' && existingRegistration.paymentStatus === 'pending') {
-        // Delete associated add-ons and the stale pending registration
+      // Stale registrations that can be cleaned up and re-created:
+      // - pending + unpaid (never completed checkout)
+      // - cancelled (checkout failed or admin-cancelled)
+      // - refunded (fully refunded)
+      const isStale =
+        (existingRegistration.status === 'pending' && existingRegistration.paymentStatus === 'pending') ||
+        existingRegistration.status === 'cancelled' ||
+        existingRegistration.status === 'refunded'
+
+      if (isStale) {
+        // Delete associated add-ons and the stale registration
         await prisma.registrationAddon.deleteMany({
           where: { registrationId: existingRegistration.id },
         })
         await prisma.registration.delete({
           where: { id: existingRegistration.id },
         })
-        console.log(`[Registrations] Cleaned up stale pending registration ${existingRegistration.id} for athlete ${athleteId}`)
+        console.log(`[Registrations] Cleaned up stale registration ${existingRegistration.id} (status=${existingRegistration.status}) for athlete ${athleteId}`)
       } else {
-        // Confirmed or paid registration — block duplicate
+        // Active registration (confirmed, paid, etc.) — block duplicate
         const athleteName = existingRegistration.athlete
           ? `${existingRegistration.athlete.firstName} ${existingRegistration.athlete.lastName}`
           : 'This athlete'

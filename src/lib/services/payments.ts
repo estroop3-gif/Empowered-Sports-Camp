@@ -188,35 +188,58 @@ export async function createStripeCheckoutSession(params: {
     let totalTaxCents = 0
 
     for (const registration of registrations) {
-      // Calculate camp price after discounts for this registration
-      const campNetPrice = registration.basePriceCents - registration.discountCents - registration.promoDiscountCents
+      // Promo discount may exceed the camp price when it applies to both camp + addons.
+      // Split it: apply to camp first, then distribute overflow across addons.
+      const campBase = registration.basePriceCents - registration.discountCents
+      const promoOnCamp = Math.min(registration.promoDiscountCents, Math.max(0, campBase))
+      const promoOnAddons = registration.promoDiscountCents - promoOnCamp
+      const campNetPrice = Math.max(0, campBase - promoOnCamp)
 
-      // Add camp registration line item
-      lineItems.push({
-        price_data: {
-          currency: 'usd',
-          product_data: {
-            name: registration.camp.name,
-            description: `Camp registration for ${registration.athlete?.firstName || 'Athlete'} ${registration.athlete?.lastName || ''}`.trim(),
-          },
-          unit_amount: campNetPrice,
-        },
-        quantity: 1,
-      })
-
-      // Add addon line items for this registration
-      for (const regAddon of registration.registrationAddons) {
+      // Add camp registration line item (only if positive)
+      if (campNetPrice > 0) {
         lineItems.push({
           price_data: {
             currency: 'usd',
             product_data: {
-              name: `${regAddon.addon.name}${registrations.length > 1 ? ` (${registration.athlete?.firstName})` : ''}`,
-              description: regAddon.variant?.name || undefined,
+              name: registration.camp.name,
+              description: `Camp registration for ${registration.athlete?.firstName || 'Athlete'} ${registration.athlete?.lastName || ''}`.trim(),
             },
-            unit_amount: regAddon.priceCents,
+            unit_amount: campNetPrice,
           },
-          quantity: regAddon.quantity,
+          quantity: 1,
         })
+      }
+
+      // Add addon line items, distributing any promo overflow proportionally
+      const addonTotal = registration.registrationAddons.reduce((sum, a) => sum + a.priceCents, 0)
+      let promoRemaining = promoOnAddons
+
+      for (let j = 0; j < registration.registrationAddons.length; j++) {
+        const regAddon = registration.registrationAddons[j]
+        let addonUnitAmount = regAddon.priceCents
+
+        if (promoRemaining > 0 && addonTotal > 0) {
+          const isLast = j === registration.registrationAddons.length - 1
+          const share = isLast
+            ? promoRemaining
+            : Math.round(promoOnAddons * (regAddon.priceCents / addonTotal))
+          if (!isLast) promoRemaining -= share
+          addonUnitAmount = Math.max(0, addonUnitAmount - share)
+        }
+
+        if (addonUnitAmount > 0) {
+          lineItems.push({
+            price_data: {
+              currency: 'usd',
+              product_data: {
+                name: `${regAddon.addon.name}${registrations.length > 1 ? ` (${registration.athlete?.firstName})` : ''}`,
+                description: regAddon.variant?.name || undefined,
+              },
+              unit_amount: addonUnitAmount,
+            },
+            quantity: regAddon.quantity,
+          })
+        }
       }
 
       // Sum up taxes
