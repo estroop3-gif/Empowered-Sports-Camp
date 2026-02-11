@@ -860,7 +860,7 @@ export async function getSquadsForParent(params: {
  */
 export async function getOtherRegisteredCampers(params: {
   campId: string
-  excludeParentId: string
+  excludeParentId?: string
 }): Promise<{
   data: Array<{
     athleteId: string
@@ -876,14 +876,12 @@ export async function getOtherRegisteredCampers(params: {
   try {
     const { campId, excludeParentId } = params
 
-    // Get confirmed/pending registrations for this camp, excluding current user's athletes
+    // Get confirmed/pending registrations for this camp, optionally excluding current user's athletes
     const registrations = await prisma.registration.findMany({
       where: {
         campId,
         status: { in: ['pending', 'confirmed'] },
-        athlete: {
-          parentId: { not: excludeParentId },
-        },
+        ...(excludeParentId ? { athlete: { parentId: { not: excludeParentId } } } : {}),
       },
       include: {
         athlete: {

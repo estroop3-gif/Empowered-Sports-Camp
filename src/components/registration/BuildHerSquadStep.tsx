@@ -115,7 +115,7 @@ export function BuildHerSquadStep({
         setIsLoading(true)
 
         // Fetch other registered campers for this camp
-        const campersRes = await fetch(`/api/squads?action=otherCampers&campId=${campId}`)
+        const campersRes = await fetch(`/api/squads/other-campers?campId=${campId}`)
         const campersData = await campersRes.json()
 
         if (campersData.data) {

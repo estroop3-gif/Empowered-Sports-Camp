@@ -60,26 +60,12 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Create pending squad invite
-    const invite = await prisma.pendingSquadInvite.create({
-      data: {
-        inviterEmail: inviterEmail.toLowerCase(),
-        invitedByName: inviterName || 'A friend',
-        invitedEmail: inviteeEmail.toLowerCase(),
-        campId: campId,
-        campName: campName || 'Camp',
-        tenantId: tenantId,
-        athleteNames: athleteNames || [],
-        status: 'pending',
-        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
-      },
-    })
-
-    // Get camp details for the email
+    // Get camp details (needed for tenantId fallback and email)
     const camp = await prisma.camp.findUnique({
       where: { id: campId },
       select: {
         name: true,
+        tenantId: true,
         startDate: true,
         endDate: true,
         slug: true,
@@ -90,6 +76,30 @@ export async function POST(request: NextRequest) {
             state: true,
           },
         },
+      },
+    })
+
+    // Resolve tenantId: use provided value, fall back to camp's tenantId
+    const resolvedTenantId = tenantId || camp?.tenantId
+    if (!resolvedTenantId) {
+      return NextResponse.json(
+        { error: 'Could not determine tenant for this camp' },
+        { status: 400 }
+      )
+    }
+
+    // Create pending squad invite
+    const invite = await prisma.pendingSquadInvite.create({
+      data: {
+        inviterEmail: inviterEmail.toLowerCase(),
+        invitedByName: inviterName || 'A friend',
+        invitedEmail: inviteeEmail.toLowerCase(),
+        campId: campId,
+        campName: campName || camp?.name || 'Camp',
+        tenantId: resolvedTenantId,
+        athleteNames: athleteNames || [],
+        status: 'pending',
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
       },
     })
 
@@ -130,9 +140,10 @@ export async function POST(request: NextRequest) {
       },
     })
   } catch (error) {
-    console.error('[Guest Squad Invite API] Error:', error)
+    const message = error instanceof Error ? error.message : String(error)
+    console.error('[Guest Squad Invite API] Error:', message, error)
     return NextResponse.json(
-      { error: 'Failed to send invite' },
+      { error: 'Failed to send invite. Please try again.' },
       { status: 500 }
     )
   }
