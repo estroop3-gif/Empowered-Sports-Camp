@@ -57,6 +57,7 @@ interface PublicCampCard {
   longitude: number | null
   venue_id: string | null
   venue_name: string | null
+  waitlist_enabled: boolean
   spots_remaining: number
   current_price: number
   is_full: boolean
@@ -105,6 +106,7 @@ function transformApiCampToSession(apiCamp: PublicCampCard): CampSession {
     sportsOffered: apiCamp.sports_offered || [],
     isEarlyBird: isEarlyBird || false,
     isFull: apiCamp.is_full,
+    waitlistEnabled: apiCamp.waitlist_enabled !== false,
     tenantId: apiCamp.tenant_id || '',
   }
 }
@@ -280,7 +282,7 @@ function RegistrationContent({ camp, addons }: { camp: CampSession; addons: AddO
   // Set camp on mount and detect waitlist mode
   useEffect(() => {
     setCamp(camp)
-    if (camp.isFull) {
+    if (camp.isFull && camp.waitlistEnabled) {
       setWaitlistMode(true)
     }
   }, [camp, setCamp, setWaitlistMode])
@@ -579,6 +581,25 @@ export default function RegisterPage() {
             className="px-6 py-3 bg-neon text-black font-bold uppercase tracking-wider hover:bg-neon/90 transition-colors"
           >
             Browse Camps
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  if (camp.isFull && !camp.waitlistEnabled) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="text-center space-y-4 max-w-md px-6">
+          <h1 className="text-2xl font-bold text-white">Camp Full</h1>
+          <p className="text-white/60">
+            {camp.name} is currently at capacity and is not accepting waitlist signups at this time.
+          </p>
+          <button
+            onClick={() => router.push('/camps')}
+            className="px-6 py-3 bg-neon text-black font-bold uppercase tracking-wider hover:bg-neon/90 transition-colors"
+          >
+            Browse Other Camps
           </button>
         </div>
       </div>

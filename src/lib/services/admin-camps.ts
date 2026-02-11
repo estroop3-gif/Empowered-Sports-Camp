@@ -29,6 +29,7 @@ export interface CampFormData {
   featured: boolean
   image_url: string | null
   flag?: string | null
+  waitlist_enabled?: boolean
   is_overnight?: boolean
   dropoff_time?: string | null
   pickup_time?: string | null
@@ -84,6 +85,7 @@ export interface AdminCamp {
   registration_count?: number
   territory_name?: string | null
   flag?: string | null
+  waitlist_enabled?: boolean
   is_overnight?: boolean
   dropoff_time?: string | null
   pickup_time?: string | null
@@ -279,6 +281,7 @@ export async function fetchAdminCamps(options: {
         registration_count: c._count?.registrations || 0,
         territory_name: c.tenant?.territories?.[0]?.name || null,
         flag: c.flag || null,
+        waitlist_enabled: c.waitlistEnabled,
         is_overnight: c.isOvernight,
         dropoff_time: c.dropoffTime ? c.dropoffTime.toISOString().slice(11, 16) : null,
         pickup_time: c.pickupTime ? c.pickupTime.toISOString().slice(11, 16) : null,
@@ -355,6 +358,7 @@ export async function fetchCampById(id: string): Promise<AdminCamp | null> {
       } : null,
       territory_name: camp.tenant?.territories?.[0]?.name || null,
       flag: camp.flag || null,
+      waitlist_enabled: camp.waitlistEnabled,
       is_overnight: camp.isOvernight,
       dropoff_time: camp.dropoffTime ? camp.dropoffTime.toISOString().slice(11, 16) : null,
       pickup_time: camp.pickupTime ? camp.pickupTime.toISOString().slice(11, 16) : null,
@@ -438,6 +442,7 @@ export async function createCamp(formData: CampFormData): Promise<AdminCamp> {
         featured: formData.featured,
         imageUrl: formData.image_url || null,
         flag: formData.flag || null,
+        waitlistEnabled: formData.waitlist_enabled !== false,
         isOvernight: formData.is_overnight || false,
         dropoffTime: formData.dropoff_time ? new Date(`1970-01-01T${formData.dropoff_time}:00Z`) : null,
         pickupTime: formData.pickup_time ? new Date(`1970-01-01T${formData.pickup_time}:00Z`) : null,
@@ -518,6 +523,7 @@ export async function createCamp(formData: CampFormData): Promise<AdminCamp> {
         slug: camp.tenant.slug,
       } : null,
       flag: camp.flag || null,
+      waitlist_enabled: camp.waitlistEnabled,
       is_overnight: camp.isOvernight,
       dropoff_time: camp.dropoffTime ? camp.dropoffTime.toISOString().slice(11, 16) : null,
       pickup_time: camp.pickupTime ? camp.pickupTime.toISOString().slice(11, 16) : null,
@@ -583,6 +589,7 @@ export async function updateCamp(id: string, formData: Partial<CampFormData>): P
       updateData.registrationOpen = formData.status === 'open' ? new Date() : null
     }
     if (formData.flag !== undefined) updateData.flag = formData.flag || null
+    if (formData.waitlist_enabled !== undefined) updateData.waitlistEnabled = formData.waitlist_enabled
     if (formData.is_overnight !== undefined) updateData.isOvernight = formData.is_overnight
     if (formData.dropoff_time !== undefined) {
       updateData.dropoffTime = formData.dropoff_time ? new Date(`1970-01-01T${formData.dropoff_time}:00Z`) : null
@@ -649,6 +656,7 @@ export async function updateCamp(id: string, formData: Partial<CampFormData>): P
       } : null,
       territory_name: camp.tenant?.territories?.[0]?.name || null,
       flag: camp.flag || null,
+      waitlist_enabled: camp.waitlistEnabled,
       is_overnight: camp.isOvernight,
       dropoff_time: camp.dropoffTime ? camp.dropoffTime.toISOString().slice(11, 16) : null,
       pickup_time: camp.pickupTime ? camp.pickupTime.toISOString().slice(11, 16) : null,
@@ -700,6 +708,7 @@ export async function duplicateCamp(id: string): Promise<AdminCamp> {
     featured: false,
     image_url: existing.image_url,
     flag: existing.flag,
+    waitlist_enabled: existing.waitlist_enabled,
     is_overnight: existing.is_overnight,
     dropoff_time: existing.dropoff_time,
     pickup_time: existing.pickup_time,

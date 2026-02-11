@@ -66,6 +66,8 @@ export interface PublicCampCard {
   is_overnight: boolean
   dropoff_time: string | null
   pickup_time: string | null
+  // Waitlist
+  waitlist_enabled: boolean
   // Computed fields
   spots_remaining: number
   current_price: number // in cents
@@ -187,6 +189,8 @@ function transformCampToCard(camp: Prisma.CampGetPayload<{
     is_overnight: camp.isOvernight,
     dropoff_time: camp.dropoffTime?.toISOString().slice(11, 16) || null,
     pickup_time: camp.pickupTime?.toISOString().slice(11, 16) || null,
+    // Waitlist
+    waitlist_enabled: camp.waitlistEnabled,
     // Computed fields
     spots_remaining: spotsRemaining,
     current_price: currentPrice,

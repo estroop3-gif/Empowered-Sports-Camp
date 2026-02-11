@@ -221,6 +221,7 @@ model Camp {
   isLocked                 Boolean                       @default(false) @map("is_locked")
   lockReason               String?                       @map("lock_reason")
   flag                     String?
+  waitlistEnabled          Boolean                       @default(true) @map("waitlist_enabled")
   isOvernight              Boolean                       @default(false) @map("is_overnight")
   dropoffTime              DateTime?                     @map("dropoff_time") @db.Time(6)
   pickupTime               DateTime?                     @map("pickup_time") @db.Time(6)

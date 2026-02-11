@@ -53,6 +53,7 @@ export interface CampSession {
   // Status
   isEarlyBird: boolean
   isFull: boolean
+  waitlistEnabled: boolean
 
   // Tenant
   tenantId: string

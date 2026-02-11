@@ -35,6 +35,7 @@ import {
   Mail,
   Heart,
   Tag,
+  Download,
 } from 'lucide-react'
 import { ViewAsControl } from './view-as-control'
 
@@ -129,6 +130,12 @@ const licensorNavItems: NavItem[] = [
     href: '/admin/athletes',
     icon: Heart,
     roles: ['hq_admin'],
+  },
+  {
+    label: 'Export Data',
+    href: '/admin/export',
+    icon: Download,
+    roles: ['hq_admin', 'licensee_owner'],
   },
   {
     label: 'Global Analytics',

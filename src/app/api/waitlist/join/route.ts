@@ -39,6 +39,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Camp not found' }, { status: 404 })
     }
 
+    if (camp.waitlistEnabled === false) {
+      return NextResponse.json(
+        { error: 'Waitlist is not enabled for this camp' },
+        { status: 403 }
+      )
+    }
+
     const effectiveTenantId = tenantId || camp.tenantId
     if (!effectiveTenantId) {
       return NextResponse.json({ error: 'Tenant not found' }, { status: 400 })

@@ -124,12 +124,12 @@ export function brandWrap(
 const F = `font-family: 'Poppins', Arial, sans-serif;`
 
 /** Small uppercase label */
-export function emailLabel(text: string, color = BRAND.magenta): string {
+export function emailLabel(text: string, color: string = BRAND.magenta): string {
   return `<p style="margin: 0 0 6px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 3px; color: ${color}; ${F}">${text}</p>`
 }
 
 /** Section heading */
-export function emailHeading(text: string, color = BRAND.textPrimary): string {
+export function emailHeading(text: string, color: string = BRAND.textPrimary): string {
   return `<h1 style="margin: 0 0 24px; color: ${color}; font-size: 26px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; line-height: 1.2; ${F}">${text}</h1>`
 }
 
@@ -144,7 +144,7 @@ export function emailParagraph(text: string): string {
 }
 
 /** CTA button (centered) */
-export function emailButton(text: string, href: string, color = BRAND.neon): string {
+export function emailButton(text: string, href: string, color: string = BRAND.neon): string {
   return `
 <table cellpadding="0" cellspacing="0" style="margin: 24px auto; width: 100%;">
   <tr>
@@ -167,7 +167,7 @@ export function emailButton(text: string, href: string, color = BRAND.neon): str
 export function emailDetailsCard(
   rows: Array<{ label: string; value: string }>,
   title?: string,
-  borderColor = BRAND.neon
+  borderColor: string = BRAND.neon
 ): string {
   const titleRow = title
     ? `<tr><td colspan="2" style="padding: 0 0 12px; color: ${borderColor}; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; ${F}">${title}</td></tr>`
@@ -197,7 +197,7 @@ export function emailDetailsCard(
 }
 
 /** Highlight / callout box */
-export function emailHighlight(text: string, color = BRAND.neon): string {
+export function emailHighlight(text: string, color: string = BRAND.neon): string {
   return `
 <table cellpadding="0" cellspacing="0" style="margin: 20px 0; width: 100%;">
   <tr>
