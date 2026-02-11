@@ -260,6 +260,13 @@ export function BuildHerSquadStep({
         return
       }
 
+      // Check if email actually sent (invite is saved either way)
+      if (data.success && !data.emailSent) {
+        setInviteError('Invite saved but the email could not be sent. Please share the registration link with your friend directly.')
+        setInviteEmail('')
+        return
+      }
+
       setInviteEmail('')
       setInviteSent(true)
       setSentToSelf(isSelfInvite)

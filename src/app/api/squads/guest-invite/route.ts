@@ -104,6 +104,8 @@ export async function POST(request: NextRequest) {
     })
 
     // Send branded invite email
+    let emailSent = false
+    let emailError: string | null = null
     try {
       const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://empoweredathletes.com'
       const registerUrl = `${baseUrl}/register/${camp?.slug || campId}?squadInvite=${invite.id}`
@@ -118,7 +120,7 @@ export async function POST(request: NextRequest) {
         ? `${camp.location.name}${camp.location.city ? `, ${camp.location.city}` : ''}${camp.location.state ? `, ${camp.location.state}` : ''}`
         : null
 
-      await sendCampInviteEmail({
+      const result = await sendCampInviteEmail({
         to: inviteeEmail,
         inviterName: inviterName || 'A friend',
         friendName: '',
@@ -127,13 +129,21 @@ export async function POST(request: NextRequest) {
         campLocation,
         registerUrl,
       })
-    } catch (emailError) {
-      console.error('Failed to send squad invite email:', emailError)
-      // Don't fail the request if email fails - invite is still created
+
+      emailSent = result.success
+      if (!result.success) {
+        emailError = result.error || 'Unknown email error'
+        console.error('[Guest Squad Invite API] Email send failed:', emailError)
+      }
+    } catch (err) {
+      emailError = err instanceof Error ? err.message : String(err)
+      console.error('[Guest Squad Invite API] Email send threw:', emailError)
     }
 
     return NextResponse.json({
       success: true,
+      emailSent,
+      emailError: emailSent ? undefined : emailError,
       data: {
         id: invite.id,
         inviteeEmail: inviteeEmail,
