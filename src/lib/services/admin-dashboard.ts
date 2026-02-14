@@ -59,11 +59,18 @@ export interface RevenueShareSummary {
   royaltyRate: number // e.g., 0.10 for 10%
 }
 
+export interface TotalRevenuePeriodData {
+  gross: number       // total charged in cents
+  transactions: number
+  stripeFees: number  // estimated Stripe fees in cents (2.9% + $0.30/txn)
+  netRevenue: number  // gross - stripeFees in cents
+}
+
 export interface TotalRevenueByPeriod {
-  allTime: number
-  thirtyDays: number
-  ninetyDays: number
-  yearToDate: number
+  allTime: TotalRevenuePeriodData
+  thirtyDays: TotalRevenuePeriodData
+  ninetyDays: TotalRevenuePeriodData
+  yearToDate: TotalRevenuePeriodData
 }
 
 export interface AdminDashboardData {
@@ -435,27 +442,40 @@ export async function getAdminDashboardData(params: {
     const [allTimeAgg, thirtyDayAgg, ninetyDayAgg, ytdAgg] = await Promise.all([
       prisma.registration.aggregate({
         where: baseWhere,
+        _count: true,
         _sum: { totalPriceCents: true },
       }),
       prisma.registration.aggregate({
         where: { ...baseWhere, createdAt: { gte: thirtyDaysAgo } },
+        _count: true,
         _sum: { totalPriceCents: true },
       }),
       prisma.registration.aggregate({
         where: { ...baseWhere, createdAt: { gte: ninetyDaysAgo } },
+        _count: true,
         _sum: { totalPriceCents: true },
       }),
       prisma.registration.aggregate({
         where: { ...baseWhere, createdAt: { gte: yearStart } },
+        _count: true,
         _sum: { totalPriceCents: true },
       }),
     ])
 
+    // Stripe standard rate: 2.9% + $0.30 per transaction
+    const calcPeriodData = (agg: typeof allTimeAgg): TotalRevenuePeriodData => {
+      const gross = agg._sum.totalPriceCents || 0
+      const txns = agg._count || 0
+      const stripeFees = Math.round(gross * 0.029) + (txns * 30)
+      const netRevenue = gross - stripeFees
+      return { gross, transactions: txns, stripeFees, netRevenue }
+    }
+
     const totalRevenueByPeriod: TotalRevenueByPeriod = {
-      allTime: allTimeAgg._sum.totalPriceCents || 0,
-      thirtyDays: thirtyDayAgg._sum.totalPriceCents || 0,
-      ninetyDays: ninetyDayAgg._sum.totalPriceCents || 0,
-      yearToDate: ytdAgg._sum.totalPriceCents || 0,
+      allTime: calcPeriodData(allTimeAgg),
+      thirtyDays: calcPeriodData(thirtyDayAgg),
+      ninetyDays: calcPeriodData(ninetyDayAgg),
+      yearToDate: calcPeriodData(ytdAgg),
     }
 
     return {
