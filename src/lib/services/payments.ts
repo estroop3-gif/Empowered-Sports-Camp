@@ -762,41 +762,83 @@ async function handleChargeRefunded(charge: Stripe.Charge): Promise<string | nul
 
   if (!paymentIntentId) return null
 
-  // Find registration with this payment intent
-  const registration = await prisma.registration.findFirst({
+  // Find ALL registrations with this payment intent (multi-camper checkouts share one PI)
+  let registrations = await prisma.registration.findMany({
     where: { stripePaymentIntentId: paymentIntentId },
     include: { camp: true },
   })
 
-  if (registration) {
+  // Fallback: if no match by payment intent, try looking up via the payment intent's metadata
+  if (registrations.length === 0) {
+    console.log('[Payments] No registration found by stripePaymentIntentId, trying Stripe metadata lookup for PI:', paymentIntentId)
+    try {
+      const stripe = getStripe()
+      const pi = await stripe.paymentIntents.retrieve(paymentIntentId)
+      const metadata = pi.metadata || {}
+      if (metadata.registrationIds) {
+        const regIds = metadata.registrationIds.split(',')
+        registrations = await prisma.registration.findMany({
+          where: { id: { in: regIds } },
+          include: { camp: true },
+        })
+        // Backfill the stripePaymentIntentId for future lookups
+        if (registrations.length > 0) {
+          await prisma.registration.updateMany({
+            where: { id: { in: regIds } },
+            data: { stripePaymentIntentId: paymentIntentId },
+          })
+        }
+      } else if (metadata.registrationId) {
+        registrations = await prisma.registration.findMany({
+          where: { id: metadata.registrationId },
+          include: { camp: true },
+        })
+        if (registrations.length > 0) {
+          await prisma.registration.update({
+            where: { id: metadata.registrationId },
+            data: { stripePaymentIntentId: paymentIntentId },
+          })
+        }
+      }
+    } catch (err) {
+      console.error('[Payments] Stripe metadata lookup failed:', err)
+    }
+  }
+
+  if (registrations.length > 0) {
     const isFullRefund = charge.amount_refunded === charge.amount
 
-    await prisma.registration.update({
-      where: { id: registration.id },
+    // Update ALL registrations tied to this payment
+    await prisma.registration.updateMany({
+      where: { id: { in: registrations.map(r => r.id) } },
       data: {
         paymentStatus: isFullRefund ? 'refunded' : 'partial',
-        status: isFullRefund ? 'refunded' : registration.status,
+        ...(isFullRefund ? { status: 'refunded' } : {}),
       },
     })
 
+    const primaryReg = registrations[0]
+
     createNotification({
-      userId: registration.parentId,
-      tenantId: registration.tenantId,
+      userId: primaryReg.parentId,
+      tenantId: primaryReg.tenantId,
       type: 'payment_confirmed',
       title: isFullRefund ? 'Refund Processed' : 'Partial Refund Processed',
-      body: `A ${isFullRefund ? 'full' : 'partial'} refund of $${(charge.amount_refunded / 100).toFixed(2)} has been processed for ${registration.camp.name}.`,
+      body: `A ${isFullRefund ? 'full' : 'partial'} refund of $${(charge.amount_refunded / 100).toFixed(2)} has been processed for ${primaryReg.camp.name}.`,
       category: 'camp',
       severity: 'info',
     }).catch((err) => console.error('[Payments] Failed to send refund notification:', err))
 
     // Notify next waitlisted person if a spot opened
     if (isFullRefund) {
-      onSpotOpened(registration.campId).catch(err =>
-        console.error('[Payments] Waitlist notification failed:', err)
-      )
+      for (const reg of registrations) {
+        onSpotOpened(reg.campId).catch(err =>
+          console.error('[Payments] Waitlist notification failed:', err)
+        )
+      }
     }
 
-    return registration.id
+    return primaryReg.id
   }
 
   // Find order with this payment intent
