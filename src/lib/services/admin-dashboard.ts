@@ -99,10 +99,11 @@ export async function getAdminDashboardData(params: {
       where: { licenseStatus: 'active' },
     })
 
-    // Total non-cancelled registrations in range (includes pending, confirmed, waitlisted)
+    // Total non-cancelled, non-refunded registrations in range
     const registrations = await prisma.registration.findMany({
       where: {
         status: { not: 'cancelled' },
+        paymentStatus: { not: 'refunded' },
         createdAt: {
           gte: startDate,
           lte: endDate,
@@ -190,6 +191,7 @@ export async function getAdminDashboardData(params: {
         registrations: {
           where: {
             status: { not: 'cancelled' },
+            paymentStatus: { not: 'refunded' },
             createdAt: {
               gte: startDate,
               lte: endDate,
@@ -320,6 +322,7 @@ export async function getAdminDashboardData(params: {
     const monthlyRegistrations = await prisma.registration.findMany({
       where: {
         status: { not: 'cancelled' },
+        paymentStatus: { not: 'refunded' },
         createdAt: {
           gte: thisMonthStart,
           lte: now,
@@ -384,10 +387,11 @@ export async function getAdminDashboardComparison(params: {
     const previousStart = new Date(currentStart.getTime() - periodLength)
     const previousEnd = new Date(currentStart.getTime())
 
-    // Current period - all non-cancelled registrations
+    // Current period - all non-cancelled, non-refunded registrations
     const currentRegistrations = await prisma.registration.aggregate({
       where: {
         status: { not: 'cancelled' },
+        paymentStatus: { not: 'refunded' },
         createdAt: {
           gte: currentStart,
           lte: currentEnd,
@@ -397,10 +401,11 @@ export async function getAdminDashboardComparison(params: {
       _sum: { totalPriceCents: true },
     })
 
-    // Previous period - all non-cancelled registrations
+    // Previous period - all non-cancelled, non-refunded registrations
     const previousRegistrations = await prisma.registration.aggregate({
       where: {
         status: { not: 'cancelled' },
+        paymentStatus: { not: 'refunded' },
         createdAt: {
           gte: previousStart,
           lte: previousEnd,

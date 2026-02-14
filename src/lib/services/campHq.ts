@@ -1322,11 +1322,13 @@ export async function getFinancialOverview(params: {
     let refundedCount = 0
 
     const registrationRows = registrations.map((r) => {
-      // Always count expected revenue from all non-cancelled registrations
-      expectedRevenueCents += r.totalPriceCents
-      expectedRegistrationFeeCents += r.basePriceCents - r.discountCents - r.promoDiscountCents
-      expectedAddonFeeCents += r.addonsTotalCents
-      expectedDiscountsCents += r.discountCents + r.promoDiscountCents
+      // Count expected revenue from all non-cancelled, non-refunded registrations
+      if (r.paymentStatus !== 'refunded') {
+        expectedRevenueCents += r.totalPriceCents
+        expectedRegistrationFeeCents += r.basePriceCents - r.discountCents - r.promoDiscountCents
+        expectedAddonFeeCents += r.addonsTotalCents
+        expectedDiscountsCents += r.discountCents + r.promoDiscountCents
+      }
 
       if (r.paymentStatus === 'paid') {
         collectedRevenueCents += r.totalPriceCents
