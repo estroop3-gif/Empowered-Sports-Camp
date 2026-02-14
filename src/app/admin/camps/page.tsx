@@ -473,7 +473,11 @@ export default function AdminCampsPage() {
                       <span className="font-bold text-neon">{formatPrice(camp.price)}</span>
                     </td>
                     <td className="py-4 px-4 text-center">
-                      <span className="text-white/70">{camp.capacity}</span>
+                      <span className="text-white/70">
+                        <span className="font-bold text-white">{camp.registration_count ?? 0}</span>
+                        {' / '}
+                        {camp.capacity}
+                      </span>
                     </td>
                     <td className="py-4 px-4 text-center">
                       <TableBadge variant={STATUS_COLORS[camp.status] || 'default'}>
