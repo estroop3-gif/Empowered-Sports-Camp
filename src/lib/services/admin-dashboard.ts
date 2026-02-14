@@ -99,10 +99,10 @@ export async function getAdminDashboardData(params: {
       where: { licenseStatus: 'active' },
     })
 
-    // Total confirmed registrations in range
+    // Total non-cancelled registrations in range (includes pending, confirmed, waitlisted)
     const registrations = await prisma.registration.findMany({
       where: {
-        status: 'confirmed',
+        status: { not: 'cancelled' },
         createdAt: {
           gte: startDate,
           lte: endDate,
@@ -115,24 +115,18 @@ export async function getAdminDashboardData(params: {
         addonsTotalCents: true,
         totalPriceCents: true,
         athleteId: true,
-        stripePaymentIntentId: true,
-        stripeCheckoutSessionId: true,
       },
     })
 
     const totalRegistrations = registrations.length
 
-    // Only count revenue from registrations that actually paid through Stripe
-    const paidRegistrations = registrations.filter(
-      (r) => r.stripePaymentIntentId || r.stripeCheckoutSessionId
-    )
-    // Registration revenue = base price minus all discounts (excludes add-ons)
-    const totalRevenue = paidRegistrations.reduce(
+    // Expected registration revenue = base price minus all discounts (excludes add-ons)
+    const totalRevenue = registrations.reduce(
       (sum, r) => sum + Math.max(0, (r.basePriceCents || 0) - (r.discountCents || 0) - (r.promoDiscountCents || 0)),
       0
     )
     // Add-on revenue separately
-    const addonRevenue = paidRegistrations.reduce((sum, r) => sum + (r.addonsTotalCents || 0), 0)
+    const addonRevenue = registrations.reduce((sum, r) => sum + (r.addonsTotalCents || 0), 0)
 
     // Unique athletes
     const uniqueAthletes = new Set(registrations.map(r => r.athleteId))
@@ -195,7 +189,7 @@ export async function getAdminDashboardData(params: {
         },
         registrations: {
           where: {
-            status: 'confirmed',
+            status: { not: 'cancelled' },
             createdAt: {
               gte: startDate,
               lte: endDate,
@@ -208,8 +202,6 @@ export async function getAdminDashboardData(params: {
             addonsTotalCents: true,
             totalPriceCents: true,
             athleteId: true,
-            stripePaymentIntentId: true,
-            stripeCheckoutSessionId: true,
           },
         },
         camps: {
@@ -225,15 +217,14 @@ export async function getAdminDashboardData(params: {
 
     const licensees: LicenseeDashboardItem[] = licenseeRaw.map(l => {
       const uniqueLicenseeAthletes = new Set(l.registrations.map(r => r.athleteId))
-      const paidRegs = l.registrations.filter(r => r.stripePaymentIntentId || r.stripeCheckoutSessionId)
       return {
         id: l.id,
         name: l.name,
         territory: l.territories[0]?.name || null,
         status: l.licenseStatus as 'active' | 'suspended' | 'terminated',
         registrations: l.registrations.length,
-        revenue: paidRegs.reduce(
-          (sum, r) => sum + Math.max(0, (r.basePriceCents || 0) - (r.discountCents || 0) - (r.promoDiscountCents || 0)) + (r.addonsTotalCents || 0),
+        revenue: l.registrations.reduce(
+          (sum, r) => sum + (r.totalPriceCents || 0),
           0
         ),
         athletes: uniqueLicenseeAthletes.size,
@@ -253,7 +244,7 @@ export async function getAdminDashboardData(params: {
     // Recent registrations
     const recentRegistrations = await prisma.registration.findMany({
       where: {
-        status: 'confirmed',
+        status: { not: 'cancelled' },
       },
       orderBy: { createdAt: 'desc' },
       take: 5,
@@ -328,15 +319,11 @@ export async function getAdminDashboardData(params: {
 
     const monthlyRegistrations = await prisma.registration.findMany({
       where: {
-        status: 'confirmed',
+        status: { not: 'cancelled' },
         createdAt: {
           gte: thisMonthStart,
           lte: now,
         },
-        OR: [
-          { stripePaymentIntentId: { not: null } },
-          { stripeCheckoutSessionId: { not: null } },
-        ],
       },
       select: {
         totalPriceCents: true,
@@ -397,35 +384,27 @@ export async function getAdminDashboardComparison(params: {
     const previousStart = new Date(currentStart.getTime() - periodLength)
     const previousEnd = new Date(currentStart.getTime())
 
-    // Current period - only count actual Stripe payments
+    // Current period - all non-cancelled registrations
     const currentRegistrations = await prisma.registration.aggregate({
       where: {
-        status: 'confirmed',
+        status: { not: 'cancelled' },
         createdAt: {
           gte: currentStart,
           lte: currentEnd,
         },
-        OR: [
-          { stripePaymentIntentId: { not: null } },
-          { stripeCheckoutSessionId: { not: null } },
-        ],
       },
       _count: true,
       _sum: { totalPriceCents: true },
     })
 
-    // Previous period - only count actual Stripe payments
+    // Previous period - all non-cancelled registrations
     const previousRegistrations = await prisma.registration.aggregate({
       where: {
-        status: 'confirmed',
+        status: { not: 'cancelled' },
         createdAt: {
           gte: previousStart,
           lte: previousEnd,
         },
-        OR: [
-          { stripePaymentIntentId: { not: null } },
-          { stripeCheckoutSessionId: { not: null } },
-        ],
       },
       _count: true,
       _sum: { totalPriceCents: true },
