@@ -15,7 +15,10 @@ import Stripe from 'stripe'
 export interface AdminDashboardOverview {
   activeLicensees: number
   totalRegistrations: number
-  totalRevenue: number // in cents - registration fees only (after discounts, excluding addons)
+  grossRevenue: number // in cents - base + addons (before discounts)
+  netRevenue: number // in cents - totalPriceCents (matches revenue analytics)
+  totalDiscounts: number // in cents - discounts + promo discounts
+  taxRevenue: number // in cents - tax collected
   addonRevenue: number // in cents - add-on revenue only
   activeAthletes: number
   activeCamps: number
@@ -130,11 +133,10 @@ export async function getAdminDashboardData(params: {
       where: { licenseStatus: 'active' },
     })
 
-    // Total non-cancelled, non-refunded registrations in range
+    // Confirmed registrations in range (matches revenue analytics filter)
     const registrations = await prisma.registration.findMany({
       where: {
-        status: { not: 'cancelled' },
-        paymentStatus: { not: 'refunded' },
+        status: 'confirmed',
         createdAt: {
           gte: startDate,
           lte: endDate,
@@ -146,18 +148,30 @@ export async function getAdminDashboardData(params: {
         promoDiscountCents: true,
         addonsTotalCents: true,
         totalPriceCents: true,
+        taxCents: true,
         athleteId: true,
       },
     })
 
     const totalRegistrations = registrations.length
 
-    // Expected registration revenue = base price minus all discounts (excludes add-ons)
-    const totalRevenue = registrations.reduce(
-      (sum, r) => sum + Math.max(0, (r.basePriceCents || 0) - (r.discountCents || 0) - (r.promoDiscountCents || 0)),
+    // Revenue calculations aligned with revenue analytics page
+    const grossRevenue = registrations.reduce(
+      (sum, r) => sum + (r.basePriceCents || 0) + (r.addonsTotalCents || 0),
       0
     )
-    // Add-on revenue separately
+    const netRevenue = registrations.reduce(
+      (sum, r) => sum + (r.totalPriceCents || 0),
+      0
+    )
+    const totalDiscounts = registrations.reduce(
+      (sum, r) => sum + (r.discountCents || 0) + (r.promoDiscountCents || 0),
+      0
+    )
+    const taxRevenue = registrations.reduce(
+      (sum, r) => sum + (r.taxCents || 0),
+      0
+    )
     const addonRevenue = registrations.reduce((sum, r) => sum + (r.addonsTotalCents || 0), 0)
 
     // Unique athletes
@@ -196,7 +210,10 @@ export async function getAdminDashboardData(params: {
     const overview: AdminDashboardOverview = {
       activeLicensees,
       totalRegistrations,
-      totalRevenue,
+      grossRevenue,
+      netRevenue,
+      totalDiscounts,
+      taxRevenue,
       addonRevenue,
       activeAthletes,
       activeCamps,
@@ -221,8 +238,7 @@ export async function getAdminDashboardData(params: {
         },
         registrations: {
           where: {
-            status: { not: 'cancelled' },
-            paymentStatus: { not: 'refunded' },
+            status: 'confirmed',
             createdAt: {
               gte: startDate,
               lte: endDate,
@@ -230,8 +246,6 @@ export async function getAdminDashboardData(params: {
           },
           select: {
             basePriceCents: true,
-            discountCents: true,
-            promoDiscountCents: true,
             addonsTotalCents: true,
             totalPriceCents: true,
             athleteId: true,
@@ -350,8 +364,7 @@ export async function getAdminDashboardData(params: {
 
     const recentRegDetails = await prisma.registration.findMany({
       where: {
-        status: { not: 'cancelled' },
-        paymentStatus: { not: 'refunded' },
+        status: 'confirmed',
         createdAt: {
           gte: startDate,
           lte: endDate,
@@ -407,8 +420,7 @@ export async function getAdminDashboardData(params: {
 
     const monthlyRegistrations = await prisma.registration.findMany({
       where: {
-        status: { not: 'cancelled' },
-        paymentStatus: { not: 'refunded' },
+        status: 'confirmed',
         createdAt: {
           gte: thisMonthStart,
           lte: now,
@@ -419,15 +431,15 @@ export async function getAdminDashboardData(params: {
       },
     })
 
-    const grossRevenue = monthlyRegistrations.reduce((sum, r) => sum + (r.totalPriceCents || 0), 0)
+    const monthlyGrossRevenue = monthlyRegistrations.reduce((sum, r) => sum + (r.totalPriceCents || 0), 0)
 
     // Default royalty rate is 10% (configurable per tenant, but we use average)
     const royaltyRate = 0.10
-    const hqRevenue = Math.round(grossRevenue * royaltyRate)
-    const licenseeShare = grossRevenue - hqRevenue
+    const hqRevenue = Math.round(monthlyGrossRevenue * royaltyRate)
+    const licenseeShare = monthlyGrossRevenue - hqRevenue
 
     const revenueShare: RevenueShareSummary = {
-      grossRevenue,
+      grossRevenue: monthlyGrossRevenue,
       licenseeShare,
       hqRevenue,
       royaltyRate,
@@ -592,42 +604,33 @@ export async function getAdminDashboardComparison(params: {
     const previousStart = new Date(currentStart.getTime() - periodLength)
     const previousEnd = new Date(currentStart.getTime())
 
-    // Current period - registration revenue only (base - discounts, excludes add-ons)
+    // Current period - net revenue using totalPriceCents (matches revenue analytics)
     const [currentRegs, previousRegs] = await Promise.all([
       prisma.registration.findMany({
         where: {
-          status: { not: 'cancelled' },
-          paymentStatus: { not: 'refunded' },
+          status: 'confirmed',
           createdAt: { gte: currentStart, lte: currentEnd },
         },
         select: {
-          basePriceCents: true,
-          discountCents: true,
-          promoDiscountCents: true,
+          totalPriceCents: true,
         },
       }),
       prisma.registration.findMany({
         where: {
-          status: { not: 'cancelled' },
-          paymentStatus: { not: 'refunded' },
+          status: 'confirmed',
           createdAt: { gte: previousStart, lte: previousEnd },
         },
         select: {
-          basePriceCents: true,
-          discountCents: true,
-          promoDiscountCents: true,
+          totalPriceCents: true,
         },
       }),
     ])
 
-    const calcRegRevenue = (regs: typeof currentRegs) =>
-      regs.reduce(
-        (sum, r) => sum + Math.max(0, (r.basePriceCents || 0) - (r.discountCents || 0) - (r.promoDiscountCents || 0)),
-        0
-      )
+    const calcNetRevenue = (regs: typeof currentRegs) =>
+      regs.reduce((sum, r) => sum + (r.totalPriceCents || 0), 0)
 
-    const currentRevenue = calcRegRevenue(currentRegs)
-    const previousRevenue = calcRegRevenue(previousRegs)
+    const currentRevenue = calcNetRevenue(currentRegs)
+    const previousRevenue = calcNetRevenue(previousRegs)
     const currentCount = currentRegs.length
     const previousCount = previousRegs.length
 

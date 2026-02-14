@@ -33,7 +33,10 @@ import { cn } from '@/lib/utils'
 interface DashboardOverview {
   activeLicensees: number
   totalRegistrations: number
-  totalRevenue: number
+  grossRevenue: number
+  netRevenue: number
+  totalDiscounts: number
+  taxRevenue: number
   addonRevenue: number
   activeAthletes: number
   activeCamps: number
@@ -224,7 +227,10 @@ export default function LicensorDashboard() {
   const overview = data?.overview || {
     activeLicensees: 0,
     totalRegistrations: 0,
-    totalRevenue: 0,
+    grossRevenue: 0,
+    netRevenue: 0,
+    totalDiscounts: 0,
+    taxRevenue: 0,
     addonRevenue: 0,
     activeAthletes: 0,
     activeCamps: 0,
@@ -321,10 +327,16 @@ export default function LicensorDashboard() {
           }
         />
         <StatCard
-          label="Registration Revenue"
-          value={formatCurrency(overview.totalRevenue)}
+          label="Gross Revenue"
+          value={formatCurrency(overview.grossRevenue)}
           icon={DollarSign}
           accent="purple"
+        />
+        <StatCard
+          label="Net Revenue"
+          value={formatCurrency(overview.netRevenue)}
+          icon={DollarSign}
+          accent="neon"
           change={
             comparison.revenueChange !== 0
               ? {
@@ -333,12 +345,6 @@ export default function LicensorDashboard() {
                 }
               : undefined
           }
-        />
-        <StatCard
-          label="Add-On Revenue"
-          value={formatCurrency(overview.addonRevenue)}
-          icon={ShoppingBag}
-          accent="magenta"
         />
         <StatCard
           label="Active Athletes"
