@@ -808,14 +808,24 @@ async function handleChargeRefunded(charge: Stripe.Charge): Promise<string | nul
   if (registrations.length > 0) {
     const isFullRefund = charge.amount_refunded === charge.amount
 
-    // Update ALL registrations tied to this payment
-    await prisma.registration.updateMany({
-      where: { id: { in: registrations.map(r => r.id) } },
-      data: {
-        paymentStatus: isFullRefund ? 'refunded' : 'partial',
-        ...(isFullRefund ? { status: 'refunded' } : {}),
-      },
-    })
+    // Distribute refund amount across registrations proportionally
+    const totalCharged = registrations.reduce((s, r) => s + (r.totalPriceCents || 0), 0)
+    const refundedCents = charge.amount_refunded || 0
+
+    for (const reg of registrations) {
+      const regShare = totalCharged > 0
+        ? Math.round((reg.totalPriceCents / totalCharged) * refundedCents)
+        : 0
+      await prisma.registration.update({
+        where: { id: reg.id },
+        data: {
+          paymentStatus: isFullRefund ? 'refunded' : 'partial',
+          refundAmountCents: regShare,
+          refundedAt: new Date(),
+          ...(isFullRefund ? { status: 'refunded' } : {}),
+        },
+      })
+    }
 
     const primaryReg = registrations[0]
 

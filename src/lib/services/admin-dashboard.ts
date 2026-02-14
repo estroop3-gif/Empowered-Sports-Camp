@@ -439,24 +439,32 @@ export async function getAdminDashboardData(params: {
     const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000)
     const yearStart = new Date(now.getFullYear(), 0, 1)
 
-    // Gross includes ALL paid + refunded registrations (matches Stripe's Gross Volume)
-    const grossWhere = { status: { not: 'cancelled' as const }, paymentStatus: { in: ['paid' as const, 'refunded' as const] } }
-    const refundedWhere = { status: { not: 'cancelled' as const }, paymentStatus: 'refunded' as const }
+    // Gross includes ALL registrations that Stripe charged (paid + partial + refunded)
+    const grossWhere = {
+      status: { not: 'cancelled' as const },
+      paymentStatus: { in: ['paid' as const, 'partial' as const, 'refunded' as const] },
+    }
+
+    // Use refundAmountCents for actual refund tracking (both partial and full refunds)
+    const refundWhere = {
+      status: { not: 'cancelled' as const },
+      paymentStatus: { in: ['partial' as const, 'refunded' as const] },
+    }
 
     const [
       allTimeGross, thirtyDayGross, ninetyDayGross, ytdGross,
       allTimeRefund, thirtyDayRefund, ninetyDayRefund, ytdRefund,
     ] = await Promise.all([
-      // Gross (paid + refunded)
+      // Gross (paid + partial + refunded) — matches Stripe Gross Volume
       prisma.registration.aggregate({ where: grossWhere, _count: true, _sum: { totalPriceCents: true } }),
       prisma.registration.aggregate({ where: { ...grossWhere, createdAt: { gte: thirtyDaysAgo } }, _count: true, _sum: { totalPriceCents: true } }),
       prisma.registration.aggregate({ where: { ...grossWhere, createdAt: { gte: ninetyDaysAgo } }, _count: true, _sum: { totalPriceCents: true } }),
       prisma.registration.aggregate({ where: { ...grossWhere, createdAt: { gte: yearStart } }, _count: true, _sum: { totalPriceCents: true } }),
-      // Refunded only
-      prisma.registration.aggregate({ where: refundedWhere, _sum: { totalPriceCents: true } }),
-      prisma.registration.aggregate({ where: { ...refundedWhere, createdAt: { gte: thirtyDaysAgo } }, _sum: { totalPriceCents: true } }),
-      prisma.registration.aggregate({ where: { ...refundedWhere, createdAt: { gte: ninetyDaysAgo } }, _sum: { totalPriceCents: true } }),
-      prisma.registration.aggregate({ where: { ...refundedWhere, createdAt: { gte: yearStart } }, _sum: { totalPriceCents: true } }),
+      // Actual refund amounts (uses refundAmountCents for accuracy, falls back to totalPriceCents for full refunds)
+      prisma.registration.aggregate({ where: refundWhere, _sum: { refundAmountCents: true, totalPriceCents: true } }),
+      prisma.registration.aggregate({ where: { ...refundWhere, createdAt: { gte: thirtyDaysAgo } }, _sum: { refundAmountCents: true, totalPriceCents: true } }),
+      prisma.registration.aggregate({ where: { ...refundWhere, createdAt: { gte: ninetyDaysAgo } }, _sum: { refundAmountCents: true, totalPriceCents: true } }),
+      prisma.registration.aggregate({ where: { ...refundWhere, createdAt: { gte: yearStart } }, _sum: { refundAmountCents: true, totalPriceCents: true } }),
     ])
 
     // Stripe standard rate: 2.9% + $0.30 per transaction (charged on gross, not refunded by Stripe)
@@ -465,8 +473,14 @@ export async function getAdminDashboardData(params: {
       refundAgg: typeof allTimeRefund,
     ): TotalRevenuePeriodData => {
       const grossVolume = grossAgg._sum.totalPriceCents || 0
-      const refunded = refundAgg._sum.totalPriceCents || 0
       const transactions = grossAgg._count || 0
+
+      // Use tracked refundAmountCents if available, otherwise fall back to full totalPriceCents for fully-refunded regs
+      const trackedRefunds = refundAgg._sum.refundAmountCents || 0
+      const fallbackRefunds = refundAgg._sum.totalPriceCents || 0
+      // If we have tracked refund data, use it; otherwise use totalPriceCents of refunded registrations
+      const refunded = trackedRefunds > 0 ? trackedRefunds : fallbackRefunds
+
       const stripeFees = Math.round(grossVolume * 0.029) + (transactions * 30)
       const netVolume = grossVolume - refunded - stripeFees
       return { grossVolume, refunded, transactions, stripeFees, netVolume }

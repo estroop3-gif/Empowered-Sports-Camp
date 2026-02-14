@@ -415,6 +415,8 @@ model Registration {
   waitlistOfferSentAt     DateTime?              @map("waitlist_offer_sent_at") @db.Timestamptz(6)
   waitlistOfferExpiresAt  DateTime?              @map("waitlist_offer_expires_at") @db.Timestamptz(6)
   waitlistOfferToken      String?                @map("waitlist_offer_token")
+  refundAmountCents       Int                    @default(0) @map("refund_amount_cents")
+  refundedAt              DateTime?              @map("refunded_at") @db.Timestamptz(6)
   cancelledAt             DateTime?              @map("cancelled_at") @db.Timestamptz(6)
   cancellationReason      String?                @map("cancellation_reason")
   createdAt               DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
