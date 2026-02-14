@@ -39,6 +39,19 @@ export interface RecentActivityItem {
   timestamp: Date
 }
 
+export interface RegistrationDetailItem {
+  id: string
+  athleteName: string
+  parentName: string
+  parentEmail: string
+  campName: string
+  registrationChargeCents: number
+  addonChargeCents: number
+  totalChargeCents: number
+  paymentStatus: string
+  createdAt: string
+}
+
 export interface RevenueShareSummary {
   grossRevenue: number // in cents
   licenseeShare: number // in cents (typically 90%)
@@ -51,6 +64,7 @@ export interface AdminDashboardData {
   licensees: LicenseeDashboardItem[]
   recentActivity: RecentActivityItem[]
   revenueShare: RevenueShareSummary
+  registrationDetails: RegistrationDetailItem[]
 }
 
 // =============================================================================
@@ -314,6 +328,61 @@ export async function getAdminDashboardData(params: {
     const topActivity = recentActivity.slice(0, 5)
 
     // -------------------------------------------------------------------------
+    // Recent Registration Details
+    // -------------------------------------------------------------------------
+
+    const recentRegDetails = await prisma.registration.findMany({
+      where: {
+        status: { not: 'cancelled' },
+        paymentStatus: { not: 'refunded' },
+        createdAt: {
+          gte: startDate,
+          lte: endDate,
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+      select: {
+        id: true,
+        basePriceCents: true,
+        discountCents: true,
+        promoDiscountCents: true,
+        addonsTotalCents: true,
+        totalPriceCents: true,
+        paymentStatus: true,
+        createdAt: true,
+        athlete: {
+          select: { firstName: true, lastName: true },
+        },
+        parent: {
+          select: { firstName: true, lastName: true, email: true },
+        },
+        camp: {
+          select: { name: true },
+        },
+      },
+    })
+
+    const registrationDetails: RegistrationDetailItem[] = recentRegDetails.map(r => {
+      const regCharge = Math.max(
+        0,
+        (r.basePriceCents || 0) - (r.discountCents || 0) - (r.promoDiscountCents || 0)
+      )
+      return {
+        id: r.id,
+        athleteName: `${r.athlete.firstName} ${r.athlete.lastName}`,
+        parentName: `${r.parent.firstName || ''} ${r.parent.lastName || ''}`.trim(),
+        parentEmail: r.parent.email,
+        campName: r.camp.name,
+        registrationChargeCents: regCharge,
+        addonChargeCents: r.addonsTotalCents || 0,
+        totalChargeCents: r.totalPriceCents || 0,
+        paymentStatus: r.paymentStatus,
+        createdAt: r.createdAt.toISOString(),
+      }
+    })
+
+    // -------------------------------------------------------------------------
     // Revenue Share Summary (This Month)
     // -------------------------------------------------------------------------
 
@@ -353,6 +422,7 @@ export async function getAdminDashboardData(params: {
         licensees,
         recentActivity: topActivity,
         revenueShare,
+        registrationDetails,
       },
       error: null,
     }

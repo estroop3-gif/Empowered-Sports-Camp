@@ -65,11 +65,26 @@ interface RevenueShare {
   royaltyRate: number
 }
 
+interface RegistrationDetailItem {
+  id: string
+  athleteName: string
+  parentName: string
+  parentEmail: string
+  campName: string
+  registrationChargeCents: number
+  addonChargeCents: number
+  totalChargeCents: number
+  paymentStatus: string
+  createdAt: string
+  [key: string]: unknown
+}
+
 interface DashboardData {
   overview: DashboardOverview
   licensees: LicenseeItem[]
   recentActivity: ActivityItem[]
   revenueShare: RevenueShare
+  registrationDetails: RegistrationDetailItem[]
   comparison: {
     revenueChange: number
     registrationChange: number
@@ -199,6 +214,7 @@ export default function LicensorDashboard() {
   }
 
   const licensees = data?.licensees || []
+  const registrationDetails = data?.registrationDetails || []
   const recentActivity = data?.recentActivity || []
   const revenueShare = data?.revenueShare || {
     grossRevenue: 0,
@@ -487,6 +503,103 @@ export default function LicensorDashboard() {
             </div>
           </ContentCard>
         </div>
+      </div>
+
+      {/* Recent Registrations */}
+      <div className="mt-8">
+        <ContentCard
+          title="Recent Registrations"
+          description="Latest 20 registrations across all licensees"
+        >
+          {registrationDetails.length === 0 ? (
+            <div className="py-8 text-center text-white/50">
+              No registrations in this period
+            </div>
+          ) : (
+            <DataTable<RegistrationDetailItem>
+              columns={[
+                {
+                  key: 'athleteName',
+                  label: 'Athlete',
+                  sortable: true,
+                  render: (value) => (
+                    <span className="font-bold text-white">{String(value)}</span>
+                  ),
+                },
+                {
+                  key: 'parentName',
+                  label: 'Parent',
+                  render: (_, row: RegistrationDetailItem) => (
+                    <div>
+                      <div className="text-white">{row.parentName}</div>
+                      <div className="text-xs text-white/40">{row.parentEmail}</div>
+                    </div>
+                  ),
+                },
+                {
+                  key: 'campName',
+                  label: 'Camp',
+                  sortable: true,
+                  render: (value) => (
+                    <span className="text-white/70">{String(value)}</span>
+                  ),
+                },
+                {
+                  key: 'registrationChargeCents',
+                  label: 'Registration',
+                  align: 'right',
+                  sortable: true,
+                  render: (value) => (
+                    <span className="text-white">{formatCurrency(Number(value))}</span>
+                  ),
+                },
+                {
+                  key: 'addonChargeCents',
+                  label: 'Add-Ons',
+                  align: 'right',
+                  render: (value) => (
+                    <span className="text-white/70">
+                      {Number(value) > 0 ? formatCurrency(Number(value)) : '\u2014'}
+                    </span>
+                  ),
+                },
+                {
+                  key: 'totalChargeCents',
+                  label: 'Total',
+                  align: 'right',
+                  sortable: true,
+                  render: (value) => (
+                    <span className="font-bold text-neon">{formatCurrency(Number(value))}</span>
+                  ),
+                },
+                {
+                  key: 'paymentStatus',
+                  label: 'Payment',
+                  render: (value) => (
+                    <TableBadge
+                      variant={
+                        value === 'paid'
+                          ? 'success'
+                          : value === 'pending'
+                          ? 'warning'
+                          : value === 'refunded'
+                          ? 'danger'
+                          : value === 'failed'
+                          ? 'danger'
+                          : 'default'
+                      }
+                    >
+                      {String(value)}
+                    </TableBadge>
+                  ),
+                },
+              ]}
+              data={registrationDetails}
+              keyField="id"
+              accent="neon"
+            />
+          )}
+        </ContentCard>
       </div>
     </AdminLayout>
   )
