@@ -1028,6 +1028,12 @@ export async function sendWeeklyReportEmail(): Promise<{ data: EmailResult | nul
       revenueAllTime,
       revenue30d,
       revenue7d,
+      revenueBreakdownAllTime,
+      revenueBreakdown30d,
+      revenueBreakdown7d,
+      refundData,
+      promoUsage,
+      perCampRevenue,
     ] = await Promise.all([
       // Total confirmed registrations
       prisma.registration.findMany({
@@ -1064,6 +1070,7 @@ export async function sendWeeklyReportEmail(): Promise<{ data: EmailResult | nul
           endDate: true,
           capacity: true,
           status: true,
+          priceCents: true,
           _count: {
             select: {
               registrations: { where: { status: 'confirmed' } },
@@ -1093,6 +1100,42 @@ export async function sendWeeklyReportEmail(): Promise<{ data: EmailResult | nul
       prisma.registration.aggregate({
         where: { status: 'confirmed', paymentStatus: 'paid', paidAt: { gte: sevenDaysAgo } },
         _sum: { totalPriceCents: true },
+      }),
+      // Full revenue breakdown all-time (base, discounts, promos, addons, tax)
+      prisma.registration.aggregate({
+        where: { status: 'confirmed', paymentStatus: 'paid' },
+        _sum: { basePriceCents: true, discountCents: true, promoDiscountCents: true, addonsTotalCents: true, taxCents: true, totalPriceCents: true },
+      }),
+      // Full revenue breakdown last 30 days
+      prisma.registration.aggregate({
+        where: { status: 'confirmed', paymentStatus: 'paid', paidAt: { gte: thirtyDaysAgo } },
+        _sum: { basePriceCents: true, discountCents: true, promoDiscountCents: true, addonsTotalCents: true, taxCents: true, totalPriceCents: true },
+      }),
+      // Full revenue breakdown last 7 days
+      prisma.registration.aggregate({
+        where: { status: 'confirmed', paymentStatus: 'paid', paidAt: { gte: sevenDaysAgo } },
+        _sum: { basePriceCents: true, discountCents: true, promoDiscountCents: true, addonsTotalCents: true, taxCents: true, totalPriceCents: true },
+      }),
+      // Refund data
+      prisma.registration.aggregate({
+        where: { refundAmountCents: { gt: 0 } },
+        _sum: { refundAmountCents: true },
+        _count: { id: true },
+      }),
+      // Promo code usage
+      prisma.registration.findMany({
+        where: { status: 'confirmed', promoCodeId: { not: null } },
+        select: {
+          promoDiscountCents: true,
+          promoCode: { select: { code: true } },
+        },
+      }),
+      // Per-camp revenue
+      prisma.registration.groupBy({
+        by: ['campId'],
+        where: { status: 'confirmed', paymentStatus: 'paid' },
+        _sum: { totalPriceCents: true, basePriceCents: true, discountCents: true, promoDiscountCents: true, addonsTotalCents: true, taxCents: true },
+        _count: { id: true },
       }),
     ])
 
@@ -1145,19 +1188,28 @@ export async function sendWeeklyReportEmail(): Promise<{ data: EmailResult | nul
         ${emailCallout('No new registrations in the past 7 days.')}`
     }
 
-    // Build camp status section
+    // Build per-camp revenue lookup
+    const campRevenueMap = new Map(perCampRevenue.map(r => [r.campId, r]))
+
+    // Build camp status section (now with revenue)
+    const thStyle = `padding: 10px 12px; color: ${BRAND.neon}; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid ${BRAND.borderSubtle}; font-family: 'Poppins', Arial, sans-serif;`
+    const tdStyle = `padding: 8px 12px; border-bottom: 1px solid ${BRAND.borderSubtle}; font-size: 13px; font-family: 'Poppins', Arial, sans-serif;`
+
     const campRows = camps.map(c => {
       const registered = c._count.registrations
       const cap = c.capacity || 0
       const fillPct = cap > 0 ? Math.round((registered / cap) * 100) : 0
       const fillColor = fillPct >= 90 ? BRAND.error : fillPct >= 70 ? BRAND.warning : BRAND.success
       const dates = `${c.startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${c.endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+      const campRev = campRevenueMap.get(c.id)
+      const revTotal = campRev?._sum.totalPriceCents || 0
       return `
         <tr>
-          <td style="padding: 8px 12px; border-bottom: 1px solid ${BRAND.borderSubtle}; color: ${BRAND.textPrimary}; font-size: 13px; font-family: 'Poppins', Arial, sans-serif;">${c.name}</td>
-          <td style="padding: 8px 12px; border-bottom: 1px solid ${BRAND.borderSubtle}; color: ${BRAND.textSecondary}; font-size: 13px; font-family: 'Poppins', Arial, sans-serif;">${dates}</td>
-          <td style="padding: 8px 12px; border-bottom: 1px solid ${BRAND.borderSubtle}; color: ${BRAND.textPrimary}; font-size: 13px; font-family: 'Poppins', Arial, sans-serif;">${registered}/${cap}</td>
-          <td style="padding: 8px 12px; border-bottom: 1px solid ${BRAND.borderSubtle}; color: ${fillColor}; font-size: 13px; font-weight: 600; font-family: 'Poppins', Arial, sans-serif; text-align: right;">${fillPct}%</td>
+          <td style="${tdStyle} color: ${BRAND.textPrimary};">${c.name}</td>
+          <td style="${tdStyle} color: ${BRAND.textSecondary};">${dates}</td>
+          <td style="${tdStyle} color: ${BRAND.textPrimary};">${registered}/${cap}</td>
+          <td style="${tdStyle} color: ${fillColor}; font-weight: 600; text-align: center;">${fillPct}%</td>
+          <td style="${tdStyle} color: ${BRAND.neon}; font-weight: 600; text-align: right;">${fmtCents(revTotal)}</td>
         </tr>`
     }).join('')
 
@@ -1165,10 +1217,11 @@ export async function sendWeeklyReportEmail(): Promise<{ data: EmailResult | nul
       ${emailSubheading('Camp Status')}
       <table cellpadding="0" cellspacing="0" style="width: 100%; margin: 0 0 24px; border-radius: 6px; overflow: hidden; background-color: rgba(204,255,0,0.04); border: 1px solid rgba(204,255,0,0.12);">
         <tr>
-          <th style="padding: 10px 12px; text-align: left; color: ${BRAND.neon}; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid ${BRAND.borderSubtle}; font-family: 'Poppins', Arial, sans-serif;">Camp</th>
-          <th style="padding: 10px 12px; text-align: left; color: ${BRAND.neon}; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid ${BRAND.borderSubtle}; font-family: 'Poppins', Arial, sans-serif;">Dates</th>
-          <th style="padding: 10px 12px; text-align: left; color: ${BRAND.neon}; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid ${BRAND.borderSubtle}; font-family: 'Poppins', Arial, sans-serif;">Registered</th>
-          <th style="padding: 10px 12px; text-align: right; color: ${BRAND.neon}; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid ${BRAND.borderSubtle}; font-family: 'Poppins', Arial, sans-serif;">Fill Rate</th>
+          <th style="${thStyle} text-align: left;">Camp</th>
+          <th style="${thStyle} text-align: left;">Dates</th>
+          <th style="${thStyle} text-align: left;">Reg</th>
+          <th style="${thStyle} text-align: center;">Fill</th>
+          <th style="${thStyle} text-align: right;">Revenue</th>
         </tr>
         ${campRows}
       </table>` : ''
@@ -1189,12 +1242,72 @@ export async function sendWeeklyReportEmail(): Promise<{ data: EmailResult | nul
         r.label === 'PAID' ? 'success' : r.label === 'FAILED' ? 'warning' : 'info'
       )).join('')}` : ''
 
-    // Build revenue snapshot
-    const revenueHtml = emailDetailsCard([
+    // Build detailed revenue breakdown helper
+    const buildRevenueBreakdown = (label: string, data: typeof revenueBreakdownAllTime) => {
+      const s = data._sum
+      return emailDetailsCard([
+        { label: 'Base Registration Fees', value: fmtCents(s.basePriceCents || 0) },
+        { label: 'Sibling Discounts', value: `−${fmtCents(s.discountCents || 0)}` },
+        { label: 'Promo Code Discounts', value: `−${fmtCents(s.promoDiscountCents || 0)}` },
+        { label: 'Add-On Revenue', value: fmtCents(s.addonsTotalCents || 0) },
+        { label: 'Sales Tax Collected', value: fmtCents(s.taxCents || 0) },
+        { label: 'Net Revenue', value: fmtCents(s.totalPriceCents || 0) },
+      ], label)
+    }
+
+    // Build revenue snapshot (top-level totals)
+    const revenueSnapshotHtml = emailDetailsCard([
       { label: 'All-Time Revenue', value: fmtCents(revenueAllTime._sum.totalPriceCents || 0) },
       { label: 'Last 30 Days', value: fmtCents(revenue30d._sum.totalPriceCents || 0) },
       { label: 'Last 7 Days', value: fmtCents(revenue7d._sum.totalPriceCents || 0) },
     ], 'Revenue Snapshot')
+
+    // Detailed breakdowns
+    const revenueAllTimeHtml = buildRevenueBreakdown('All-Time Revenue Breakdown', revenueBreakdownAllTime)
+    const revenue30dHtml = buildRevenueBreakdown('Last 30 Days Breakdown', revenueBreakdown30d)
+    const revenue7dHtml = buildRevenueBreakdown('Last 7 Days Breakdown', revenueBreakdown7d)
+
+    // Refunds section
+    const refundCount = refundData._count.id
+    const refundTotal = refundData._sum.refundAmountCents || 0
+    const refundHtml = refundCount > 0
+      ? emailCallout(`<strong style="color: ${BRAND.magenta};">Refunds:</strong> ${refundCount} refund(s) totaling <strong style="color: ${BRAND.textPrimary};">${fmtCents(refundTotal)}</strong>`, 'warning')
+      : emailCallout(`<strong style="color: ${BRAND.success};">Refunds:</strong> None`, 'success')
+
+    // Promo code usage
+    const promoMap = new Map<string, { count: number; totalCents: number }>()
+    for (const r of promoUsage) {
+      const code = r.promoCode?.code || 'Unknown'
+      const existing = promoMap.get(code) || { count: 0, totalCents: 0 }
+      existing.count++
+      existing.totalCents += r.promoDiscountCents
+      promoMap.set(code, existing)
+    }
+    const promoHtml = promoMap.size > 0
+      ? `${emailSubheading('Promo Code Usage')}` + Array.from(promoMap.entries()).map(([code, data]) =>
+          emailCallout(`<strong style="color: ${BRAND.neon};">${code}:</strong> Used ${data.count} time(s) — ${fmtCents(data.totalCents)} in discounts`, 'purple')
+        ).join('')
+      : ''
+
+    // Average revenue per registration
+    const allTimeTotal = revenueAllTime._sum.totalPriceCents || 0
+    const totalConfirmedPaid = allConfirmedRegistrations.length
+    const avgPerReg = totalConfirmedPaid > 0 ? Math.round(allTimeTotal / totalConfirmedPaid) : 0
+
+    // Projected revenue from unfilled spots
+    const totalOpenSpots = camps
+      .filter(c => ['registration_open', 'registration_closed'].includes(c.status))
+      .reduce((sum, c) => sum + Math.max(0, (c.capacity || 0) - c._count.registrations), 0)
+    const avgCampPrice = camps.length > 0
+      ? Math.round(camps.reduce((s, c) => s + c.priceCents, 0) / camps.length)
+      : 0
+    const projectedFromOpen = totalOpenSpots * avgCampPrice
+
+    const kpiHtml = emailDetailsCard([
+      { label: 'Avg Revenue per Registration', value: fmtCents(avgPerReg) },
+      { label: 'Total Open Spots (Active Camps)', value: String(totalOpenSpots) },
+      { label: 'Projected Revenue if Filled', value: fmtCents(projectedFromOpen) },
+    ], 'Key Metrics')
 
     const reportDate = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
 
@@ -1206,7 +1319,13 @@ export async function sendWeeklyReportEmail(): Promise<{ data: EmailResult | nul
       ${recentHtml}
       ${campStatusHtml}
       ${paymentHtml}
-      ${revenueHtml}
+      ${refundHtml}
+      ${revenueSnapshotHtml}
+      ${revenue7dHtml}
+      ${revenue30dHtml}
+      ${revenueAllTimeHtml}
+      ${kpiHtml}
+      ${promoHtml}
       ${emailParagraph(`This report is sent automatically every Monday at 9:00 AM UTC.`)}
     `
 
