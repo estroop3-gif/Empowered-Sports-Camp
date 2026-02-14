@@ -259,7 +259,7 @@ export async function POST(request: NextRequest) {
 
       // Calculate tax on taxable addons (physical products like t-shirts)
       // Camp registration fees are services and typically not taxed
-      const taxableAmount = relevantAddOns
+      const taxableAmount = camperAddOns
         .filter(a => isValidUUID(a.addonId) && taxableAddonsMap.get(a.addonId) === true)
         .reduce((sum, a) => sum + a.unitPrice * a.quantity, 0)
       const taxCents = taxRatePercent > 0 ? Math.round(taxableAmount * (taxRatePercent / 100)) : 0
