@@ -10,6 +10,7 @@
 
 import { prisma } from '@/lib/db/client'
 import { createNotification } from './notifications'
+import { sendRegistrationConfirmationEmail } from './email'
 import { createStripeCheckoutSession } from './payments'
 import { ensureParentRole } from './users'
 import type { PaymentStatus, RegistrationStatus, CampFriendSquad, CampFriendSquadMember } from '@/generated/prisma'
@@ -760,6 +761,9 @@ export async function confirmRegistrationsFromPayment(params: {
       return { data: null, error: null }
     }
 
+    // Capture IDs of registrations being newly confirmed (for email sending)
+    const newlyConfirmedIds = registrations.map((r) => r.id)
+
     // Update all registrations
     await prisma.registration.updateMany({
       where: {
@@ -771,6 +775,15 @@ export async function confirmRegistrationsFromPayment(params: {
         paidAt: new Date(),
       },
     })
+
+    // Send confirmation emails for newly confirmed registrations
+    const tenantId = registrations[0]?.tenantId
+    if (tenantId) {
+      for (const regId of newlyConfirmedIds) {
+        sendRegistrationConfirmationEmail({ registrationId: regId, tenantId })
+          .catch((err) => console.error('[CampRegistration] Failed to send confirmation email:', err))
+      }
+    }
 
     // Ensure parent has the parent role (for dashboard access)
     const parentIds = [...new Set(registrations.map(r => r.parentId))]

@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/client'
 import { ensureParentRole } from '@/lib/services/users'
+import { sendRegistrationConfirmationEmail } from '@/lib/services/email'
 
 export async function POST(request: NextRequest) {
   // Only allow in development mode
@@ -48,11 +49,20 @@ export async function POST(request: NextRequest) {
     // Ensure parent has the parent role for dashboard access
     const regs = await prisma.registration.findMany({
       where: { id: { in: registrationIds } },
-      select: { parentId: true },
+      select: { parentId: true, tenantId: true },
     })
     const parentIds = [...new Set(regs.map(r => r.parentId))]
     for (const pid of parentIds) {
       await ensureParentRole(pid)
+    }
+
+    // Send confirmation emails
+    const tenantId = regs[0]?.tenantId
+    if (tenantId) {
+      for (const regId of registrationIds) {
+        sendRegistrationConfirmationEmail({ registrationId: regId, tenantId })
+          .catch(err => console.error('[DevConfirm] Failed to send confirmation email:', err))
+      }
     }
 
     console.log(`[DevConfirm] Marked ${registrationIds.length} registrations as paid`)

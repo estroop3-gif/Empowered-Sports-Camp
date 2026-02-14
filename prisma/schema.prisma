@@ -480,6 +480,7 @@ model Addon {
   createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
   isTaxable          Boolean             @default(false) @map("is_taxable")
   isDefault          Boolean             @default(false) @map("is_default")
+  collectSize        Boolean             @default(false) @map("collect_size")
   variants           AddonVariant[]
   camp               Camp?               @relation(fields: [campId], references: [id], onDelete: Cascade)
   tenant             Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)

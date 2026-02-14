@@ -35,6 +35,7 @@ interface Addon {
   max_quantity: number
   is_active: boolean
   is_default: boolean
+  collect_size: boolean
   created_at: string
   variants: Array<{
     id: string
@@ -95,6 +96,7 @@ export default function CampAddonsPage({ params }: { params: Promise<{ campId: s
     priceCents: 0,
     isRequired: false,
     maxQuantity: 1,
+    collectSize: false,
   })
 
   // New template form state
@@ -105,6 +107,7 @@ export default function CampAddonsPage({ params }: { params: Promise<{ campId: s
     isRequired: false,
     maxQuantity: 1,
     isDefault: false,
+    collectSize: false,
   })
 
   // Edit form state
@@ -198,6 +201,7 @@ export default function CampAddonsPage({ params }: { params: Promise<{ campId: s
           priceCents: Math.round(newAddon.priceCents * 100),
           isRequired: newAddon.isRequired,
           maxQuantity: newAddon.maxQuantity,
+          collectSize: newAddon.collectSize,
         }),
       })
 
@@ -215,6 +219,7 @@ export default function CampAddonsPage({ params }: { params: Promise<{ campId: s
         priceCents: 0,
         isRequired: false,
         maxQuantity: 1,
+        collectSize: false,
       })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create add-on')
@@ -243,6 +248,7 @@ export default function CampAddonsPage({ params }: { params: Promise<{ campId: s
           isRequired: newTemplate.isRequired,
           maxQuantity: newTemplate.maxQuantity,
           isDefault: newTemplate.isDefault,
+          collectSize: newTemplate.collectSize,
         }),
       })
 
@@ -261,6 +267,7 @@ export default function CampAddonsPage({ params }: { params: Promise<{ campId: s
         isRequired: false,
         maxQuantity: 1,
         isDefault: false,
+        collectSize: false,
       })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create template')
@@ -683,6 +690,23 @@ export default function CampAddonsPage({ params }: { params: Promise<{ campId: s
                 </label>
               </div>
             </div>
+            <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                id="newCollectSize"
+                checked={newAddon.collectSize}
+                onChange={(e) => setNewAddon({ ...newAddon, collectSize: e.target.checked })}
+                className="h-5 w-5 accent-neon"
+              />
+              <label htmlFor="newCollectSize" className="text-white cursor-pointer">
+                Collect T-shirt Size
+              </label>
+              {newAddon.collectSize && (
+                <span className="text-xs text-white/40 ml-2">
+                  Standard sizes (YS–3XL) will be created automatically
+                </span>
+              )}
+            </div>
             <div className="flex justify-end gap-3 pt-4">
               <Button type="button" variant="outline-white" onClick={() => setShowAddForm(false)}>
                 Cancel
@@ -802,6 +826,11 @@ export default function CampAddonsPage({ params }: { params: Promise<{ campId: s
                         {addon.is_required && (
                           <span className="px-2 py-0.5 text-xs font-bold uppercase tracking-wider bg-magenta/20 text-magenta border border-magenta/30">
                             Required
+                          </span>
+                        )}
+                        {addon.collect_size && (
+                          <span className="px-2 py-0.5 text-xs font-bold uppercase tracking-wider bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
+                            T-Shirt Size
                           </span>
                         )}
                         {!addon.is_active && (
@@ -953,6 +982,23 @@ export default function CampAddonsPage({ params }: { params: Promise<{ campId: s
                   </label>
                 </div>
               </div>
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  id="templateCollectSize"
+                  checked={newTemplate.collectSize}
+                  onChange={(e) => setNewTemplate({ ...newTemplate, collectSize: e.target.checked })}
+                  className="h-5 w-5 accent-neon"
+                />
+                <label htmlFor="templateCollectSize" className="text-white cursor-pointer">
+                  Collect T-shirt Size
+                </label>
+                {newTemplate.collectSize && (
+                  <span className="text-xs text-white/40 ml-2">
+                    Standard sizes (YS–3XL) will be created automatically
+                  </span>
+                )}
+              </div>
               <div className="flex justify-end gap-3 pt-4">
                 <Button type="button" variant="outline-white" onClick={() => setShowCreateTemplate(false)}>
                   Cancel
@@ -1076,6 +1122,11 @@ export default function CampAddonsPage({ params }: { params: Promise<{ campId: s
                             {addon.is_required && (
                               <span className="px-2 py-0.5 text-xs font-bold uppercase tracking-wider bg-magenta/20 text-magenta border border-magenta/30">
                                 Required
+                              </span>
+                            )}
+                            {addon.collect_size && (
+                              <span className="px-2 py-0.5 text-xs font-bold uppercase tracking-wider bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
+                                T-Shirt Size
                               </span>
                             )}
                             {alreadyOnCamp && (

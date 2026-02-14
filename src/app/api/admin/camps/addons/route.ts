@@ -9,6 +9,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/client'
 import { getAuthenticatedUserFromRequest } from '@/lib/auth/cognito-server'
 
+const SIZE_VARIANTS = ['YS', 'YM', 'YL', 'S', 'M', 'L', 'XL', '2XL', '3XL']
+
 function formatAddon(addon: {
   id: string
   tenantId: string
@@ -21,6 +23,7 @@ function formatAddon(addon: {
   isActive: boolean
   isDefault: boolean
   isTaxable: boolean
+  collectSize: boolean
   createdAt: Date
   camp?: { id: string; name: string } | null
   variants: Array<{
@@ -43,6 +46,7 @@ function formatAddon(addon: {
     is_active: addon.isActive,
     is_default: addon.isDefault,
     is_taxable: addon.isTaxable,
+    collect_size: addon.collectSize,
     created_at: addon.createdAt.toISOString(),
     camp_name: addon.camp?.name || null,
     variants: addon.variants.map((v) => ({
@@ -137,6 +141,7 @@ export async function POST(request: NextRequest) {
       maxQuantity,
       isDefault,
       isTaxable,
+      collectSize,
       variants,
     } = body
 
@@ -146,6 +151,23 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
+
+    // If collectSize is true and no variants provided, auto-create size variants
+    const variantsToCreate = variants?.length
+      ? variants.map((v: { name: string; priceAdjustmentCents?: number; inventory?: number }) => ({
+          name: v.name,
+          priceAdjustmentCents: v.priceAdjustmentCents || 0,
+          inventory: v.inventory ?? null,
+          isActive: true,
+        }))
+      : collectSize
+        ? SIZE_VARIANTS.map((size) => ({
+            name: size,
+            priceAdjustmentCents: 0,
+            inventory: null,
+            isActive: true,
+          }))
+        : undefined
 
     // Create the add-on
     const addon = await prisma.addon.create({
@@ -160,16 +182,8 @@ export async function POST(request: NextRequest) {
         isActive: true,
         isDefault: isDefault || false,
         isTaxable: isTaxable || false,
-        variants: variants?.length
-          ? {
-              create: variants.map((v: { name: string; priceAdjustmentCents?: number; inventory?: number }) => ({
-                name: v.name,
-                priceAdjustmentCents: v.priceAdjustmentCents || 0,
-                inventory: v.inventory ?? null,
-                isActive: true,
-              })),
-            }
-          : undefined,
+        collectSize: collectSize || false,
+        variants: variantsToCreate ? { create: variantsToCreate } : undefined,
       },
       include: {
         variants: true,
@@ -213,10 +227,28 @@ export async function PUT(request: NextRequest) {
       isActive,
       isDefault,
       isTaxable,
+      collectSize,
     } = body
 
     if (!addonId) {
       return NextResponse.json({ error: 'addonId is required' }, { status: 400 })
+    }
+
+    // If toggling collectSize on, check if we need to auto-create size variants
+    if (collectSize === true) {
+      const existingVariants = await prisma.addonVariant.count({
+        where: { addonId },
+      })
+      if (existingVariants === 0) {
+        await prisma.addonVariant.createMany({
+          data: SIZE_VARIANTS.map((size) => ({
+            addonId,
+            name: size,
+            priceAdjustmentCents: 0,
+            isActive: true,
+          })),
+        })
+      }
     }
 
     const addon = await prisma.addon.update({
@@ -230,6 +262,7 @@ export async function PUT(request: NextRequest) {
         ...(isActive !== undefined && { isActive }),
         ...(isDefault !== undefined && { isDefault }),
         ...(isTaxable !== undefined && { isTaxable }),
+        ...(collectSize !== undefined && { collectSize }),
       },
       include: {
         variants: true,

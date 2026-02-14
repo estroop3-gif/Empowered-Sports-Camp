@@ -161,6 +161,13 @@ export async function createStripeCheckoutSession(params: {
         ensureParentRole(pid).catch(err => console.error('[Payments] ensureParentRole failed:', err))
       }
 
+      // Send confirmation emails for free registrations
+      const { sendRegistrationConfirmationEmail } = await import('./email')
+      for (const regId of allRegIds) {
+        sendRegistrationConfirmationEmail({ registrationId: regId, tenantId })
+          .catch(err => console.error('[Payments] Failed to send confirmation email:', err))
+      }
+
       return {
         data: {
           checkoutUrl: `${successUrl}?free=true`,
