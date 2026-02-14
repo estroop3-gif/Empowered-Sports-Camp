@@ -1326,7 +1326,7 @@ export async function sendWeeklyReportEmail(): Promise<{ data: EmailResult | nul
       ${revenueAllTimeHtml}
       ${kpiHtml}
       ${promoHtml}
-      ${emailParagraph(`This report is sent automatically every Monday at 9:00 AM UTC.`)}
+      ${emailParagraph(`This report is sent automatically every Monday at 9:00 AM EST.`)}
     `
 
     const html = brandWrap(bodyContent)
