@@ -80,10 +80,11 @@ interface RegistrationDetailItem {
 }
 
 interface TotalRevenuePeriodData {
-  gross: number
+  grossVolume: number
+  refunded: number
   transactions: number
   stripeFees: number
-  netRevenue: number
+  netVolume: number
 }
 
 interface TotalRevenueByPeriod {
@@ -239,7 +240,7 @@ export default function LicensorDashboard() {
     hqRevenue: 0,
     royaltyRate: 0.1,
   }
-  const emptyPeriod: TotalRevenuePeriodData = { gross: 0, transactions: 0, stripeFees: 0, netRevenue: 0 }
+  const emptyPeriod: TotalRevenuePeriodData = { grossVolume: 0, refunded: 0, transactions: 0, stripeFees: 0, netVolume: 0 }
   const totalRevenueByPeriod = data?.totalRevenueByPeriod || {
     allTime: emptyPeriod,
     thirtyDays: emptyPeriod,
@@ -382,15 +383,21 @@ export default function LicensorDashboard() {
             const period = totalRevenueByPeriod[totalRevenuePeriod]
             return (
               <div className="py-2 space-y-4">
-                <div className="grid grid-cols-3 gap-6">
+                <div className="grid grid-cols-4 gap-6">
                   <div>
-                    <p className="text-xs font-bold uppercase tracking-wider text-white/40 mb-1">Gross Revenue</p>
+                    <p className="text-xs font-bold uppercase tracking-wider text-white/40 mb-1">Gross Volume</p>
                     <span className="text-2xl font-black text-white">
-                      {formatCurrency(period.gross)}
+                      {formatCurrency(period.grossVolume)}
                     </span>
                     <p className="text-xs text-white/30 mt-0.5">
                       {period.transactions.toLocaleString()} transaction{period.transactions !== 1 ? 's' : ''}
                     </p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-wider text-white/40 mb-1">Refunds</p>
+                    <span className="text-2xl font-black text-magenta">
+                      {period.refunded > 0 ? `-${formatCurrency(period.refunded)}` : '$0'}
+                    </span>
                   </div>
                   <div>
                     <p className="text-xs font-bold uppercase tracking-wider text-white/40 mb-1">Est. Stripe Fees</p>
@@ -400,15 +407,15 @@ export default function LicensorDashboard() {
                     <p className="text-xs text-white/30 mt-0.5">2.9% + $0.30/txn</p>
                   </div>
                   <div>
-                    <p className="text-xs font-bold uppercase tracking-wider text-white/40 mb-1">Est. Take-Home</p>
+                    <p className="text-xs font-bold uppercase tracking-wider text-white/40 mb-1">Est. Net Volume</p>
                     <span className="text-2xl font-black text-neon">
-                      {formatCurrency(period.netRevenue)}
+                      {formatCurrency(period.netVolume)}
                     </span>
-                    <p className="text-xs text-white/30 mt-0.5">After processing fees</p>
+                    <p className="text-xs text-white/30 mt-0.5">After fees &amp; refunds</p>
                   </div>
                 </div>
                 <p className="text-xs text-white/30">
-                  Stripe fee estimates may not be 100% accurate. Check your Stripe dashboard for exact amounts.
+                  Estimates based on standard Stripe rate (2.9% + $0.30). Check your Stripe dashboard for exact amounts. Payouts may differ due to Stripe&apos;s payout schedule.
                 </p>
               </div>
             )
