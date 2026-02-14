@@ -29,24 +29,24 @@ export async function POST(request: NextRequest) {
     const response = NextResponse.json({ success: true })
 
     // Set cookies with secure options
-    // Use 24 hours for session tokens to reduce login friction
+    // Use 30 days for all tokens so cookies persist as long as the refresh token.
+    // The JWT inside is still validated server-side on every request, so expired
+    // JWTs trigger a server-side refresh using the refresh_token cookie.
+    const maxAge = 30 * 24 * 60 * 60 // 30 days
+
     const cookieOptions = {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax' as const,
       path: '/',
-      maxAge: 24 * 60 * 60, // 24 hours for session stability
+      maxAge,
     }
 
     response.cookies.set('id_token', idToken, cookieOptions)
     response.cookies.set('access_token', accessToken, cookieOptions)
 
-    // Refresh token has longer expiry (30 days)
     if (refreshToken) {
-      response.cookies.set('refresh_token', refreshToken, {
-        ...cookieOptions,
-        maxAge: 30 * 24 * 60 * 60, // 30 days
-      })
+      response.cookies.set('refresh_token', refreshToken, cookieOptions)
     }
 
     return response

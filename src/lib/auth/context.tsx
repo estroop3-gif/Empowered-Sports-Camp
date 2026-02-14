@@ -6,6 +6,7 @@ import {
   getCurrentSession,
   signOut as cognitoSignOut,
   checkAndRefreshSession,
+  refreshAndSyncSession,
   type AuthUser,
 } from './cognito-client'
 
@@ -243,6 +244,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const cognitoUser = await getCurrentUser()
 
       if (cognitoUser) {
+        // Sync tokens to server cookies immediately so API calls work.
+        // This handles the case where the client-side SDK refreshed tokens
+        // (via localStorage) but the server cookies were stale or expired.
+        await refreshAndSyncSession()
+
         setUser({
           id: cognitoUser.id,
           email: cognitoUser.email,
@@ -269,42 +275,75 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     initAuth()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Check and refresh session periodically (every 5 minutes)
-  // This keeps the session alive for up to 30 days (refresh token validity)
+  // Check and refresh session periodically.
+  // Uses a failure counter so a single transient error doesn't log the user out
+  // mid-registration. Only signs out after 3 consecutive failures.
+  const refreshFailCountRef = useRef(0)
+  const MAX_REFRESH_FAILURES = 3
+
   useEffect(() => {
     const checkSession = async () => {
       if (!user) return
 
-      // Try to refresh the session if needed
+      // Try client-side refresh first (checks expiry, refreshes if needed)
       const refreshed = await checkAndRefreshSession()
 
-      if (!refreshed) {
-        // Session couldn't be refreshed - may need to login again
-        const session = await getCurrentSession()
-        if (!session) {
-          // Session completely expired
-          setUser(null)
-          setActualRole(null)
-          setTenant(null)
-          setViewingAsRoleState(null)
-          initializedRef.current = false
-          if (typeof window !== 'undefined') {
-            sessionStorage.removeItem(VIEWING_AS_ROLE_KEY)
-          }
+      if (refreshed) {
+        refreshFailCountRef.current = 0
+        return
+      }
+
+      // Client-side refresh failed — try server-side /api/auth/refresh as fallback
+      try {
+        const res = await fetch('/api/auth/refresh', { method: 'POST' })
+        if (res.ok) {
+          refreshFailCountRef.current = 0
+          return
+        }
+      } catch {
+        // Server refresh also failed
+      }
+
+      // Both methods failed — increment failure counter
+      refreshFailCountRef.current += 1
+      console.warn(
+        `[Auth] Session refresh failed (${refreshFailCountRef.current}/${MAX_REFRESH_FAILURES})`
+      )
+
+      // Only sign out after multiple consecutive failures
+      if (refreshFailCountRef.current >= MAX_REFRESH_FAILURES) {
+        console.warn('[Auth] Max refresh failures reached, signing out')
+        setUser(null)
+        setActualRole(null)
+        setTenant(null)
+        setViewingAsRoleState(null)
+        initializedRef.current = false
+        refreshFailCountRef.current = 0
+        if (typeof window !== 'undefined') {
+          sessionStorage.removeItem(VIEWING_AS_ROLE_KEY)
         }
       }
     }
 
     // Initial check after a short delay
-    const initialCheck = setTimeout(checkSession, 5000) // 5 seconds after mount
+    const initialCheck = setTimeout(checkSession, 5000)
 
-    // Then check every 2 minutes to ensure tokens stay fresh
-    // This aggressive refresh prevents mid-operation expirations
+    // Check every 2 minutes to keep tokens fresh
     const interval = setInterval(checkSession, 2 * 60 * 1000)
+
+    // Also refresh when the user comes back to the tab (e.g., after checking email
+    // during registration). This prevents stale sessions when returning after a long gap.
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        checkSession()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
 
     return () => {
       clearTimeout(initialCheck)
       clearInterval(interval)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
   }, [user])
 

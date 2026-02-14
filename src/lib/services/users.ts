@@ -404,6 +404,40 @@ export async function deactivateUserRole(params: {
 }
 
 /**
+ * Delete a user completely from the database.
+ * Removes FK-restricted records (CampAttendance, PickupToken) first, then the Profile.
+ * All other relations have onDelete: Cascade and will be cleaned up automatically.
+ */
+export async function deleteUser(params: {
+  userId: string
+}): Promise<{ data: { success: boolean } | null; error: Error | null }> {
+  try {
+    const { userId } = params
+
+    await prisma.$transaction(async (tx) => {
+      // Delete records with required FK to Profile (no cascade)
+      await tx.campAttendance.deleteMany({
+        where: { parentProfileId: userId },
+      })
+
+      await tx.pickupToken.deleteMany({
+        where: { parentProfileId: userId },
+      })
+
+      // Delete the profile — all other relations cascade
+      await tx.profile.delete({
+        where: { id: userId },
+      })
+    })
+
+    return { data: { success: true }, error: null }
+  } catch (error) {
+    console.error('[Users] Failed to delete user:', error)
+    return { data: null, error: error as Error }
+  }
+}
+
+/**
  * Update user profile
  */
 export async function updateUserProfile(params: {

@@ -42,15 +42,15 @@ export async function POST(request: NextRequest) {
 
     const response = NextResponse.json({ success: true })
 
-    // Use 24 hours for session tokens
-    const sessionMaxAge = 24 * 60 * 60
+    // Use 30 days to match set-tokens — JWT validation still gates every request
+    const maxAge = 30 * 24 * 60 * 60
 
     response.cookies.set('access_token', tokens.access_token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       path: '/',
-      maxAge: sessionMaxAge,
+      maxAge,
     })
 
     response.cookies.set('id_token', tokens.id_token, {
@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       path: '/',
-      maxAge: sessionMaxAge,
+      maxAge,
     })
 
     return response

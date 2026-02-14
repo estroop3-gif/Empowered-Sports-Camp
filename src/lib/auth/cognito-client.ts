@@ -301,8 +301,10 @@ export function changePassword(oldPassword: string, newPassword: string): Promis
 }
 
 /**
- * Refresh the current session and sync cookies with server
- * This should be called periodically to keep the session alive
+ * Refresh the current session and sync cookies with server.
+ * Returns true if the client-side session is valid, even if the
+ * cookie sync fails (cookie sync is best-effort to avoid treating
+ * a network blip as a session failure).
  */
 export async function refreshAndSyncSession(): Promise<boolean> {
   const pool = getUserPool()
@@ -320,9 +322,9 @@ export async function refreshAndSyncSession(): Promise<boolean> {
         return
       }
 
+      // Session is valid — sync cookies as best-effort
       try {
-        // Sync the tokens with the server cookies
-        const response = await fetch('/api/auth/set-tokens', {
+        await fetch('/api/auth/set-tokens', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -332,11 +334,13 @@ export async function refreshAndSyncSession(): Promise<boolean> {
             expiresIn: session.getIdToken().getExpiration() - Math.floor(Date.now() / 1000),
           }),
         })
-
-        resolve(response.ok)
       } catch {
-        resolve(false)
+        // Cookie sync failed but client-side session is still valid
+        console.warn('[Auth] Cookie sync failed, client session still valid')
       }
+
+      // Return true since the client session refreshed successfully
+      resolve(true)
     })
   })
 }

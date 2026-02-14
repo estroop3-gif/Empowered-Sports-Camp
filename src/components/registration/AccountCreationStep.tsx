@@ -300,7 +300,18 @@ export function AccountCreationStep({ onContinue, onBack }: AccountCreationStepP
       if (error.code === 'NotAuthorizedException') {
         setLoginError('Incorrect email or password.')
       } else if (error.code === 'UserNotConfirmedException') {
-        setLoginError('Your account has not been verified. Please check your email for a verification code.')
+        // Resend the verification code and redirect to confirm phase
+        try {
+          await resendConfirmationCode(loginEmail)
+        } catch (resendErr) {
+          console.error('Failed to resend confirmation code:', resendErr)
+        }
+        setFormData(prev => ({ ...prev, email: loginEmail }))
+        setShowLoginModal(false)
+        setLoginEmail('')
+        setLoginPassword('')
+        setPhase('confirm')
+        return
       } else if (error.code === 'UserNotFoundException') {
         setLoginError('No account found with this email address.')
       } else {

@@ -167,24 +167,22 @@ export async function getAuthenticatedUserFromRequest(
     if (token) {
       user = await verifyToken(token)
       console.log('[auth] Token verification result:', user ? 'success' : 'failed')
+    }
 
-      // If ID token verification failed, try to refresh using refresh_token
-      if (!user && cookies['refresh_token']) {
-        console.log('[auth] ID token expired, attempting server-side refresh...')
-        try {
-          const newTokens = await refreshTokens(cookies['refresh_token'])
-          if (newTokens?.id_token) {
-            console.log('[auth] Server-side refresh successful, verifying new token...')
-            user = await verifyToken(newTokens.id_token)
-            if (user) {
-              console.log('[auth] New token verified successfully')
-              // Note: We can't set cookies from here, but the user is now authenticated
-              // The client should refresh its tokens on next checkSession call
-            }
+    // If no valid user yet, try to refresh using refresh_token
+    if (!user && cookies['refresh_token']) {
+      console.log('[auth] Attempting server-side refresh...')
+      try {
+        const newTokens = await refreshTokens(cookies['refresh_token'])
+        if (newTokens?.id_token) {
+          console.log('[auth] Server-side refresh successful, verifying new token...')
+          user = await verifyToken(newTokens.id_token)
+          if (user) {
+            console.log('[auth] New token verified successfully')
           }
-        } catch (refreshError) {
-          console.error('[auth] Server-side refresh failed:', refreshError)
         }
+      } catch (refreshError) {
+        console.error('[auth] Server-side refresh failed:', refreshError)
       }
     }
   }

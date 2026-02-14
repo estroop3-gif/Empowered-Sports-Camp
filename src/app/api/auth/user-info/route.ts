@@ -39,6 +39,38 @@ export async function GET(request: NextRequest) {
       })
     }
 
+    // If no profile exists but the user is authenticated in Cognito, auto-create one
+    if (!profile && authUser.email) {
+      try {
+        const newProfile = await prisma.$transaction(async (tx) => {
+          const p = await tx.profile.create({
+            data: {
+              id: authUser.id,
+              email: authUser.email,
+              firstName: authUser.firstName || null,
+              lastName: authUser.lastName || null,
+            },
+          })
+
+          await tx.userRoleAssignment.create({
+            data: {
+              userId: authUser.id,
+              role: 'parent',
+              isActive: true,
+            },
+          })
+
+          return p
+        })
+
+        console.log('[UserInfo] Auto-created profile for authenticated user:', authUser.id)
+        profile = newProfile
+      } catch (autoCreateErr) {
+        console.error('[UserInfo] Failed to auto-create profile:', autoCreateErr)
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      }
+    }
+
     // Security check: ensure the profile matches the authenticated user's email
     if (!profile || profile.email !== authUser.email) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })

@@ -50,6 +50,21 @@ function ConfirmContent() {
         } finally {
           sessionStorage.removeItem('signupProfileData')
         }
+      } else {
+        // No sessionStorage data — user navigated away before verifying.
+        // Create profile from Cognito attributes as a fallback.
+        try {
+          const response = await fetch('/api/auth/create-user-from-cognito', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email }),
+          })
+          if (!response.ok) {
+            console.error('Failed to create profile from Cognito:', await response.text())
+          }
+        } catch (profileErr) {
+          console.error('Error creating profile from Cognito:', profileErr)
+        }
       }
 
       setMessage('Account verified successfully! Redirecting to login...')

@@ -16,7 +16,9 @@ import {
   deactivateUserRole,
   updateUserProfile,
   createUser,
+  deleteUser,
 } from '@/lib/services/users'
+import { adminDeleteCognitoUser } from '@/lib/auth/cognito-admin'
 import { UserRole } from '@/generated/prisma'
 
 export async function GET(request: NextRequest) {
@@ -158,6 +160,30 @@ export async function POST(request: NextRequest) {
         const { data, error } = await deactivateUserRole({ userId })
         if (error) return NextResponse.json({ error: error.message }, { status: 500 })
         return NextResponse.json({ data })
+      }
+
+      case 'deleteUser': {
+        if (!email) {
+          return NextResponse.json({ error: 'email is required for deletion' }, { status: 400 })
+        }
+
+        // Prevent self-deletion
+        if (user.email === email) {
+          return NextResponse.json({ error: 'You cannot delete your own account' }, { status: 400 })
+        }
+
+        // Delete from Cognito (handle gracefully if not found)
+        try {
+          await adminDeleteCognitoUser(email)
+        } catch (cognitoErr) {
+          console.error('[API] Failed to delete Cognito user:', cognitoErr)
+          // Continue with DB deletion even if Cognito fails
+        }
+
+        // Delete from database
+        const { data: deleteData, error: deleteError } = await deleteUser({ userId })
+        if (deleteError) return NextResponse.json({ error: deleteError.message }, { status: 500 })
+        return NextResponse.json({ data: deleteData })
       }
 
       case 'updateProfile': {

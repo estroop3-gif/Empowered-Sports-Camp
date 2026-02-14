@@ -21,6 +21,7 @@ import {
   X,
   Check,
   RefreshCw,
+  AlertTriangle,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -117,6 +118,7 @@ export default function UsersPage() {
   const [isTenantModalOpen, setIsTenantModalOpen] = useState(false)
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false)
   const [isDeactivateModalOpen, setIsDeactivateModalOpen] = useState(false)
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
   const [isAddUserModalOpen, setIsAddUserModalOpen] = useState(false)
 
   // Form states
@@ -334,6 +336,44 @@ export default function UsersPage() {
     setActionLoading(false)
   }
 
+  const handleDelete = (user: UserWithRole) => {
+    setSelectedUser(user)
+    setActionError(null)
+    setIsDeleteModalOpen(true)
+  }
+
+  const submitDelete = async () => {
+    if (!selectedUser) return
+
+    setActionLoading(true)
+    setActionError(null)
+
+    try {
+      const res = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'deleteUser',
+          userId: selectedUser.id,
+          email: selectedUser.email,
+        }),
+      })
+
+      const { error } = await res.json()
+
+      if (error) {
+        setActionError(error)
+      } else {
+        setIsDeleteModalOpen(false)
+        loadUsers()
+      }
+    } catch (err) {
+      setActionError('Failed to delete user')
+    }
+
+    setActionLoading(false)
+  }
+
   const openAddUserModal = () => {
     setNewUserEmail('')
     setNewUserFirstName('')
@@ -410,6 +450,12 @@ export default function UsersPage() {
       label: 'Deactivate',
       icon: Trash2,
       onClick: () => handleDeactivate(u),
+      variant: 'danger' as const,
+    },
+    {
+      label: 'Delete Account',
+      icon: AlertTriangle,
+      onClick: () => handleDelete(u),
       variant: 'danger' as const,
     },
   ]
@@ -824,6 +870,62 @@ export default function UsersPage() {
                 <>
                   <Trash2 className="h-4 w-4 mr-2" />
                   Deactivate
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Delete Account Confirmation Modal */}
+      <Modal
+        isOpen={isDeleteModalOpen}
+        onClose={() => setIsDeleteModalOpen(false)}
+        title="Delete Account"
+        description="This action is permanent and cannot be undone."
+      >
+        <div className="space-y-4">
+          <div className="bg-red-500/10 border border-red-500/30 p-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-red-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm text-red-300 font-semibold">
+                  Permanently delete {selectedUser?.first_name || selectedUser?.email}?
+                </p>
+                <p className="text-xs text-red-300/70 mt-2">
+                  This will permanently remove the user from both Cognito (authentication)
+                  and the database. All associated data including roles, athletes, registrations,
+                  and other records will be deleted. This action cannot be reversed.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {actionError && (
+            <p className="text-red-400 text-sm">{actionError}</p>
+          )}
+
+          <div className="flex gap-3">
+            <Button
+              variant="outline-white"
+              className="flex-1"
+              onClick={() => setIsDeleteModalOpen(false)}
+              disabled={actionLoading}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="outline-white"
+              className="flex-1 border-red-500/50 text-red-400 hover:bg-red-500/10"
+              onClick={submitDelete}
+              disabled={actionLoading}
+            >
+              {actionLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <>
+                  <AlertTriangle className="h-4 w-4 mr-2" />
+                  Delete Permanently
                 </>
               )}
             </Button>
