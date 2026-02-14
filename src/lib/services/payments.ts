@@ -558,13 +558,14 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session): Promise
       ? metadata.registrationIds.split(',')
       : [metadata.registrationId]
 
-    // Update ALL registration statuses
+    // Update ALL registration statuses and store checkout session ID
     await prisma.registration.updateMany({
       where: { id: { in: allRegIds } },
       data: {
         paymentStatus: 'paid',
         status: 'confirmed',
         stripePaymentIntentId: paymentIntentId,
+        stripeCheckoutSessionId: session.id,
         paidAt: new Date(),
         // Clear waitlist fields for any waitlisted registrations
         waitlistPosition: null,
@@ -572,6 +573,36 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session): Promise
         waitlistOfferExpiresAt: null,
       },
     })
+
+    // Fix addonsTotalCents and totalPriceCents from actual registrationAddons
+    // This ensures DB matches Stripe's actual charge regardless of checkout calculation bugs
+    const regsWithAddons = await prisma.registration.findMany({
+      where: { id: { in: allRegIds } },
+      select: {
+        id: true,
+        basePriceCents: true,
+        discountCents: true,
+        promoDiscountCents: true,
+        addonsTotalCents: true,
+        taxCents: true,
+        registrationAddons: { select: { priceCents: true } },
+      },
+    })
+
+    for (const reg of regsWithAddons) {
+      const actualAddonTotal = reg.registrationAddons.reduce((s, a) => s + a.priceCents, 0)
+      if (actualAddonTotal !== reg.addonsTotalCents) {
+        const correctTotal = reg.basePriceCents - reg.discountCents - reg.promoDiscountCents + actualAddonTotal + reg.taxCents
+        await prisma.registration.update({
+          where: { id: reg.id },
+          data: {
+            addonsTotalCents: actualAddonTotal,
+            totalPriceCents: correctTotal,
+          },
+        })
+        console.log(`[Payments] Fixed registration ${reg.id}: addonsTotalCents ${reg.addonsTotalCents} → ${actualAddonTotal}, totalPriceCents → ${correctTotal}`)
+      }
+    }
 
     // Get all registration details for notifications
     const registrations = await prisma.registration.findMany({

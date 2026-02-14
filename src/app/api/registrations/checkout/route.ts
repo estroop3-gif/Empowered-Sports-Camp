@@ -239,9 +239,11 @@ export async function POST(request: NextRequest) {
       const discountCents = siblingDiscount
 
       // Calculate addons for this camper (before promo so we can scope the discount)
-      const camperAddOns = addOns.filter(a => a.camperId === camperData.id || !a.camperId)
-      const relevantAddOns = i === 0 ? addOns : camperAddOns.filter(a => a.camperId === camperData.id)
-      const addonsTotalCents = relevantAddOns.reduce((sum, a) => sum + a.unitPrice * a.quantity, 0)
+      // Use the same scoping as the addon attachment loop below:
+      // - addons specifically for this camper (camperId matches)
+      // - unassigned addons (no camperId) go to the first camper only
+      const camperAddOns = addOns.filter(a => a.camperId === camperData.id || (!a.camperId && i === 0))
+      const addonsTotalCents = camperAddOns.reduce((sum, a) => sum + a.unitPrice * a.quantity, 0)
 
       // Promo discount (apply only to first camper, scoped by appliesTo)
       let promoDiscountCents = 0
@@ -394,23 +396,20 @@ export async function POST(request: NextRequest) {
 
       registrationIds.push(regData.registrationId)
 
-      // Add addons for this registration
-      // Only add addons with valid UUIDs (skip default/fallback addons with non-UUID IDs)
+      // Add addons for this registration (camperAddOns already scoped to this camper)
       for (const addon of camperAddOns) {
-        if (addon.camperId === camperData.id || (addon.camperId === null && i === 0)) {
-          // Skip addons with non-UUID IDs (these are default/fallback addons)
-          if (!isValidUUID(addon.addonId)) {
-            console.log(`[Checkout] Skipping addon with non-UUID ID: ${addon.addonId}`)
-            continue
-          }
-          await addRegistrationAddon({
-            registrationId: regData.registrationId,
-            addonId: addon.addonId,
-            variantId: addon.variantId,
-            quantity: addon.quantity,
-            priceCents: addon.unitPrice * addon.quantity,
-          })
+        // Skip addons with non-UUID IDs (these are default/fallback addons)
+        if (!isValidUUID(addon.addonId)) {
+          console.log(`[Checkout] Skipping addon with non-UUID ID: ${addon.addonId}`)
+          continue
         }
+        await addRegistrationAddon({
+          registrationId: regData.registrationId,
+          addonId: addon.addonId,
+          variantId: addon.variantId,
+          quantity: addon.quantity,
+          priceCents: addon.unitPrice * addon.quantity,
+        })
       }
     }
 
