@@ -37,6 +37,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             description: true,
             startDate: true,
             endDate: true,
+            startTime: true,
+            endTime: true,
             priceCents: true,
             location: {
               select: {
@@ -111,6 +113,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         description: registration.camp.description,
         start_date: registration.camp.startDate.toISOString(),
         end_date: registration.camp.endDate.toISOString(),
+        start_time: registration.camp.startTime?.toISOString() || null,
+        end_time: registration.camp.endTime?.toISOString() || null,
         location_name: registration.camp.location?.name || null,
         city: registration.camp.location?.city || null,
         state: registration.camp.location?.state || null,

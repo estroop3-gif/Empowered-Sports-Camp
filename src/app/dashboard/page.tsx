@@ -658,7 +658,11 @@ export default function ParentDashboard() {
                             </div>
                             <div className="text-right">
                               <p className="font-black text-neon">{formatCurrency(reg.camps.price_cents)}</p>
-                              <p className="text-xs text-white/40 mt-1">Click to view details</p>
+                              {reg.payment_status === 'paid' ? (
+                                <p className="text-xs text-neon/70 mt-1 font-semibold">Paid — View Receipt</p>
+                              ) : (
+                                <p className="text-xs text-white/40 mt-1">View Details</p>
+                              )}
                             </div>
                           </div>
                         </Link>

@@ -29,23 +29,30 @@ export async function POST(req: Request) {
 
   // Send confirmation email for successful registration payments
   if (data?.eventType === 'checkout.session.completed' && data.resourceId) {
-    // Check if this is a registration (not an order)
+    // Find ALL registrations from this checkout session (supports multi-camper)
     const registration = await prisma.registration.findUnique({
       where: { id: data.resourceId },
-      select: { id: true, tenantId: true },
+      select: { stripeCheckoutSessionId: true },
     })
 
-    if (registration) {
-      // Send confirmation email via Resend
-      const { error: emailError } = await sendRegistrationConfirmationEmail({
-        registrationId: registration.id,
-        tenantId: registration.tenantId,
+    if (registration?.stripeCheckoutSessionId) {
+      const allRegistrations = await prisma.registration.findMany({
+        where: { stripeCheckoutSessionId: registration.stripeCheckoutSessionId },
+        select: { id: true, tenantId: true },
       })
 
-      if (emailError) {
-        console.error(`[Webhook] Failed to send confirmation email for registration ${registration.id}:`, emailError)
-      } else {
-        console.log(`[Webhook] Confirmation email sent for registration ${registration.id}`)
+      // Send confirmation email for EACH registration
+      for (const reg of allRegistrations) {
+        const { error: emailError } = await sendRegistrationConfirmationEmail({
+          registrationId: reg.id,
+          tenantId: reg.tenantId,
+        })
+
+        if (emailError) {
+          console.error(`[Webhook] Failed to send confirmation email for registration ${reg.id}:`, emailError)
+        } else {
+          console.log(`[Webhook] Confirmation email sent for registration ${reg.id}`)
+        }
       }
     }
   }

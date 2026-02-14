@@ -40,6 +40,8 @@ export interface RosterCamper {
   parentName: string | null
   parentEmail: string | null
   parentPhone: string | null
+  paymentStatus: string
+  totalPriceCents: number
 }
 
 export interface RosterCamperDetail extends RosterCamper {
@@ -346,6 +348,8 @@ export async function listCampersForSession(params: {
           : null,
         parentEmail: r.parent.email,
         parentPhone: r.parent.phone,
+        paymentStatus: r.paymentStatus,
+        totalPriceCents: r.totalPriceCents,
       }
     })
 
@@ -594,6 +598,8 @@ export async function getCamperDetail(params: {
             : null,
         parentEmail: shouldMaskContact ? null : registration.parent.email,
         parentPhone: shouldMaskContact ? null : registration.parent.phone,
+        paymentStatus: registration.paymentStatus,
+        totalPriceCents: registration.totalPriceCents,
         emergencyContactName: registration.athlete.emergencyContactName || registration.parent.emergencyContactName,
         emergencyContactPhone: registration.athlete.emergencyContactPhone || registration.parent.emergencyContactPhone,
         emergencyContactRelationship: registration.athlete.emergencyContactRelationship || registration.parent.emergencyContactRelationship,
@@ -777,6 +783,8 @@ export async function getCamperDetail(params: {
           : null,
       parentEmail: shouldMaskContact ? null : registration.parent.email,
       parentPhone: shouldMaskContact ? null : registration.parent.phone,
+      paymentStatus: registration.paymentStatus,
+      totalPriceCents: registration.totalPriceCents,
       emergencyContactName: registration.athlete.emergencyContactName || registration.parent.emergencyContactName,
       emergencyContactPhone: registration.athlete.emergencyContactPhone || registration.parent.emergencyContactPhone,
       emergencyContactRelationship: registration.athlete.emergencyContactRelationship || registration.parent.emergencyContactRelationship,

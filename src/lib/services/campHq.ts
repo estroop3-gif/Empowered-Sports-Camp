@@ -1210,3 +1210,130 @@ export async function getCampHqAttendanceReport(
     return { data: null, error: error as Error }
   }
 }
+
+// ============================================================================
+// FINANCIAL OVERVIEW
+// ============================================================================
+
+export interface FinancialOverview {
+  totalRevenueCents: number
+  registrationFeeCents: number
+  addonFeeCents: number
+  totalDiscountsCents: number
+  paidCount: number
+  unpaidCount: number
+  partialCount: number
+  refundedCount: number
+  registrations: Array<{
+    athleteName: string
+    parentName: string
+    parentEmail: string
+    basePriceCents: number
+    discountCents: number
+    promoDiscountCents: number
+    addonsTotalCents: number
+    totalPriceCents: number
+    paymentStatus: string
+    paidAt: string | null
+  }>
+}
+
+export async function getFinancialOverview(params: {
+  campId: string
+  tenantId: string | null
+}): Promise<{ data: FinancialOverview | null; error: Error | null }> {
+  try {
+    const { campId, tenantId } = params
+
+    // Verify camp and tenant access
+    const camp = await prisma.camp.findUnique({
+      where: { id: campId },
+      select: { id: true, tenantId: true },
+    })
+
+    if (!camp) {
+      return { data: null, error: new Error('Camp not found') }
+    }
+
+    if (tenantId && camp.tenantId !== tenantId) {
+      return { data: null, error: new Error('Not authorized') }
+    }
+
+    const registrations = await prisma.registration.findMany({
+      where: {
+        campId,
+        status: { not: 'cancelled' },
+      },
+      include: {
+        athlete: {
+          select: { firstName: true, lastName: true },
+        },
+        parent: {
+          select: { firstName: true, lastName: true, email: true },
+        },
+      },
+      orderBy: [
+        { athlete: { lastName: 'asc' } },
+        { athlete: { firstName: 'asc' } },
+      ],
+    })
+
+    let totalRevenueCents = 0
+    let registrationFeeCents = 0
+    let addonFeeCents = 0
+    let totalDiscountsCents = 0
+    let paidCount = 0
+    let unpaidCount = 0
+    let partialCount = 0
+    let refundedCount = 0
+
+    const registrationRows = registrations.map((r) => {
+      if (r.paymentStatus === 'paid') {
+        totalRevenueCents += r.totalPriceCents
+        registrationFeeCents += r.basePriceCents - r.discountCents - r.promoDiscountCents
+        addonFeeCents += r.addonsTotalCents
+        totalDiscountsCents += r.discountCents + r.promoDiscountCents
+        paidCount++
+      } else if (r.paymentStatus === 'partial') {
+        partialCount++
+      } else if (r.paymentStatus === 'refunded') {
+        refundedCount++
+      } else {
+        unpaidCount++
+      }
+
+      return {
+        athleteName: `${r.athlete.firstName} ${r.athlete.lastName}`,
+        parentName: r.parent.firstName && r.parent.lastName
+          ? `${r.parent.firstName} ${r.parent.lastName}`
+          : r.parent.email,
+        parentEmail: r.parent.email,
+        basePriceCents: r.basePriceCents,
+        discountCents: r.discountCents,
+        promoDiscountCents: r.promoDiscountCents,
+        addonsTotalCents: r.addonsTotalCents,
+        totalPriceCents: r.totalPriceCents,
+        paymentStatus: r.paymentStatus,
+        paidAt: r.paidAt?.toISOString() || null,
+      }
+    })
+
+    return {
+      data: {
+        totalRevenueCents,
+        registrationFeeCents,
+        addonFeeCents,
+        totalDiscountsCents,
+        paidCount,
+        unpaidCount,
+        partialCount,
+        refundedCount,
+        registrations: registrationRows,
+      },
+      error: null,
+    }
+  } catch (error) {
+    console.error('[getFinancialOverview] Error:', error)
+    return { data: null, error: error as Error }
+  }
+}

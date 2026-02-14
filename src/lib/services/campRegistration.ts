@@ -571,11 +571,166 @@ export async function createRegistrationCheckout(params: {
  * Confirm registrations after successful payment.
  * Called from Stripe webhook or for demo payments.
  */
+interface ConfirmReceiptRegistration {
+  athleteName: string
+  basePriceCents: number
+  discountCents: number
+  promoDiscountCents: number
+  addonsTotalCents: number
+  addons: Array<{ name: string; variant: string | null; quantity: number; priceCents: number }>
+  promoCode: { code: string; discountType: string; discountValue: number } | null
+}
+
+interface ConfirmReceiptData {
+  registrations: ConfirmReceiptRegistration[]
+  subtotalCents: number
+  totalDiscountCents: number
+  totalAddonsCents: number
+  taxCents: number
+  grandTotalCents: number
+}
+
+interface ConfirmResponse {
+  confirmed: number
+  confirmationNumber: string
+  campName: string
+  campDates: string
+  campTimes: string
+  location: string
+  locationAddress: string
+  athleteNames: string[]
+  totalPaid: string
+  registrationIds: string[]
+  receipt: ConfirmReceiptData
+}
+
+function formatTimeValue(time: Date | null): string {
+  if (!time) return ''
+  const hours = time.getUTCHours()
+  const minutes = time.getUTCMinutes()
+  const ampm = hours >= 12 ? 'PM' : 'AM'
+  const h = hours % 12 || 12
+  return `${h}:${minutes.toString().padStart(2, '0')} ${ampm}`
+}
+
+function buildConfirmResponse(
+  regs: Array<{
+    id: string
+    basePriceCents: number
+    discountCents: number
+    promoDiscountCents: number
+    addonsTotalCents: number
+    taxCents: number
+    totalPriceCents: number
+    athlete: { firstName: string; lastName: string }
+    camp: {
+      name: string
+      startDate: Date
+      endDate: Date
+      startTime: Date | null
+      endTime: Date | null
+      location: { name: string; address: string | null; city: string | null; state: string | null; zip: string | null } | null
+    }
+    promoCode: { code: string; discountType: string; discountValue: number } | null
+    registrationAddons: Array<{
+      quantity: number
+      priceCents: number
+      addon: { name: string } | null
+      variant: { name: string } | null
+    }>
+  }>,
+  sessionId: string,
+  confirmedCount: number,
+): ConfirmResponse {
+  const camp = regs[0].camp
+  const loc = camp.location
+  const locationStr = loc ? [loc.name, loc.city, loc.state].filter(Boolean).join(', ') : ''
+  const locationAddress = loc
+    ? [loc.address, loc.city, loc.state, loc.zip].filter(Boolean).join(', ')
+    : ''
+  const startDate = camp.startDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+  const endDate = camp.endDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+  const startTime = formatTimeValue(camp.startTime)
+  const endTime = formatTimeValue(camp.endTime)
+  const campTimes = startTime && endTime ? `${startTime} - ${endTime}` : ''
+
+  let subtotalCents = 0
+  let totalDiscountCents = 0
+  let totalAddonsCents = 0
+  let taxCents = 0
+  let grandTotalCents = 0
+
+  const receiptRegistrations: ConfirmReceiptRegistration[] = regs.map((r) => {
+    subtotalCents += r.basePriceCents
+    totalDiscountCents += r.discountCents + r.promoDiscountCents
+    totalAddonsCents += r.addonsTotalCents
+    taxCents += r.taxCents
+    grandTotalCents += r.totalPriceCents
+
+    return {
+      athleteName: `${r.athlete.firstName} ${r.athlete.lastName}`,
+      basePriceCents: r.basePriceCents,
+      discountCents: r.discountCents,
+      promoDiscountCents: r.promoDiscountCents,
+      addonsTotalCents: r.addonsTotalCents,
+      addons: r.registrationAddons.map((ra) => ({
+        name: ra.addon?.name || 'Add-on',
+        variant: ra.variant?.name || null,
+        quantity: ra.quantity,
+        priceCents: ra.priceCents,
+      })),
+      promoCode: r.promoCode
+        ? { code: r.promoCode.code, discountType: r.promoCode.discountType, discountValue: r.promoCode.discountValue }
+        : null,
+    }
+  })
+
+  return {
+    confirmed: confirmedCount,
+    confirmationNumber: `EA-${sessionId.slice(-8).toUpperCase()}`,
+    campName: camp.name,
+    campDates: `${startDate} - ${endDate}`,
+    campTimes,
+    location: locationStr,
+    locationAddress,
+    athleteNames: regs.map((r) => `${r.athlete.firstName} ${r.athlete.lastName}`),
+    totalPaid: `$${(grandTotalCents / 100).toFixed(2)}`,
+    registrationIds: regs.map((r) => r.id),
+    receipt: {
+      registrations: receiptRegistrations,
+      subtotalCents,
+      totalDiscountCents,
+      totalAddonsCents,
+      taxCents,
+      grandTotalCents,
+    },
+  }
+}
+
 export async function confirmRegistrationsFromPayment(params: {
   sessionId: string
-}): Promise<{ data: { confirmed: number; campName?: string; campDates?: string; location?: string; athleteNames?: string[]; totalPaid?: string; confirmationNumber?: string } | null; error: Error | null }> {
+}): Promise<{ data: ConfirmResponse | null; error: Error | null }> {
   try {
     const { sessionId } = params
+
+    const registrationInclude = {
+      camp: {
+        include: {
+          location: true,
+        },
+      },
+      athlete: true,
+      parent: true,
+      promoCode: {
+        select: { code: true, discountType: true, discountValue: true },
+      },
+      registrationAddons: {
+        include: {
+          addon: { select: { name: true } },
+          variant: { select: { name: true } },
+        },
+      },
+    }
 
     // Find registrations with this checkout session
     // Works for both real Stripe sessions and demo sessions since all registrations
@@ -585,47 +740,22 @@ export async function confirmRegistrationsFromPayment(params: {
         stripeCheckoutSessionId: sessionId,
         paymentStatus: { not: 'paid' },
       },
-      include: {
-        camp: {
-          include: {
-            location: true,
-          },
-        },
-        athlete: true,
-        parent: true,
-      },
+      include: registrationInclude,
     })
 
     if (registrations.length === 0) {
       // Check if already confirmed (e.g. webhook already processed)
       const alreadyConfirmed = await prisma.registration.findMany({
         where: { stripeCheckoutSessionId: sessionId },
-        include: {
-          camp: { include: { location: true } },
-          athlete: true,
-        },
+        include: registrationInclude,
       })
       if (alreadyConfirmed.length > 0) {
-        const camp = alreadyConfirmed[0].camp
-        const loc = camp.location
-        const locationStr = loc ? [loc.name, loc.city, loc.state].filter(Boolean).join(', ') : ''
-        const startDate = camp.startDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
-        const endDate = camp.endDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
-        const totalCents = alreadyConfirmed.reduce((sum, r) => sum + (r.totalPriceCents || 0), 0)
         return {
-          data: {
-            confirmed: 0,
-            campName: camp.name,
-            campDates: `${startDate} - ${endDate}`,
-            location: locationStr,
-            athleteNames: alreadyConfirmed.map(r => `${r.athlete.firstName} ${r.athlete.lastName}`),
-            totalPaid: `$${(totalCents / 100).toFixed(2)}`,
-            confirmationNumber: `EA-${sessionId.slice(-8).toUpperCase()}`,
-          },
+          data: buildConfirmResponse(alreadyConfirmed, sessionId, 0),
           error: null,
         }
       }
-      return { data: { confirmed: 0 }, error: null }
+      return { data: null, error: null }
     }
 
     // Update all registrations
@@ -691,24 +821,8 @@ export async function confirmRegistrationsFromPayment(params: {
       })
     }
 
-    // Build response with camp details
-    const camp = registrations[0].camp
-    const loc = camp.location
-    const locationStr = loc ? [loc.name, loc.city, loc.state].filter(Boolean).join(', ') : ''
-    const startDate = camp.startDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
-    const endDate = camp.endDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
-    const totalCents = registrations.reduce((sum, r) => sum + (r.totalPriceCents || 0), 0)
-
     return {
-      data: {
-        confirmed: registrations.length,
-        campName: camp.name,
-        campDates: `${startDate} - ${endDate}`,
-        location: locationStr,
-        athleteNames: registrations.map(r => `${r.athlete.firstName} ${r.athlete.lastName}`),
-        totalPaid: `$${(totalCents / 100).toFixed(2)}`,
-        confirmationNumber: `EA-${sessionId.slice(-8).toUpperCase()}`,
-      },
+      data: buildConfirmResponse(registrations, sessionId, registrations.length),
       error: null,
     }
   } catch (error) {

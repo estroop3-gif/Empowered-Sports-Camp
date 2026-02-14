@@ -62,6 +62,8 @@ interface RegistrationDetails {
     description: string | null
     start_date: string
     end_date: string
+    start_time: string | null
+    end_time: string | null
     location_name: string | null
     city: string | null
     state: string | null
@@ -683,6 +685,20 @@ export default function RegistrationDetailPage() {
               <div>
                 <p className="text-xs text-white/40 uppercase tracking-wider mb-1">Dates</p>
                 <p className="text-white">{formatDateRange(registration.camp.start_date, registration.camp.end_date)}</p>
+                {registration.camp.start_time && registration.camp.end_time && (
+                  <p className="text-sm text-white/60 mt-1">
+                    {(() => {
+                      const fmt = (iso: string) => {
+                        const d = new Date(iso)
+                        const h = d.getUTCHours()
+                        const m = d.getUTCMinutes()
+                        const ampm = h >= 12 ? 'PM' : 'AM'
+                        return `${h % 12 || 12}:${m.toString().padStart(2, '0')} ${ampm}`
+                      }
+                      return `${fmt(registration.camp.start_time!)} – ${fmt(registration.camp.end_time!)} daily`
+                    })()}
+                  </p>
+                )}
               </div>
               {(registration.camp.location_name || registration.camp.city) && (
                 <div>

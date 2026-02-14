@@ -444,6 +444,32 @@ function OverviewTab({
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date())
   const [refreshing, setRefreshing] = useState(false)
 
+  // Financial data
+  const [financialData, setFinancialData] = useState<{
+    totalRevenueCents: number
+    registrationFeeCents: number
+    addonFeeCents: number
+    totalDiscountsCents: number
+    paidCount: number
+    unpaidCount: number
+    partialCount: number
+    refundedCount: number
+    registrations: Array<{
+      athleteName: string
+      parentName: string
+      parentEmail: string
+      basePriceCents: number
+      discountCents: number
+      promoDiscountCents: number
+      addonsTotalCents: number
+      totalPriceCents: number
+      paymentStatus: string
+      paidAt: string | null
+    }>
+  } | null>(null)
+  const [financialLoading, setFinancialLoading] = useState(true)
+  const [showFinancialTable, setShowFinancialTable] = useState(false)
+
   // Modal states
   const [showStartDayModal, setShowStartDayModal] = useState(false)
   const [showEndDayModal, setShowEndDayModal] = useState(false)
@@ -466,6 +492,24 @@ function OverviewTab({
   useEffect(() => {
     loadActions()
   }, [loadActions])
+
+  // Load financial data
+  useEffect(() => {
+    async function loadFinancial() {
+      try {
+        const res = await fetch(`/api/camps/${campId}/hq?action=financial`)
+        const json = await res.json()
+        if (res.ok && json.data) {
+          setFinancialData(json.data)
+        }
+      } catch (err) {
+        console.error('Failed to load financial data:', err)
+      } finally {
+        setFinancialLoading(false)
+      }
+    }
+    loadFinancial()
+  }, [campId])
 
   // Update last updated timestamp when overview changes
   useEffect(() => {
@@ -770,6 +814,151 @@ function OverviewTab({
           </div>
         </PortalCard>
       </div>
+
+      {/* Revenue Section */}
+      <PortalCard title="Revenue" accent="neon">
+        {financialLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-6 w-6 animate-spin text-white/30" />
+          </div>
+        ) : financialData ? (
+          <div className="space-y-6">
+            {/* Revenue Summary Cards */}
+            <div className="grid gap-4 md:grid-cols-4">
+              <div className="bg-neon/5 border border-neon/20 p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <DollarSign className="h-4 w-4 text-neon" />
+                  <span className="text-xs font-semibold text-white/50 uppercase tracking-wider">Total Revenue</span>
+                </div>
+                <p className="text-2xl font-black text-neon">
+                  ${(financialData.totalRevenueCents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                </p>
+              </div>
+
+              <div className="bg-white/5 border border-white/10 p-4">
+                <span className="text-xs font-semibold text-white/50 uppercase tracking-wider">Registration Fees</span>
+                <p className="text-xl font-bold text-white mt-1">
+                  ${(financialData.registrationFeeCents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                </p>
+              </div>
+
+              <div className="bg-white/5 border border-white/10 p-4">
+                <span className="text-xs font-semibold text-white/50 uppercase tracking-wider">Add-On Fees</span>
+                <p className="text-xl font-bold text-white mt-1">
+                  ${(financialData.addonFeeCents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                </p>
+              </div>
+
+              <div className="bg-white/5 border border-white/10 p-4">
+                <span className="text-xs font-semibold text-white/50 uppercase tracking-wider">Payment Status</span>
+                <div className="flex items-center gap-3 mt-1">
+                  <span className="text-sm">
+                    <span className="font-bold text-green-400">{financialData.paidCount}</span>
+                    <span className="text-white/40"> paid</span>
+                  </span>
+                  {financialData.unpaidCount > 0 && (
+                    <span className="text-sm">
+                      <span className="font-bold text-orange-400">{financialData.unpaidCount}</span>
+                      <span className="text-white/40"> unpaid</span>
+                    </span>
+                  )}
+                  {financialData.refundedCount > 0 && (
+                    <span className="text-sm">
+                      <span className="font-bold text-purple-400">{financialData.refundedCount}</span>
+                      <span className="text-white/40"> refund</span>
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Detailed Breakdown Table */}
+            {financialData.registrations.length > 0 && (
+              <div>
+                <button
+                  onClick={() => setShowFinancialTable(!showFinancialTable)}
+                  className="text-sm text-neon hover:text-neon/80 font-semibold uppercase tracking-wider flex items-center gap-1"
+                >
+                  {showFinancialTable ? 'Hide' : 'Show'} Detailed Breakdown
+                  <ArrowRight className={cn('h-3 w-3 transition-transform', showFinancialTable && 'rotate-90')} />
+                </button>
+
+                {showFinancialTable && (
+                  <div className="mt-4 overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-white/10">
+                          <th className="text-left py-2 px-3 text-xs font-semibold text-white/50 uppercase tracking-wider">Athlete</th>
+                          <th className="text-left py-2 px-3 text-xs font-semibold text-white/50 uppercase tracking-wider">Parent</th>
+                          <th className="text-right py-2 px-3 text-xs font-semibold text-white/50 uppercase tracking-wider">Base Fee</th>
+                          <th className="text-right py-2 px-3 text-xs font-semibold text-white/50 uppercase tracking-wider">Discounts</th>
+                          <th className="text-right py-2 px-3 text-xs font-semibold text-white/50 uppercase tracking-wider">Add-Ons</th>
+                          <th className="text-right py-2 px-3 text-xs font-semibold text-white/50 uppercase tracking-wider">Total</th>
+                          <th className="text-center py-2 px-3 text-xs font-semibold text-white/50 uppercase tracking-wider">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5">
+                        {financialData.registrations.map((reg, i) => {
+                          const totalDisc = reg.discountCents + reg.promoDiscountCents
+                          return (
+                            <tr key={i} className="hover:bg-white/5">
+                              <td className="py-2 px-3 text-white">{reg.athleteName}</td>
+                              <td className="py-2 px-3 text-white/60">{reg.parentName}</td>
+                              <td className="py-2 px-3 text-right text-white">${(reg.basePriceCents / 100).toFixed(2)}</td>
+                              <td className="py-2 px-3 text-right text-green-400">
+                                {totalDisc > 0 ? `-$${(totalDisc / 100).toFixed(2)}` : '—'}
+                              </td>
+                              <td className="py-2 px-3 text-right text-white/60">
+                                {reg.addonsTotalCents > 0 ? `$${(reg.addonsTotalCents / 100).toFixed(2)}` : '—'}
+                              </td>
+                              <td className="py-2 px-3 text-right font-semibold text-white">${(reg.totalPriceCents / 100).toFixed(2)}</td>
+                              <td className="py-2 px-3 text-center">
+                                <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${
+                                  reg.paymentStatus === 'paid' ? 'bg-green-100 text-green-800' :
+                                  reg.paymentStatus === 'partial' ? 'bg-yellow-100 text-yellow-800' :
+                                  reg.paymentStatus === 'failed' ? 'bg-red-100 text-red-800' :
+                                  reg.paymentStatus === 'refunded' ? 'bg-purple-100 text-purple-800' :
+                                  'bg-orange-100 text-orange-800'
+                                }`}>
+                                  {reg.paymentStatus === 'paid' ? 'Paid' :
+                                   reg.paymentStatus === 'partial' ? 'Partial' :
+                                   reg.paymentStatus === 'failed' ? 'Failed' :
+                                   reg.paymentStatus === 'refunded' ? 'Refunded' :
+                                   'Pending'}
+                                </span>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                      <tfoot>
+                        <tr className="border-t-2 border-white/20">
+                          <td colSpan={2} className="py-2 px-3 font-bold text-white uppercase text-xs tracking-wider">Totals</td>
+                          <td className="py-2 px-3 text-right font-bold text-white">
+                            ${(financialData.registrations.reduce((s, r) => s + r.basePriceCents, 0) / 100).toFixed(2)}
+                          </td>
+                          <td className="py-2 px-3 text-right font-bold text-green-400">
+                            {financialData.totalDiscountsCents > 0 ? `-$${(financialData.totalDiscountsCents / 100).toFixed(2)}` : '—'}
+                          </td>
+                          <td className="py-2 px-3 text-right font-bold text-white/60">
+                            ${(financialData.addonFeeCents / 100).toFixed(2)}
+                          </td>
+                          <td className="py-2 px-3 text-right font-black text-neon text-base">
+                            ${(financialData.totalRevenueCents / 100).toFixed(2)}
+                          </td>
+                          <td></td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="text-white/40 text-sm py-4">No financial data available.</p>
+        )}
+      </PortalCard>
     </div>
   )
 }

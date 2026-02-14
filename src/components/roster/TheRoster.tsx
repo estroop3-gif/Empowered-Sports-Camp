@@ -666,6 +666,9 @@ export default function TheRoster({ campId, role, backUrl }: TheRosterProps) {
                         Status
                       </th>
                       <th className="text-center px-4 py-3 text-xs font-semibold text-white/50 uppercase tracking-wider">
+                        Payment
+                      </th>
+                      <th className="text-center px-4 py-3 text-xs font-semibold text-white/50 uppercase tracking-wider">
                         Flags
                       </th>
                       <th className="text-right px-4 py-3 text-xs font-semibold text-white/50 uppercase tracking-wider">
@@ -734,6 +737,11 @@ export default function TheRoster({ campId, role, backUrl }: TheRosterProps) {
                         {/* Status */}
                         <td className="px-4 py-3 text-center">
                           <StatusBadge status={camper.checkInStatus} />
+                        </td>
+
+                        {/* Payment */}
+                        <td className="px-4 py-3 text-center">
+                          <PaymentBadge status={camper.paymentStatus} />
                         </td>
 
                         {/* Flags */}
@@ -1134,6 +1142,30 @@ export default function TheRoster({ campId, role, backUrl }: TheRosterProps) {
         </div>
       )}
     </div>
+  )
+}
+
+function PaymentBadge({ status }: { status: string }) {
+  const styles: Record<string, string> = {
+    paid: 'bg-green-100 text-green-800',
+    partial: 'bg-yellow-100 text-yellow-800',
+    pending: 'bg-orange-100 text-orange-800',
+    failed: 'bg-red-100 text-red-800',
+    refunded: 'bg-purple-100 text-purple-800',
+  }
+
+  const labels: Record<string, string> = {
+    paid: 'Paid',
+    partial: 'Partial',
+    pending: 'Pending',
+    failed: 'Failed',
+    refunded: 'Refunded',
+  }
+
+  return (
+    <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${styles[status] || styles.pending}`}>
+      {labels[status] || status}
+    </span>
   )
 }
 

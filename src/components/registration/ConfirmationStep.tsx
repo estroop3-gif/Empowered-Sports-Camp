@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { CheckCircle2, Calendar, MapPin, Mail, Download, UserPlus } from 'lucide-react'
+import { CheckCircle2, Calendar, MapPin, Mail, Download, UserPlus, Receipt } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useCheckout } from '@/lib/checkout/context'
 import { parseDateSafe, formatTime12h } from '@/lib/utils'
@@ -15,8 +15,8 @@ import { InviteFriendModal } from '@/components/camps/InviteFriendModal'
  * DESIGN NOTES:
  * - Celebratory success state
  * - Confirmation number prominently displayed
- * - What's next section
- * - Quick actions (add to calendar, share)
+ * - Payment breakdown with totals
+ * - Quick actions (add to calendar, download receipt, share)
  */
 
 interface ConfirmationStepProps {
@@ -34,6 +34,10 @@ function formatDate(dateString: string): string {
 }
 
 const formatTime = formatTime12h
+
+function formatCents(cents: number): string {
+  return `$${(cents / 100).toFixed(2)}`
+}
 
 export function ConfirmationStep({ campSession, confirmationNumber }: ConfirmationStepProps) {
   const { state, totals } = useCheckout()
@@ -56,6 +60,240 @@ export function ConfirmationStep({ campSession, confirmationNumber }: Confirmati
     gcalUrl.searchParams.set('details', `Camp registration confirmation: ${confirmationNumber}`)
 
     window.open(gcalUrl.toString(), '_blank')
+  }
+
+  const handleDownloadReceipt = () => {
+    const printWindow = window.open('', '_blank')
+    if (!printWindow) {
+      alert('Please allow pop-ups to download the receipt')
+      return
+    }
+
+    const receiptDate = new Date().toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    })
+
+    const campName = campSession?.name || 'Camp Registration'
+    const campDates = campSession
+      ? `${parseDateSafe(campSession.startDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })} - ${parseDateSafe(campSession.endDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`
+      : ''
+    const campTimes = campSession
+      ? `${formatTime(campSession.dailyStartTime)} - ${formatTime(campSession.dailyEndTime)}`
+      : ''
+    const location = campSession?.location
+      ? [campSession.location.name, campSession.location.city, campSession.location.state].filter(Boolean).join(', ')
+      : ''
+
+    const camperNames = state.campers.map(c => `${c.firstName} ${c.lastName}`).join(', ')
+
+    // Build line items
+    let lineItemsHtml = ''
+    const pricePerCamper = campSession ? campSession.price : (totals.campSubtotal / Math.max(state.campers.length, 1))
+
+    for (const camper of state.campers) {
+      lineItemsHtml += `
+        <div class="line-item">
+          <span>${camper.firstName} ${camper.lastName} — Camp Registration</span>
+          <span>${formatCents(pricePerCamper)}</span>
+        </div>
+      `
+    }
+
+    if (totals.addOnsSubtotal > 0) {
+      lineItemsHtml += `
+        <div class="line-item">
+          <span>Add-Ons</span>
+          <span>${formatCents(totals.addOnsSubtotal)}</span>
+        </div>
+      `
+    }
+
+    if (totals.siblingDiscount > 0) {
+      lineItemsHtml += `
+        <div class="line-item discount">
+          <span>Sibling Discount</span>
+          <span>-${formatCents(totals.siblingDiscount)}</span>
+        </div>
+      `
+    }
+
+    if (totals.promoDiscount > 0) {
+      lineItemsHtml += `
+        <div class="line-item discount">
+          <span>Promo Code${state.promoCode ? ` (${state.promoCode.code})` : ''}</span>
+          <span>-${formatCents(totals.promoDiscount)}</span>
+        </div>
+      `
+    }
+
+    if (totals.tax > 0) {
+      lineItemsHtml += `
+        <div class="line-item">
+          <span>Sales Tax</span>
+          <span>${formatCents(totals.tax)}</span>
+        </div>
+      `
+    }
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Receipt - ${campName}</title>
+          <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+              padding: 40px;
+              max-width: 800px;
+              margin: 0 auto;
+              color: #333;
+            }
+            .header {
+              text-align: center;
+              margin-bottom: 40px;
+              padding-bottom: 20px;
+              border-bottom: 2px solid #00ff88;
+            }
+            .logo {
+              font-size: 24px;
+              font-weight: 900;
+              color: #00ff88;
+              text-transform: uppercase;
+              letter-spacing: 2px;
+            }
+            .receipt-title {
+              font-size: 14px;
+              color: #666;
+              margin-top: 8px;
+              text-transform: uppercase;
+              letter-spacing: 1px;
+            }
+            .section { margin-bottom: 30px; }
+            .section-title {
+              font-size: 12px;
+              text-transform: uppercase;
+              color: #999;
+              letter-spacing: 1px;
+              margin-bottom: 10px;
+            }
+            .camp-name {
+              font-size: 24px;
+              font-weight: 700;
+              margin-bottom: 5px;
+            }
+            .details { color: #666; font-size: 14px; line-height: 1.6; }
+            .divider {
+              border-top: 1px solid #eee;
+              margin: 20px 0;
+            }
+            .line-item {
+              display: flex;
+              justify-content: space-between;
+              padding: 8px 0;
+              font-size: 14px;
+            }
+            .line-item.discount { color: #00aa55; }
+            .line-item.total {
+              font-size: 18px;
+              font-weight: 700;
+              border-top: 2px solid #333;
+              margin-top: 10px;
+              padding-top: 15px;
+            }
+            .payment-info {
+              background: #f8f8f8;
+              padding: 15px;
+              border-radius: 8px;
+              margin-top: 20px;
+            }
+            .payment-status {
+              display: inline-block;
+              padding: 4px 12px;
+              border-radius: 4px;
+              font-size: 12px;
+              font-weight: 600;
+              text-transform: uppercase;
+              background: #00ff8820;
+              color: #00aa55;
+            }
+            .footer {
+              margin-top: 40px;
+              text-align: center;
+              color: #999;
+              font-size: 12px;
+            }
+            .confirmation-number {
+              font-family: monospace;
+              background: #f0f0f0;
+              padding: 2px 8px;
+              border-radius: 4px;
+            }
+            @media print {
+              body { padding: 20px; }
+              .no-print { display: none; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="logo">Empowered Sports Camp</div>
+            <div class="receipt-title">Registration Receipt</div>
+          </div>
+
+          <div class="section">
+            <div class="section-title">Camp Registration</div>
+            <div class="camp-name">${campName}</div>
+            <div class="details">
+              ${campDates ? campDates + '<br>' : ''}
+              ${campTimes ? campTimes + '<br>' : ''}
+              ${location ? location + '<br>' : ''}
+              Athletes: ${camperNames}
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="section">
+            <div class="section-title">Payment Summary</div>
+            ${lineItemsHtml}
+
+            <div class="line-item total">
+              <span>Total</span>
+              <span>${formatCents(totals.total)}</span>
+            </div>
+          </div>
+
+          <div class="payment-info">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <div class="section-title" style="margin-bottom: 5px;">Payment Status</div>
+                <span class="payment-status">Paid</span>
+              </div>
+              <div style="text-align: right;">
+                <div class="section-title" style="margin-bottom: 5px;">Date</div>
+                <span>${receiptDate}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="footer">
+            <p>Confirmation #: <span class="confirmation-number">${confirmationNumber}</span></p>
+            <p style="margin-top: 10px;">Thank you for registering with Empowered Sports Camp!</p>
+            <p style="margin-top: 5px;">Questions? Contact us at support@empoweredsportscamp.com</p>
+          </div>
+
+          <script>
+            window.onload = function() {
+              window.print();
+            }
+          </script>
+        </body>
+      </html>
+    `)
+    printWindow.document.close()
   }
 
   return (
@@ -150,6 +388,68 @@ export function ConfirmationStep({ campSession, confirmationNumber }: Confirmati
         </div>
       )}
 
+      {/* Payment Breakdown */}
+      {totals.total > 0 && (
+        <div className="bg-white/5 border border-white/10 p-6 text-left space-y-3">
+          <div className="flex items-center gap-2 justify-center">
+            <Receipt className="h-4 w-4 text-white/50" />
+            <h3 className="text-sm font-bold uppercase tracking-wider text-white">
+              Payment Summary
+            </h3>
+          </div>
+
+          <div className="space-y-1">
+            {/* Camp registration per camper */}
+            <div className="flex justify-between text-sm py-1">
+              <span className="text-white">
+                Camp Registration{state.campers.length > 1 ? ` (${state.campers.length} campers)` : ''}
+              </span>
+              <span className="text-white font-medium">{formatCents(totals.campSubtotal)}</span>
+            </div>
+
+            {/* Add-ons total */}
+            {totals.addOnsSubtotal > 0 && (
+              <div className="flex justify-between text-sm py-1">
+                <span className="text-white/60">Add-Ons</span>
+                <span className="text-white/60">{formatCents(totals.addOnsSubtotal)}</span>
+              </div>
+            )}
+
+            {/* Sibling discount */}
+            {totals.siblingDiscount > 0 && (
+              <div className="flex justify-between text-sm py-1">
+                <span className="text-green-400">Sibling Discount</span>
+                <span className="text-green-400">-{formatCents(totals.siblingDiscount)}</span>
+              </div>
+            )}
+
+            {/* Promo discount */}
+            {totals.promoDiscount > 0 && (
+              <div className="flex justify-between text-sm py-1">
+                <span className="text-green-400">
+                  Promo Code{state.promoCode ? ` (${state.promoCode.code})` : ''}
+                </span>
+                <span className="text-green-400">-{formatCents(totals.promoDiscount)}</span>
+              </div>
+            )}
+
+            {/* Tax */}
+            {totals.tax > 0 && (
+              <div className="flex justify-between text-sm py-1">
+                <span className="text-white/60">Sales Tax</span>
+                <span className="text-white/60">{formatCents(totals.tax)}</span>
+              </div>
+            )}
+
+            {/* Total */}
+            <div className="border-t-2 border-white/20 mt-2 pt-3 flex justify-between">
+              <span className="text-white font-bold uppercase tracking-wider">Total Paid</span>
+              <span className="text-xl font-black text-neon">{formatCents(totals.total)}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Email Notice */}
       <div className="bg-neon/10 border border-neon/30 p-4">
         <div className="flex items-center justify-center gap-2 text-neon">
@@ -202,7 +502,7 @@ export function ConfirmationStep({ campSession, confirmationNumber }: Confirmati
           <Calendar className="h-4 w-4 mr-2" />
           Add to Calendar
         </Button>
-        <Button variant="outline-neon">
+        <Button variant="outline-neon" onClick={handleDownloadReceipt}>
           <Download className="h-4 w-4 mr-2" />
           Download Receipt
         </Button>

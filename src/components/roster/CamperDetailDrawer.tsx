@@ -413,6 +413,37 @@ function OverviewTab({
         </dl>
       </section>
 
+      {/* Payment Info */}
+      <section>
+        <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">
+          Payment
+        </h3>
+        <dl className="space-y-2">
+          <div className="flex justify-between">
+            <dt className="text-sm text-gray-600">Payment Status</dt>
+            <dd>
+              <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${
+                camper.paymentStatus === 'paid' ? 'bg-green-100 text-green-800' :
+                camper.paymentStatus === 'partial' ? 'bg-yellow-100 text-yellow-800' :
+                camper.paymentStatus === 'failed' ? 'bg-red-100 text-red-800' :
+                camper.paymentStatus === 'refunded' ? 'bg-purple-100 text-purple-800' :
+                'bg-orange-100 text-orange-800'
+              }`}>
+                {camper.paymentStatus === 'paid' ? 'Paid' :
+                 camper.paymentStatus === 'partial' ? 'Partial' :
+                 camper.paymentStatus === 'failed' ? 'Failed' :
+                 camper.paymentStatus === 'refunded' ? 'Refunded' :
+                 'Pending'}
+              </span>
+            </dd>
+          </div>
+          <div className="flex justify-between">
+            <dt className="text-sm text-gray-600">Total Price</dt>
+            <dd className="text-sm font-medium">${(camper.totalPriceCents / 100).toFixed(2)}</dd>
+          </div>
+        </dl>
+      </section>
+
       {/* Upsells */}
       {camper.upsells.length > 0 && (
         <section>

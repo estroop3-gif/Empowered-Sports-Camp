@@ -462,6 +462,13 @@ export async function sendRegistrationConfirmationEmail(params: {
         athlete: true,
         parent: true,
         tenant: true,
+        promoCode: { select: { code: true, discountType: true, discountValue: true } },
+        registrationAddons: {
+          include: {
+            addon: { select: { name: true } },
+            variant: { select: { name: true } },
+          },
+        },
       },
     })
 
@@ -488,20 +495,47 @@ export async function sendRegistrationConfirmationEmail(params: {
       year: 'numeric',
     })
 
-    // Calculate total paid
-    const totalPaid = (registration.totalPriceCents || 0) / 100
+    // Format times
+    const formatTimeVal = (t: Date | null) => {
+      if (!t) return ''
+      const h = t.getUTCHours()
+      const m = t.getUTCMinutes()
+      const ampm = h >= 12 ? 'PM' : 'AM'
+      return `${h % 12 || 12}:${m.toString().padStart(2, '0')} ${ampm}`
+    }
+    const campTimes = registration.camp.startTime && registration.camp.endTime
+      ? `${formatTimeVal(registration.camp.startTime)} – ${formatTimeVal(registration.camp.endTime)}`
+      : ''
+
+    // Build receipt data for context
+    const fmtCents = (c: number) => `$${(c / 100).toFixed(2)}`
+    const addons = registration.registrationAddons.map((ra) => ({
+      name: ra.addon?.name || 'Add-on',
+      variant: ra.variant?.name || null,
+      quantity: ra.quantity,
+      priceCents: ra.priceCents,
+    }))
 
     const context: EmailContext = {
       parentName: registration.parent?.firstName || 'Parent',
       camperName: `${registration.athlete?.firstName || ''} ${registration.athlete?.lastName || ''}`.trim() || 'Your Athlete',
       campName: registration.camp.name,
       sessionDates: `${startDate} – ${endDate}`,
+      campTimes,
       facilityName: registration.camp.location?.name || 'TBA',
       facilityAddress: registration.camp.location?.address || '',
       facilityCity: registration.camp.location?.city || '',
       facilityState: registration.camp.location?.state || '',
-      totalPaid: `$${totalPaid.toFixed(2)}`,
+      totalPaid: fmtCents(registration.totalPriceCents),
+      basePriceCents: String(registration.basePriceCents),
+      discountCents: String(registration.discountCents),
+      promoDiscountCents: String(registration.promoDiscountCents),
+      addonsTotalCents: String(registration.addonsTotalCents),
+      taxCents: String(registration.taxCents),
+      promoCodeStr: registration.promoCode?.code || '',
+      addonsJson: JSON.stringify(addons),
       confirmationNumber: registration.id.slice(0, 8).toUpperCase(),
+      registrationId: registration.id,
       directorName: registration.tenant?.name || 'Empowered Sports Camp',
       directorPhone: registration.tenant?.contactPhone || '',
     }
@@ -976,7 +1010,82 @@ function buildEmailContent(templateCode: EmailTemplateCode, context: EmailContex
   let bodyContent = ''
 
   switch (templateCode) {
-    case 'REGISTRATION_CONFIRMATION':
+    case 'REGISTRATION_CONFIRMATION': {
+      // Build receipt line items
+      const baseCents = parseInt(String(context.basePriceCents || '0'), 10)
+      const discCents = parseInt(String(context.discountCents || '0'), 10)
+      const promoCents = parseInt(String(context.promoDiscountCents || '0'), 10)
+      const addonsCents = parseInt(String(context.addonsTotalCents || '0'), 10)
+      const taxAmt = parseInt(String(context.taxCents || '0'), 10)
+      const fmtC = (c: number) => `$${(c / 100).toFixed(2)}`
+
+      let receiptRows = `
+        <tr>
+          <td style="padding: 8px 0; color: ${BRAND.textMuted}; font-size: 14px; ${F} width: 60%;">Camp Registration</td>
+          <td style="padding: 8px 0; color: ${BRAND.textPrimary}; font-size: 14px; font-weight: 600; ${F} text-align: right;">${fmtC(baseCents)}</td>
+        </tr>
+      `
+
+      // Parse addon details
+      try {
+        const addonsArr = JSON.parse(String(context.addonsJson || '[]')) as Array<{ name: string; variant: string | null; quantity: number; priceCents: number }>
+        for (const addon of addonsArr) {
+          const label = `${addon.name}${addon.variant ? ` (${addon.variant})` : ''}${addon.quantity > 1 ? ` x${addon.quantity}` : ''}`
+          receiptRows += `
+            <tr>
+              <td style="padding: 4px 0 4px 16px; color: ${BRAND.textMuted}; font-size: 13px; ${F}">${label}</td>
+              <td style="padding: 4px 0; color: ${BRAND.textSecondary}; font-size: 13px; ${F} text-align: right;">${fmtC(addon.priceCents)}</td>
+            </tr>
+          `
+        }
+      } catch { /* ignore parse errors */ }
+
+      if (discCents > 0) {
+        receiptRows += `
+          <tr>
+            <td style="padding: 8px 0; color: ${BRAND.success}; font-size: 14px; ${F}">Sibling Discount</td>
+            <td style="padding: 8px 0; color: ${BRAND.success}; font-size: 14px; font-weight: 600; ${F} text-align: right;">-${fmtC(discCents)}</td>
+          </tr>
+        `
+      }
+
+      if (promoCents > 0) {
+        receiptRows += `
+          <tr>
+            <td style="padding: 8px 0; color: ${BRAND.success}; font-size: 14px; ${F}">Promo Code${context.promoCodeStr ? ` (${context.promoCodeStr})` : ''}</td>
+            <td style="padding: 8px 0; color: ${BRAND.success}; font-size: 14px; font-weight: 600; ${F} text-align: right;">-${fmtC(promoCents)}</td>
+          </tr>
+        `
+      }
+
+      if (taxAmt > 0) {
+        receiptRows += `
+          <tr>
+            <td style="padding: 8px 0; color: ${BRAND.textMuted}; font-size: 14px; ${F}">Sales Tax</td>
+            <td style="padding: 8px 0; color: ${BRAND.textSecondary}; font-size: 14px; ${F} text-align: right;">${fmtC(taxAmt)}</td>
+          </tr>
+        `
+      }
+
+      const receiptSection = `
+<table cellpadding="0" cellspacing="0" style="margin: 16px 0 24px; width: 100%; border-radius: 6px; overflow: hidden;">
+  <tr>
+    <td style="background-color: rgba(204,255,0,0.04); border: 1px solid rgba(204,255,0,0.12); border-radius: 6px; padding: 20px 24px;">
+      <table cellpadding="0" cellspacing="0" style="width: 100%;">
+        <tr><td colspan="2" style="padding: 0 0 12px; color: ${BRAND.neon}; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; ${F}">Payment Receipt</td></tr>
+        ${receiptRows}
+        <tr>
+          <td colspan="2" style="padding: 0;"><hr style="border: none; border-top: 2px solid ${BRAND.textPrimary}; margin: 12px 0 8px;" /></td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 0; color: ${BRAND.textPrimary}; font-size: 16px; font-weight: 700; ${F}">Total Paid</td>
+          <td style="padding: 8px 0; color: ${BRAND.neon}; font-size: 18px; font-weight: 700; ${F} text-align: right;">${context.totalPaid}</td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>`
+
       bodyContent = `
         ${emailLabel('Confirmed')}
         ${emailHeading(`You're<br/><span style="color: ${BRAND.neon};">All Set!</span>`)}
@@ -986,17 +1095,20 @@ function buildEmailContent(templateCode: EmailTemplateCode, context: EmailContex
         ${emailDetailsCard([
           { label: 'Camper Name', value: String(context.camperName) },
           { label: 'Camp Session', value: String(context.sessionDates) },
+          ...(context.campTimes ? [{ label: 'Daily Schedule', value: String(context.campTimes) }] : []),
           { label: 'Location', value: String(context.facilityName) },
           { label: 'Address', value: `${context.facilityAddress} ${context.facilityCity}, ${context.facilityState}` },
-          { label: 'Total Paid', value: String(context.totalPaid) },
           { label: 'Confirmation #', value: String(context.confirmationNumber) },
         ], 'Registration Details')}
+        ${receiptSection}
+        ${context.registrationId ? emailButton('View Full Receipt', `/dashboard/registrations/${context.registrationId}`) : ''}
         ${emailSubheading('What Happens Next?')}
         ${emailParagraph(`You will receive a detailed preparation email <strong style="color: ${BRAND.textPrimary};">two weeks before</strong> the camp start date with packing lists, check-in instructions, and the final schedule.`)}
         ${emailParagraph(`Thank you for trusting us with your athlete. We can't wait to see them on the field!`)}
         ${emailParagraph(`Best regards,<br/><strong style="color: ${BRAND.textPrimary};">${context.directorName}</strong>${context.directorPhone ? `<br/>${context.directorPhone}` : ''}`)}
       `
       break
+    }
 
     case 'CAMP_TWO_WEEKS_OUT':
       bodyContent = `
