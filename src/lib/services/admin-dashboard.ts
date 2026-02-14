@@ -6,6 +6,7 @@
  */
 
 import { prisma } from '@/lib/db/client'
+import Stripe from 'stripe'
 
 // =============================================================================
 // Types
@@ -433,64 +434,120 @@ export async function getAdminDashboardData(params: {
     }
 
     // -------------------------------------------------------------------------
-    // Total Revenue by Period (registration + add-ons)
+    // Total Revenue by Period — pulled directly from Stripe for accuracy
     // -------------------------------------------------------------------------
 
     const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000)
     const yearStart = new Date(now.getFullYear(), 0, 1)
 
-    // Gross includes ALL registrations that Stripe charged (paid + partial + refunded)
-    const grossWhere = {
-      status: { not: 'cancelled' as const },
-      paymentStatus: { in: ['paid' as const, 'partial' as const, 'refunded' as const] },
-    }
+    let totalRevenueByPeriod: TotalRevenueByPeriod
 
-    // Use refundAmountCents for actual refund tracking (both partial and full refunds)
-    const refundWhere = {
-      status: { not: 'cancelled' as const },
-      paymentStatus: { in: ['partial' as const, 'refunded' as const] },
-    }
+    try {
+      const stripeKey = process.env.STRIPE_SECRET_KEY || ''
+      if (!stripeKey || (!stripeKey.startsWith('sk_') && !stripeKey.startsWith('rk_'))) {
+        throw new Error('Stripe not configured')
+      }
 
-    const [
-      allTimeGross, thirtyDayGross, ninetyDayGross, ytdGross,
-      allTimeRefund, thirtyDayRefund, ninetyDayRefund, ytdRefund,
-    ] = await Promise.all([
-      // Gross (paid + partial + refunded) — matches Stripe Gross Volume
-      prisma.registration.aggregate({ where: grossWhere, _count: true, _sum: { totalPriceCents: true } }),
-      prisma.registration.aggregate({ where: { ...grossWhere, createdAt: { gte: thirtyDaysAgo } }, _count: true, _sum: { totalPriceCents: true } }),
-      prisma.registration.aggregate({ where: { ...grossWhere, createdAt: { gte: ninetyDaysAgo } }, _count: true, _sum: { totalPriceCents: true } }),
-      prisma.registration.aggregate({ where: { ...grossWhere, createdAt: { gte: yearStart } }, _count: true, _sum: { totalPriceCents: true } }),
-      // Actual refund amounts (uses refundAmountCents for accuracy, falls back to totalPriceCents for full refunds)
-      prisma.registration.aggregate({ where: refundWhere, _sum: { refundAmountCents: true, totalPriceCents: true } }),
-      prisma.registration.aggregate({ where: { ...refundWhere, createdAt: { gte: thirtyDaysAgo } }, _sum: { refundAmountCents: true, totalPriceCents: true } }),
-      prisma.registration.aggregate({ where: { ...refundWhere, createdAt: { gte: ninetyDaysAgo } }, _sum: { refundAmountCents: true, totalPriceCents: true } }),
-      prisma.registration.aggregate({ where: { ...refundWhere, createdAt: { gte: yearStart } }, _sum: { refundAmountCents: true, totalPriceCents: true } }),
-    ])
+      const stripeClient = new Stripe(stripeKey, { apiVersion: '2025-12-15.clover' })
 
-    // Stripe standard rate: 2.9% + $0.30 per transaction (charged on gross, not refunded by Stripe)
-    const calcPeriodData = (
-      grossAgg: typeof allTimeGross,
-      refundAgg: typeof allTimeRefund,
-    ): TotalRevenuePeriodData => {
-      const grossVolume = grossAgg._sum.totalPriceCents || 0
-      const transactions = grossAgg._count || 0
+      // Fetch all charges from Stripe with balance transaction for actual fees
+      const allCharges: Stripe.Charge[] = []
+      let hasMore = true
+      let startingAfter: string | undefined
 
-      // Use tracked refundAmountCents if available, otherwise fall back to full totalPriceCents for fully-refunded regs
-      const trackedRefunds = refundAgg._sum.refundAmountCents || 0
-      const fallbackRefunds = refundAgg._sum.totalPriceCents || 0
-      // If we have tracked refund data, use it; otherwise use totalPriceCents of refunded registrations
-      const refunded = trackedRefunds > 0 ? trackedRefunds : fallbackRefunds
+      while (hasMore) {
+        const batch = await stripeClient.charges.list({
+          limit: 100,
+          expand: ['data.balance_transaction'],
+          ...(startingAfter ? { starting_after: startingAfter } : {}),
+        })
+        allCharges.push(...batch.data)
+        hasMore = batch.has_more
+        if (batch.data.length > 0) startingAfter = batch.data[batch.data.length - 1].id
+      }
 
-      const stripeFees = Math.round(grossVolume * 0.029) + (transactions * 30)
-      const netVolume = grossVolume - refunded - stripeFees
-      return { grossVolume, refunded, transactions, stripeFees, netVolume }
-    }
+      // Calculate period data from actual Stripe charges
+      const calcStripePeriod = (since?: Date): TotalRevenuePeriodData => {
+        const filtered = since
+          ? allCharges.filter(c => new Date(c.created * 1000) >= since)
+          : allCharges
 
-    const totalRevenueByPeriod: TotalRevenueByPeriod = {
-      allTime: calcPeriodData(allTimeGross, allTimeRefund),
-      thirtyDays: calcPeriodData(thirtyDayGross, thirtyDayRefund),
-      ninetyDays: calcPeriodData(ninetyDayGross, ninetyDayRefund),
-      yearToDate: calcPeriodData(ytdGross, ytdRefund),
+        let grossVolume = 0
+        let refunded = 0
+        let stripeFees = 0
+        let transactions = 0
+
+        for (const charge of filtered) {
+          if (charge.paid) {
+            grossVolume += charge.amount
+            refunded += charge.amount_refunded
+            transactions++
+            const bt = charge.balance_transaction
+            if (bt && typeof bt !== 'string') {
+              stripeFees += bt.fee
+            }
+          }
+        }
+
+        return {
+          grossVolume,
+          refunded,
+          transactions,
+          stripeFees,
+          netVolume: grossVolume - refunded - stripeFees,
+        }
+      }
+
+      totalRevenueByPeriod = {
+        allTime: calcStripePeriod(),
+        thirtyDays: calcStripePeriod(thirtyDaysAgo),
+        ninetyDays: calcStripePeriod(ninetyDaysAgo),
+        yearToDate: calcStripePeriod(yearStart),
+      }
+    } catch (stripeError) {
+      // Fallback to DB-based calculation if Stripe API fails
+      console.warn('[AdminDashboard] Stripe API unavailable, using DB fallback:', stripeError)
+
+      const grossWhere = {
+        status: { not: 'cancelled' as const },
+        paymentStatus: { in: ['paid' as const, 'partial' as const, 'refunded' as const] },
+      }
+      const refundWhere = {
+        status: { not: 'cancelled' as const },
+        paymentStatus: { in: ['partial' as const, 'refunded' as const] },
+      }
+
+      const [allTimeGross, thirtyDayGross, ninetyDayGross, ytdGross,
+        allTimeRefund, thirtyDayRefund, ninetyDayRefund, ytdRefund] = await Promise.all([
+        prisma.registration.aggregate({ where: grossWhere, _count: true, _sum: { totalPriceCents: true } }),
+        prisma.registration.aggregate({ where: { ...grossWhere, createdAt: { gte: thirtyDaysAgo } }, _count: true, _sum: { totalPriceCents: true } }),
+        prisma.registration.aggregate({ where: { ...grossWhere, createdAt: { gte: ninetyDaysAgo } }, _count: true, _sum: { totalPriceCents: true } }),
+        prisma.registration.aggregate({ where: { ...grossWhere, createdAt: { gte: yearStart } }, _count: true, _sum: { totalPriceCents: true } }),
+        prisma.registration.aggregate({ where: refundWhere, _sum: { refundAmountCents: true, totalPriceCents: true } }),
+        prisma.registration.aggregate({ where: { ...refundWhere, createdAt: { gte: thirtyDaysAgo } }, _sum: { refundAmountCents: true, totalPriceCents: true } }),
+        prisma.registration.aggregate({ where: { ...refundWhere, createdAt: { gte: ninetyDaysAgo } }, _sum: { refundAmountCents: true, totalPriceCents: true } }),
+        prisma.registration.aggregate({ where: { ...refundWhere, createdAt: { gte: yearStart } }, _sum: { refundAmountCents: true, totalPriceCents: true } }),
+      ])
+
+      const calcFallback = (
+        grossAgg: typeof allTimeGross,
+        refundAgg: typeof allTimeRefund,
+      ): TotalRevenuePeriodData => {
+        const grossVolume = grossAgg._sum.totalPriceCents || 0
+        const transactions = grossAgg._count || 0
+        const trackedRefunds = refundAgg._sum.refundAmountCents || 0
+        const fallbackRefunds = refundAgg._sum.totalPriceCents || 0
+        const refundedAmt = trackedRefunds > 0 ? trackedRefunds : fallbackRefunds
+        const stripeFees = Math.round(grossVolume * 0.029) + (transactions * 30)
+        return { grossVolume, refunded: refundedAmt, transactions, stripeFees, netVolume: grossVolume - refundedAmt - stripeFees }
+      }
+
+      totalRevenueByPeriod = {
+        allTime: calcFallback(allTimeGross, allTimeRefund),
+        thirtyDays: calcFallback(thirtyDayGross, thirtyDayRefund),
+        ninetyDays: calcFallback(ninetyDayGross, ninetyDayRefund),
+        yearToDate: calcFallback(ytdGross, ytdRefund),
+      }
     }
 
     return {

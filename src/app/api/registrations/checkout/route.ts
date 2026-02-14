@@ -463,6 +463,12 @@ export async function POST(request: NextRequest) {
       checkoutUrl: checkoutData.checkoutUrl,
     })
 
+    // Store checkout session ID on all registrations for future Stripe tracking
+    await prisma.registration.updateMany({
+      where: { id: { in: registrationIds } },
+      data: { stripeCheckoutSessionId: checkoutData.sessionId },
+    })
+
     return NextResponse.json({
       data: {
         registrationIds,

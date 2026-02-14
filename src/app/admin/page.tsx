@@ -400,14 +400,13 @@ export default function LicensorDashboard() {
                     </span>
                   </div>
                   <div>
-                    <p className="text-xs font-bold uppercase tracking-wider text-white/40 mb-1">Est. Stripe Fees</p>
+                    <p className="text-xs font-bold uppercase tracking-wider text-white/40 mb-1">Stripe Fees</p>
                     <span className="text-2xl font-black text-magenta">
                       -{formatCurrency(period.stripeFees)}
                     </span>
-                    <p className="text-xs text-white/30 mt-0.5">2.9% + $0.30/txn</p>
                   </div>
                   <div>
-                    <p className="text-xs font-bold uppercase tracking-wider text-white/40 mb-1">Est. Net Volume</p>
+                    <p className="text-xs font-bold uppercase tracking-wider text-white/40 mb-1">Net Volume</p>
                     <span className="text-2xl font-black text-neon">
                       {formatCurrency(period.netVolume)}
                     </span>
@@ -415,7 +414,7 @@ export default function LicensorDashboard() {
                   </div>
                 </div>
                 <p className="text-xs text-white/30">
-                  Estimates based on standard Stripe rate (2.9% + $0.30). Check your Stripe dashboard for exact amounts. Payouts may differ due to Stripe&apos;s payout schedule.
+                  Revenue data synced directly from Stripe. Payouts may differ due to Stripe&apos;s payout schedule.
                 </p>
               </div>
             )
