@@ -79,12 +79,20 @@ interface RegistrationDetailItem {
   [key: string]: unknown
 }
 
+interface TotalRevenueByPeriod {
+  allTime: number
+  thirtyDays: number
+  ninetyDays: number
+  yearToDate: number
+}
+
 interface DashboardData {
   overview: DashboardOverview
   licensees: LicenseeItem[]
   recentActivity: ActivityItem[]
   revenueShare: RevenueShare
   registrationDetails: RegistrationDetailItem[]
+  totalRevenueByPeriod: TotalRevenueByPeriod
   comparison: {
     revenueChange: number
     registrationChange: number
@@ -92,6 +100,7 @@ interface DashboardData {
 }
 
 type TimeRange = '30d' | '90d' | 'ytd'
+type TotalRevenuePeriod = 'allTime' | 'thirtyDays' | 'ninetyDays' | 'yearToDate'
 
 export default function LicensorDashboard() {
   const { user } = useAuth()
@@ -100,6 +109,7 @@ export default function LicensorDashboard() {
   const [error, setError] = useState<string | null>(null)
   const [data, setData] = useState<DashboardData | null>(null)
   const [timeRange, setTimeRange] = useState<TimeRange>('30d')
+  const [totalRevenuePeriod, setTotalRevenuePeriod] = useState<TotalRevenuePeriod>('allTime')
 
   const userName = user?.firstName || user?.email?.split('@')[0] || 'Admin'
 
@@ -222,9 +232,22 @@ export default function LicensorDashboard() {
     hqRevenue: 0,
     royaltyRate: 0.1,
   }
+  const totalRevenueByPeriod = data?.totalRevenueByPeriod || {
+    allTime: 0,
+    thirtyDays: 0,
+    ninetyDays: 0,
+    yearToDate: 0,
+  }
   const comparison = data?.comparison || {
     revenueChange: 0,
     registrationChange: 0,
+  }
+
+  const totalRevenuePeriodLabels: Record<TotalRevenuePeriod, string> = {
+    allTime: 'All Time',
+    thirtyDays: '30 Days',
+    ninetyDays: '90 Days',
+    yearToDate: 'YTD',
   }
 
   return (
@@ -315,6 +338,48 @@ export default function LicensorDashboard() {
           accent="neon"
         />
       </StatCardGrid>
+
+      {/* Total Revenue Card */}
+      <div className="mb-8">
+        <ContentCard
+          title="Total Revenue"
+          description={totalRevenuePeriodLabels[totalRevenuePeriod]}
+          action={
+            <div className="inline-flex items-center gap-1 bg-black/50 border border-white/10 p-0.5">
+              {(
+                [
+                  ['allTime', 'All Time'],
+                  ['thirtyDays', '30d'],
+                  ['ninetyDays', '90d'],
+                  ['yearToDate', 'YTD'],
+                ] as const
+              ).map(([key, label]) => (
+                <button
+                  key={key}
+                  onClick={() => setTotalRevenuePeriod(key)}
+                  className={cn(
+                    'px-2.5 py-1 text-xs font-bold uppercase tracking-wider transition-colors',
+                    totalRevenuePeriod === key
+                      ? 'bg-neon text-black'
+                      : 'text-white/50 hover:text-white'
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          }
+        >
+          <div className="py-2">
+            <span className="text-4xl font-black text-neon">
+              {formatCurrency(totalRevenueByPeriod[totalRevenuePeriod])}
+            </span>
+            <p className="text-sm text-white/40 mt-2">
+              Registration fees + add-ons (excludes cancelled &amp; refunded)
+            </p>
+          </div>
+        </ContentCard>
+      </div>
 
       <div className="grid gap-8 lg:grid-cols-3">
         {/* Licensee Performance Table */}

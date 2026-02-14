@@ -59,12 +59,20 @@ export interface RevenueShareSummary {
   royaltyRate: number // e.g., 0.10 for 10%
 }
 
+export interface TotalRevenueByPeriod {
+  allTime: number
+  thirtyDays: number
+  ninetyDays: number
+  yearToDate: number
+}
+
 export interface AdminDashboardData {
   overview: AdminDashboardOverview
   licensees: LicenseeDashboardItem[]
   recentActivity: RecentActivityItem[]
   revenueShare: RevenueShareSummary
   registrationDetails: RegistrationDetailItem[]
+  totalRevenueByPeriod: TotalRevenueByPeriod
 }
 
 // =============================================================================
@@ -416,6 +424,40 @@ export async function getAdminDashboardData(params: {
       royaltyRate,
     }
 
+    // -------------------------------------------------------------------------
+    // Total Revenue by Period (registration + add-ons)
+    // -------------------------------------------------------------------------
+
+    const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000)
+    const yearStart = new Date(now.getFullYear(), 0, 1)
+    const baseWhere = { status: { not: 'cancelled' as const }, paymentStatus: { not: 'refunded' as const } }
+
+    const [allTimeAgg, thirtyDayAgg, ninetyDayAgg, ytdAgg] = await Promise.all([
+      prisma.registration.aggregate({
+        where: baseWhere,
+        _sum: { totalPriceCents: true },
+      }),
+      prisma.registration.aggregate({
+        where: { ...baseWhere, createdAt: { gte: thirtyDaysAgo } },
+        _sum: { totalPriceCents: true },
+      }),
+      prisma.registration.aggregate({
+        where: { ...baseWhere, createdAt: { gte: ninetyDaysAgo } },
+        _sum: { totalPriceCents: true },
+      }),
+      prisma.registration.aggregate({
+        where: { ...baseWhere, createdAt: { gte: yearStart } },
+        _sum: { totalPriceCents: true },
+      }),
+    ])
+
+    const totalRevenueByPeriod: TotalRevenueByPeriod = {
+      allTime: allTimeAgg._sum.totalPriceCents || 0,
+      thirtyDays: thirtyDayAgg._sum.totalPriceCents || 0,
+      ninetyDays: ninetyDayAgg._sum.totalPriceCents || 0,
+      yearToDate: ytdAgg._sum.totalPriceCents || 0,
+    }
+
     return {
       data: {
         overview,
@@ -423,6 +465,7 @@ export async function getAdminDashboardData(params: {
         recentActivity: topActivity,
         revenueShare,
         registrationDetails,
+        totalRevenueByPeriod,
       },
       error: null,
     }
@@ -457,38 +500,44 @@ export async function getAdminDashboardComparison(params: {
     const previousStart = new Date(currentStart.getTime() - periodLength)
     const previousEnd = new Date(currentStart.getTime())
 
-    // Current period - all non-cancelled, non-refunded registrations
-    const currentRegistrations = await prisma.registration.aggregate({
-      where: {
-        status: { not: 'cancelled' },
-        paymentStatus: { not: 'refunded' },
-        createdAt: {
-          gte: currentStart,
-          lte: currentEnd,
+    // Current period - registration revenue only (base - discounts, excludes add-ons)
+    const [currentRegs, previousRegs] = await Promise.all([
+      prisma.registration.findMany({
+        where: {
+          status: { not: 'cancelled' },
+          paymentStatus: { not: 'refunded' },
+          createdAt: { gte: currentStart, lte: currentEnd },
         },
-      },
-      _count: true,
-      _sum: { totalPriceCents: true },
-    })
-
-    // Previous period - all non-cancelled, non-refunded registrations
-    const previousRegistrations = await prisma.registration.aggregate({
-      where: {
-        status: { not: 'cancelled' },
-        paymentStatus: { not: 'refunded' },
-        createdAt: {
-          gte: previousStart,
-          lte: previousEnd,
+        select: {
+          basePriceCents: true,
+          discountCents: true,
+          promoDiscountCents: true,
         },
-      },
-      _count: true,
-      _sum: { totalPriceCents: true },
-    })
+      }),
+      prisma.registration.findMany({
+        where: {
+          status: { not: 'cancelled' },
+          paymentStatus: { not: 'refunded' },
+          createdAt: { gte: previousStart, lte: previousEnd },
+        },
+        select: {
+          basePriceCents: true,
+          discountCents: true,
+          promoDiscountCents: true,
+        },
+      }),
+    ])
 
-    const currentRevenue = currentRegistrations._sum.totalPriceCents || 0
-    const previousRevenue = previousRegistrations._sum.totalPriceCents || 0
-    const currentCount = currentRegistrations._count || 0
-    const previousCount = previousRegistrations._count || 0
+    const calcRegRevenue = (regs: typeof currentRegs) =>
+      regs.reduce(
+        (sum, r) => sum + Math.max(0, (r.basePriceCents || 0) - (r.discountCents || 0) - (r.promoDiscountCents || 0)),
+        0
+      )
+
+    const currentRevenue = calcRegRevenue(currentRegs)
+    const previousRevenue = calcRegRevenue(previousRegs)
+    const currentCount = currentRegs.length
+    const previousCount = previousRegs.length
 
     const revenueChange = previousRevenue > 0
       ? ((currentRevenue - previousRevenue) / previousRevenue) * 100
