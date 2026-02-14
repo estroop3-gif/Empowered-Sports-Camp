@@ -1216,10 +1216,18 @@ export async function getCampHqAttendanceReport(
 // ============================================================================
 
 export interface FinancialOverview {
-  totalRevenueCents: number
-  registrationFeeCents: number
-  addonFeeCents: number
-  totalDiscountsCents: number
+  // Collected revenue (paid only)
+  collectedRevenueCents: number
+  collectedRegistrationFeeCents: number
+  collectedAddonFeeCents: number
+  collectedDiscountsCents: number
+  // Expected revenue (all non-cancelled)
+  expectedRevenueCents: number
+  expectedRegistrationFeeCents: number
+  expectedAddonFeeCents: number
+  expectedDiscountsCents: number
+  // Counts
+  totalRegistrations: number
   paidCount: number
   unpaidCount: number
   partialCount: number
@@ -1278,21 +1286,31 @@ export async function getFinancialOverview(params: {
       ],
     })
 
-    let totalRevenueCents = 0
-    let registrationFeeCents = 0
-    let addonFeeCents = 0
-    let totalDiscountsCents = 0
+    let collectedRevenueCents = 0
+    let collectedRegistrationFeeCents = 0
+    let collectedAddonFeeCents = 0
+    let collectedDiscountsCents = 0
+    let expectedRevenueCents = 0
+    let expectedRegistrationFeeCents = 0
+    let expectedAddonFeeCents = 0
+    let expectedDiscountsCents = 0
     let paidCount = 0
     let unpaidCount = 0
     let partialCount = 0
     let refundedCount = 0
 
     const registrationRows = registrations.map((r) => {
+      // Always count expected revenue from all non-cancelled registrations
+      expectedRevenueCents += r.totalPriceCents
+      expectedRegistrationFeeCents += r.basePriceCents - r.discountCents - r.promoDiscountCents
+      expectedAddonFeeCents += r.addonsTotalCents
+      expectedDiscountsCents += r.discountCents + r.promoDiscountCents
+
       if (r.paymentStatus === 'paid') {
-        totalRevenueCents += r.totalPriceCents
-        registrationFeeCents += r.basePriceCents - r.discountCents - r.promoDiscountCents
-        addonFeeCents += r.addonsTotalCents
-        totalDiscountsCents += r.discountCents + r.promoDiscountCents
+        collectedRevenueCents += r.totalPriceCents
+        collectedRegistrationFeeCents += r.basePriceCents - r.discountCents - r.promoDiscountCents
+        collectedAddonFeeCents += r.addonsTotalCents
+        collectedDiscountsCents += r.discountCents + r.promoDiscountCents
         paidCount++
       } else if (r.paymentStatus === 'partial') {
         partialCount++
@@ -1320,10 +1338,15 @@ export async function getFinancialOverview(params: {
 
     return {
       data: {
-        totalRevenueCents,
-        registrationFeeCents,
-        addonFeeCents,
-        totalDiscountsCents,
+        collectedRevenueCents,
+        collectedRegistrationFeeCents,
+        collectedAddonFeeCents,
+        collectedDiscountsCents,
+        expectedRevenueCents,
+        expectedRegistrationFeeCents,
+        expectedAddonFeeCents,
+        expectedDiscountsCents,
+        totalRegistrations: registrations.length,
         paidCount,
         unpaidCount,
         partialCount,

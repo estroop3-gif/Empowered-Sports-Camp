@@ -446,10 +446,15 @@ function OverviewTab({
 
   // Financial data
   const [financialData, setFinancialData] = useState<{
-    totalRevenueCents: number
-    registrationFeeCents: number
-    addonFeeCents: number
-    totalDiscountsCents: number
+    collectedRevenueCents: number
+    collectedRegistrationFeeCents: number
+    collectedAddonFeeCents: number
+    collectedDiscountsCents: number
+    expectedRevenueCents: number
+    expectedRegistrationFeeCents: number
+    expectedAddonFeeCents: number
+    expectedDiscountsCents: number
+    totalRegistrations: number
     paidCount: number
     unpaidCount: number
     partialCount: number
@@ -468,7 +473,7 @@ function OverviewTab({
     }>
   } | null>(null)
   const [financialLoading, setFinancialLoading] = useState(true)
-  const [showFinancialTable, setShowFinancialTable] = useState(false)
+  const [showFinancialTable, setShowFinancialTable] = useState(true)
 
   // Modal states
   const [showStartDayModal, setShowStartDayModal] = useState(false)
@@ -828,29 +833,36 @@ function OverviewTab({
               <div className="bg-neon/5 border border-neon/20 p-4">
                 <div className="flex items-center gap-2 mb-2">
                   <DollarSign className="h-4 w-4 text-neon" />
-                  <span className="text-xs font-semibold text-white/50 uppercase tracking-wider">Total Revenue</span>
+                  <span className="text-xs font-semibold text-white/50 uppercase tracking-wider">Expected Revenue</span>
                 </div>
                 <p className="text-2xl font-black text-neon">
-                  ${(financialData.totalRevenueCents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  ${(financialData.expectedRevenueCents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                </p>
+              </div>
+
+              <div className="bg-green-500/5 border border-green-500/20 p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <DollarSign className="h-4 w-4 text-green-400" />
+                  <span className="text-xs font-semibold text-white/50 uppercase tracking-wider">Collected</span>
+                </div>
+                <p className="text-2xl font-black text-green-400">
+                  ${(financialData.collectedRevenueCents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                </p>
+              </div>
+
+              <div className="bg-orange-500/5 border border-orange-500/20 p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <DollarSign className="h-4 w-4 text-orange-400" />
+                  <span className="text-xs font-semibold text-white/50 uppercase tracking-wider">Outstanding</span>
+                </div>
+                <p className="text-2xl font-black text-orange-400">
+                  ${((financialData.expectedRevenueCents - financialData.collectedRevenueCents) / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                 </p>
               </div>
 
               <div className="bg-white/5 border border-white/10 p-4">
-                <span className="text-xs font-semibold text-white/50 uppercase tracking-wider">Registration Fees</span>
-                <p className="text-xl font-bold text-white mt-1">
-                  ${(financialData.registrationFeeCents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                </p>
-              </div>
-
-              <div className="bg-white/5 border border-white/10 p-4">
-                <span className="text-xs font-semibold text-white/50 uppercase tracking-wider">Add-On Fees</span>
-                <p className="text-xl font-bold text-white mt-1">
-                  ${(financialData.addonFeeCents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                </p>
-              </div>
-
-              <div className="bg-white/5 border border-white/10 p-4">
-                <span className="text-xs font-semibold text-white/50 uppercase tracking-wider">Payment Status</span>
+                <span className="text-xs font-semibold text-white/50 uppercase tracking-wider">Registrations</span>
+                <p className="text-2xl font-bold text-white mt-1">{financialData.totalRegistrations}</p>
                 <div className="flex items-center gap-3 mt-1">
                   <span className="text-sm">
                     <span className="font-bold text-green-400">{financialData.paidCount}</span>
@@ -860,6 +872,12 @@ function OverviewTab({
                     <span className="text-sm">
                       <span className="font-bold text-orange-400">{financialData.unpaidCount}</span>
                       <span className="text-white/40"> unpaid</span>
+                    </span>
+                  )}
+                  {financialData.partialCount > 0 && (
+                    <span className="text-sm">
+                      <span className="font-bold text-yellow-400">{financialData.partialCount}</span>
+                      <span className="text-white/40"> partial</span>
                     </span>
                   )}
                   {financialData.refundedCount > 0 && (
@@ -938,13 +956,13 @@ function OverviewTab({
                             ${(financialData.registrations.reduce((s, r) => s + r.basePriceCents, 0) / 100).toFixed(2)}
                           </td>
                           <td className="py-2 px-3 text-right font-bold text-green-400">
-                            {financialData.totalDiscountsCents > 0 ? `-$${(financialData.totalDiscountsCents / 100).toFixed(2)}` : '—'}
+                            {financialData.expectedDiscountsCents > 0 ? `-$${(financialData.expectedDiscountsCents / 100).toFixed(2)}` : '—'}
                           </td>
                           <td className="py-2 px-3 text-right font-bold text-white/60">
-                            ${(financialData.addonFeeCents / 100).toFixed(2)}
+                            ${(financialData.expectedAddonFeeCents / 100).toFixed(2)}
                           </td>
                           <td className="py-2 px-3 text-right font-black text-neon text-base">
-                            ${(financialData.totalRevenueCents / 100).toFixed(2)}
+                            ${(financialData.expectedRevenueCents / 100).toFixed(2)}
                           </td>
                           <td></td>
                         </tr>
