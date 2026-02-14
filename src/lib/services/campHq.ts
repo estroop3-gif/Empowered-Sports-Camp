@@ -1286,6 +1286,28 @@ export async function getFinancialOverview(params: {
       ],
     })
 
+    // DEBUG: Log query results to diagnose $0 revenue issue
+    console.log('[getFinancialOverview] campId:', campId)
+    console.log('[getFinancialOverview] tenantId:', tenantId)
+    console.log('[getFinancialOverview] registrations found:', registrations.length)
+    if (registrations.length > 0) {
+      console.log('[getFinancialOverview] sample registration:', {
+        id: registrations[0].id,
+        status: registrations[0].status,
+        paymentStatus: registrations[0].paymentStatus,
+        totalPriceCents: registrations[0].totalPriceCents,
+        basePriceCents: registrations[0].basePriceCents,
+      })
+      console.log('[getFinancialOverview] all totalPriceCents:', registrations.map(r => r.totalPriceCents))
+    } else {
+      // Check if there are ANY registrations for this camp (including cancelled)
+      const allRegs = await prisma.registration.findMany({
+        where: { campId },
+        select: { id: true, status: true, paymentStatus: true, totalPriceCents: true },
+      })
+      console.log('[getFinancialOverview] ALL registrations (incl cancelled):', allRegs.length, allRegs.map(r => ({ status: r.status, payment: r.paymentStatus, total: r.totalPriceCents })))
+    }
+
     let collectedRevenueCents = 0
     let collectedRegistrationFeeCents = 0
     let collectedAddonFeeCents = 0
@@ -1334,6 +1356,17 @@ export async function getFinancialOverview(params: {
         paymentStatus: r.paymentStatus,
         paidAt: r.paidAt?.toISOString() || null,
       }
+    })
+
+    // DEBUG: Log computed totals
+    console.log('[getFinancialOverview] RESULTS:', {
+      expectedRevenueCents,
+      collectedRevenueCents,
+      totalRegistrations: registrations.length,
+      paidCount,
+      unpaidCount,
+      partialCount,
+      refundedCount,
     })
 
     return {

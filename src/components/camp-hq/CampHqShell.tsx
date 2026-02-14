@@ -473,6 +473,7 @@ function OverviewTab({
     }>
   } | null>(null)
   const [financialLoading, setFinancialLoading] = useState(true)
+  const [financialError, setFinancialError] = useState<string | null>(null)
   const [showFinancialTable, setShowFinancialTable] = useState(true)
 
   // Modal states
@@ -504,11 +505,18 @@ function OverviewTab({
       try {
         const res = await fetch(`/api/camps/${campId}/hq?action=financial`)
         const json = await res.json()
-        if (res.ok && json.data) {
+        console.log('[CampHQ Financial] Response status:', res.status, 'data:', json)
+        if (!res.ok) {
+          setFinancialError(json.error || `HTTP ${res.status}`)
+        } else if (json.data) {
           setFinancialData(json.data)
+          setFinancialError(null)
+        } else {
+          setFinancialError('API returned no data')
         }
       } catch (err) {
         console.error('Failed to load financial data:', err)
+        setFinancialError(err instanceof Error ? err.message : 'Network error')
       } finally {
         setFinancialLoading(false)
       }
@@ -974,7 +982,13 @@ function OverviewTab({
             )}
           </div>
         ) : (
-          <p className="text-white/40 text-sm py-4">No financial data available.</p>
+          <div className="py-4">
+            {financialError ? (
+              <p className="text-red-400 text-sm">Financial data error: {financialError}</p>
+            ) : (
+              <p className="text-white/40 text-sm">No financial data available.</p>
+            )}
+          </div>
         )}
       </PortalCard>
     </div>
