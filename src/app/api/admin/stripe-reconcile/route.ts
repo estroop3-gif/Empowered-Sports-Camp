@@ -1,8 +1,11 @@
 /**
  * Stripe Reconciliation API
  *
- * GET  /api/admin/stripe-reconcile — Compare DB amounts with actual Stripe charges
- * POST /api/admin/stripe-reconcile — Fix DB records to match Stripe
+ * GET  /api/admin/stripe-reconcile — Pull charges from Stripe, compare with DB
+ * POST /api/admin/stripe-reconcile — Fix DB records to match Stripe amounts
+ *
+ * Since registrations may not have stripePaymentIntentId stored,
+ * this endpoint queries Stripe directly and matches via metadata.
  */
 
 import { NextResponse } from 'next/server'
@@ -13,30 +16,90 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
   apiVersion: '2025-12-15.clover',
 })
 
-interface Discrepancy {
+interface StripeCharge {
+  paymentIntentId: string
+  checkoutSessionId: string | null
+  stripeAmountCents: number
+  registrationIds: string[]
+  status: string
+  created: string
+}
+
+interface Comparison {
   paymentIntentId: string
   registrationIds: string[]
   athleteNames: string[]
+  stripeAmountCents: number
   dbTotalCents: number
-  stripeTotalCents: number
   diffCents: number
-  stripeStatus: string
+  perRegistration: {
+    id: string
+    athleteName: string
+    dbTotal: number
+    storedAddons: number
+    actualAddons: number
+    addonMismatch: boolean
+  }[]
 }
 
 /**
- * GET — Show all discrepancies between DB and Stripe
+ * GET — Pull all charges from Stripe, match to DB, show discrepancies
  */
 export async function GET() {
   try {
-    // Get all registrations with a Stripe payment intent
+    // Step 1: List all checkout sessions from Stripe with registration metadata
+    const sessions: Stripe.Checkout.Session[] = []
+    let hasMore = true
+    let startingAfter: string | undefined
+
+    while (hasMore) {
+      const batch = await stripe.checkout.sessions.list({
+        limit: 100,
+        ...(startingAfter ? { starting_after: startingAfter } : {}),
+      })
+      sessions.push(...batch.data)
+      hasMore = batch.has_more
+      if (batch.data.length > 0) {
+        startingAfter = batch.data[batch.data.length - 1].id
+      }
+    }
+
+    // Filter to registration sessions only
+    const regSessions = sessions.filter(
+      s => s.metadata?.type === 'registration' && s.status === 'complete'
+    )
+
+    // Step 2: For each session, get the charge amount and registration IDs
+    const stripeCharges: StripeCharge[] = []
+    for (const session of regSessions) {
+      const regIds = session.metadata?.registrationIds
+        ? session.metadata.registrationIds.split(',')
+        : session.metadata?.registrationId
+          ? [session.metadata.registrationId]
+          : []
+
+      if (regIds.length === 0) continue
+
+      const piId = typeof session.payment_intent === 'string'
+        ? session.payment_intent
+        : session.payment_intent?.id || null
+
+      stripeCharges.push({
+        paymentIntentId: piId || 'unknown',
+        checkoutSessionId: session.id,
+        stripeAmountCents: session.amount_total || 0,
+        registrationIds: regIds,
+        status: session.payment_status || 'unknown',
+        created: new Date((session.created || 0) * 1000).toISOString(),
+      })
+    }
+
+    // Step 3: Look up DB registrations for each charge
+    const allRegIds = stripeCharges.flatMap(c => c.registrationIds)
     const registrations = await prisma.registration.findMany({
-      where: {
-        stripePaymentIntentId: { not: null },
-        status: { not: 'cancelled' },
-      },
+      where: { id: { in: allRegIds } },
       select: {
         id: true,
-        stripePaymentIntentId: true,
         totalPriceCents: true,
         basePriceCents: true,
         discountCents: true,
@@ -44,91 +107,77 @@ export async function GET() {
         addonsTotalCents: true,
         taxCents: true,
         paymentStatus: true,
+        stripePaymentIntentId: true,
         athlete: { select: { firstName: true, lastName: true } },
-        registrationAddons: {
-          select: { priceCents: true, quantity: true },
-        },
+        registrationAddons: { select: { priceCents: true } },
       },
     })
 
-    // Group by payment intent (multi-camper checkouts share one PI)
-    const byPI = new Map<string, typeof registrations>()
-    for (const reg of registrations) {
-      const pi = reg.stripePaymentIntentId!
-      if (!byPI.has(pi)) byPI.set(pi, [])
-      byPI.get(pi)!.push(reg)
-    }
+    const regMap = new Map(registrations.map(r => [r.id, r]))
 
-    const discrepancies: Discrepancy[] = []
-    const matches: { paymentIntentId: string; amount: number }[] = []
-    let totalDbCents = 0
+    // Step 4: Compare
+    const comparisons: Comparison[] = []
     let totalStripeCents = 0
+    let totalDbCents = 0
+    let discrepancyCount = 0
 
-    // Query Stripe for each unique payment intent
-    for (const [piId, regs] of byPI) {
-      // Skip demo payment intents
-      if (piId.startsWith('demo_')) continue
+    for (const charge of stripeCharges) {
+      const regs = charge.registrationIds
+        .map(id => regMap.get(id))
+        .filter(Boolean) as typeof registrations
 
-      try {
-        const pi = await stripe.paymentIntents.retrieve(piId)
-        const stripeAmount = pi.amount_received || pi.amount || 0
-        const dbAmount = regs.reduce((s, r) => s + (r.totalPriceCents || 0), 0)
+      if (regs.length === 0) continue
 
-        totalDbCents += dbAmount
-        totalStripeCents += stripeAmount
+      const dbTotal = regs.reduce((s, r) => s + (r.totalPriceCents || 0), 0)
+      const diff = dbTotal - charge.stripeAmountCents
 
-        if (Math.abs(dbAmount - stripeAmount) > 1) {
-          // Check what addon totals SHOULD be based on registrationAddons
-          const addonDetails = regs.map(r => ({
+      totalStripeCents += charge.stripeAmountCents
+      totalDbCents += dbTotal
+
+      const comparison: Comparison = {
+        paymentIntentId: charge.paymentIntentId,
+        registrationIds: charge.registrationIds,
+        athleteNames: regs.map(r => `${r.athlete?.firstName} ${r.athlete?.lastName}`),
+        stripeAmountCents: charge.stripeAmountCents,
+        dbTotalCents: dbTotal,
+        diffCents: diff,
+        perRegistration: regs.map(r => {
+          const actualAddons = r.registrationAddons.reduce((s, a) => s + a.priceCents, 0)
+          return {
             id: r.id,
-            storedAddonTotal: r.addonsTotalCents,
-            actualAddonTotal: r.registrationAddons.reduce((s, a) => s + a.priceCents, 0),
             athleteName: `${r.athlete?.firstName} ${r.athlete?.lastName}`,
-          }))
-
-          discrepancies.push({
-            paymentIntentId: piId,
-            registrationIds: regs.map(r => r.id),
-            athleteNames: regs.map(r => `${r.athlete?.firstName} ${r.athlete?.lastName}`),
-            dbTotalCents: dbAmount,
-            stripeTotalCents: stripeAmount,
-            diffCents: dbAmount - stripeAmount,
-            stripeStatus: pi.status,
-          })
-        } else {
-          matches.push({ paymentIntentId: piId, amount: stripeAmount })
-        }
-      } catch (err) {
-        discrepancies.push({
-          paymentIntentId: piId,
-          registrationIds: regs.map(r => r.id),
-          athleteNames: regs.map(r => `${r.athlete?.firstName} ${r.athlete?.lastName}`),
-          dbTotalCents: regs.reduce((s, r) => s + (r.totalPriceCents || 0), 0),
-          stripeTotalCents: 0,
-          diffCents: regs.reduce((s, r) => s + (r.totalPriceCents || 0), 0),
-          stripeStatus: `error: ${err instanceof Error ? err.message : 'unknown'}`,
-        })
+            dbTotal: r.totalPriceCents,
+            storedAddons: r.addonsTotalCents,
+            actualAddons,
+            addonMismatch: actualAddons !== r.addonsTotalCents,
+          }
+        }),
       }
+
+      if (Math.abs(diff) > 1) discrepancyCount++
+      comparisons.push(comparison)
     }
 
     return NextResponse.json({
       summary: {
-        totalPaymentIntents: byPI.size,
-        matchingCount: matches.length,
-        discrepancyCount: discrepancies.length,
-        dbTotal: `$${(totalDbCents / 100).toFixed(2)}`,
+        stripeCharges: stripeCharges.length,
+        dbRegistrations: registrations.length,
+        discrepancyCount,
         stripeTotal: `$${(totalStripeCents / 100).toFixed(2)}`,
+        dbTotal: `$${(totalDbCents / 100).toFixed(2)}`,
         difference: `$${((totalDbCents - totalStripeCents) / 100).toFixed(2)}`,
       },
-      discrepancies: discrepancies.map(d => ({
-        ...d,
-        dbTotal: `$${(d.dbTotalCents / 100).toFixed(2)}`,
-        stripeTotal: `$${(d.stripeTotalCents / 100).toFixed(2)}`,
-        diff: `$${(d.diffCents / 100).toFixed(2)}`,
+      comparisons: comparisons.map(c => ({
+        paymentIntentId: c.paymentIntentId,
+        athleteNames: c.athleteNames,
+        stripeAmount: `$${(c.stripeAmountCents / 100).toFixed(2)}`,
+        dbTotal: `$${(c.dbTotalCents / 100).toFixed(2)}`,
+        diff: c.diffCents !== 0 ? `$${(c.diffCents / 100).toFixed(2)}` : 'match',
+        perRegistration: c.perRegistration,
       })),
-      matches: matches.map(m => ({
-        paymentIntentId: m.paymentIntentId,
-        amount: `$${(m.amount / 100).toFixed(2)}`,
+      stripeCharges: stripeCharges.map(c => ({
+        ...c,
+        stripeAmount: `$${(c.stripeAmountCents / 100).toFixed(2)}`,
       })),
     })
   } catch (error) {
@@ -141,126 +190,124 @@ export async function GET() {
 }
 
 /**
- * POST — Fix DB records to match actual Stripe charge amounts
+ * POST — Fix DB records to match Stripe amounts
  *
- * For each discrepancy:
- * 1. Recalculates addonsTotalCents from actual registrationAddons
- * 2. Recalculates totalPriceCents = base - discount - promo + addons + tax
- * 3. If still doesn't match Stripe, distributes Stripe amount proportionally
+ * 1. Fixes addonsTotalCents from actual registrationAddons
+ * 2. Recalculates totalPriceCents
+ * 3. Backfills stripePaymentIntentId and stripeCheckoutSessionId
  */
 export async function POST() {
   try {
-    const registrations = await prisma.registration.findMany({
-      where: {
-        stripePaymentIntentId: { not: null },
-        status: { not: 'cancelled' },
-      },
-      select: {
-        id: true,
-        stripePaymentIntentId: true,
-        totalPriceCents: true,
-        basePriceCents: true,
-        discountCents: true,
-        promoDiscountCents: true,
-        addonsTotalCents: true,
-        taxCents: true,
-        paymentStatus: true,
-        registrationAddons: {
-          select: { priceCents: true, quantity: true },
-        },
-      },
-    })
+    // Step 1: Get Stripe checkout sessions
+    const sessions: Stripe.Checkout.Session[] = []
+    let hasMore = true
+    let startingAfter: string | undefined
 
-    // Group by payment intent
-    const byPI = new Map<string, typeof registrations>()
-    for (const reg of registrations) {
-      const pi = reg.stripePaymentIntentId!
-      if (!byPI.has(pi)) byPI.set(pi, [])
-      byPI.get(pi)!.push(reg)
+    while (hasMore) {
+      const batch = await stripe.checkout.sessions.list({
+        limit: 100,
+        ...(startingAfter ? { starting_after: startingAfter } : {}),
+      })
+      sessions.push(...batch.data)
+      hasMore = batch.has_more
+      if (batch.data.length > 0) {
+        startingAfter = batch.data[batch.data.length - 1].id
+      }
     }
 
-    const fixes: { registrationId: string; oldTotal: number; newTotal: number; oldAddons: number; newAddons: number }[] = []
+    const regSessions = sessions.filter(
+      s => s.metadata?.type === 'registration' && s.status === 'complete'
+    )
 
-    for (const [piId, regs] of byPI) {
-      if (piId.startsWith('demo_')) continue
+    // Step 2: Process each session
+    const fixes: {
+      registrationId: string
+      athleteName: string
+      changes: string[]
+    }[] = []
 
-      let stripeAmount: number
-      try {
-        const pi = await stripe.paymentIntents.retrieve(piId)
-        stripeAmount = pi.amount_received || pi.amount || 0
-      } catch {
-        continue // Skip if can't reach Stripe
-      }
+    for (const session of regSessions) {
+      const regIds = session.metadata?.registrationIds
+        ? session.metadata.registrationIds.split(',')
+        : session.metadata?.registrationId
+          ? [session.metadata.registrationId]
+          : []
 
-      // Step 1: Fix addonsTotalCents from actual registrationAddons
+      if (regIds.length === 0) continue
+
+      const piId = typeof session.payment_intent === 'string'
+        ? session.payment_intent
+        : session.payment_intent?.id || null
+
+      // Get registrations with their addons
+      const regs = await prisma.registration.findMany({
+        where: { id: { in: regIds } },
+        select: {
+          id: true,
+          totalPriceCents: true,
+          basePriceCents: true,
+          discountCents: true,
+          promoDiscountCents: true,
+          addonsTotalCents: true,
+          taxCents: true,
+          stripePaymentIntentId: true,
+          stripeCheckoutSessionId: true,
+          athlete: { select: { firstName: true, lastName: true } },
+          registrationAddons: { select: { priceCents: true } },
+        },
+      })
+
       for (const reg of regs) {
-        const actualAddonTotal = reg.registrationAddons.reduce((s, a) => s + a.priceCents, 0)
-        if (actualAddonTotal !== reg.addonsTotalCents) {
-          const correctTotal = reg.basePriceCents - reg.discountCents - reg.promoDiscountCents + actualAddonTotal + reg.taxCents
+        const changes: string[] = []
 
-          fixes.push({
-            registrationId: reg.id,
-            oldTotal: reg.totalPriceCents,
-            newTotal: correctTotal,
-            oldAddons: reg.addonsTotalCents,
-            newAddons: actualAddonTotal,
-          })
+        // Fix 1: Backfill stripePaymentIntentId
+        if (!reg.stripePaymentIntentId && piId) {
+          changes.push(`stripePaymentIntentId: null → ${piId}`)
+        }
 
+        // Fix 2: Backfill stripeCheckoutSessionId
+        if (!reg.stripeCheckoutSessionId) {
+          changes.push(`stripeCheckoutSessionId: null → ${session.id}`)
+        }
+
+        // Fix 3: Correct addonsTotalCents from actual registrationAddons
+        const actualAddons = reg.registrationAddons.reduce((s, a) => s + a.priceCents, 0)
+        const addonMismatch = actualAddons !== reg.addonsTotalCents
+
+        // Fix 4: Recalculate totalPriceCents
+        const correctTotal = reg.basePriceCents - reg.discountCents - reg.promoDiscountCents +
+          (addonMismatch ? actualAddons : reg.addonsTotalCents) + reg.taxCents
+
+        if (addonMismatch) {
+          changes.push(`addonsTotalCents: ${reg.addonsTotalCents} → ${actualAddons}`)
+        }
+        if (correctTotal !== reg.totalPriceCents) {
+          changes.push(`totalPriceCents: ${reg.totalPriceCents} → ${correctTotal}`)
+        }
+
+        if (changes.length > 0) {
           await prisma.registration.update({
             where: { id: reg.id },
             data: {
-              addonsTotalCents: actualAddonTotal,
-              totalPriceCents: correctTotal,
+              ...(piId && !reg.stripePaymentIntentId ? { stripePaymentIntentId: piId } : {}),
+              ...(!reg.stripeCheckoutSessionId ? { stripeCheckoutSessionId: session.id } : {}),
+              ...(addonMismatch ? { addonsTotalCents: actualAddons } : {}),
+              ...(correctTotal !== reg.totalPriceCents ? { totalPriceCents: correctTotal } : {}),
             },
           })
 
-          // Update in-memory for step 2
-          reg.addonsTotalCents = actualAddonTotal
-          reg.totalPriceCents = correctTotal
-        }
-      }
-
-      // Step 2: If DB total still doesn't match Stripe, distribute proportionally
-      const dbTotal = regs.reduce((s, r) => s + r.totalPriceCents, 0)
-      if (Math.abs(dbTotal - stripeAmount) > 1) {
-        // Distribute Stripe amount proportionally across registrations
-        let remaining = stripeAmount
-        for (let i = 0; i < regs.length; i++) {
-          const reg = regs[i]
-          const isLast = i === regs.length - 1
-          const share = isLast
-            ? remaining
-            : Math.round(stripeAmount * (reg.totalPriceCents / dbTotal))
-          if (!isLast) remaining -= share
-
-          if (share !== reg.totalPriceCents) {
-            fixes.push({
-              registrationId: reg.id,
-              oldTotal: reg.totalPriceCents,
-              newTotal: share,
-              oldAddons: reg.addonsTotalCents,
-              newAddons: reg.addonsTotalCents, // Keep addons as-is for proportional fix
-            })
-
-            await prisma.registration.update({
-              where: { id: reg.id },
-              data: { totalPriceCents: share },
-            })
-          }
+          fixes.push({
+            registrationId: reg.id,
+            athleteName: `${reg.athlete?.firstName} ${reg.athlete?.lastName}`,
+            changes,
+          })
         }
       }
     }
 
     return NextResponse.json({
       fixed: fixes.length,
-      details: fixes.map(f => ({
-        registrationId: f.registrationId,
-        oldTotal: `$${(f.oldTotal / 100).toFixed(2)}`,
-        newTotal: `$${(f.newTotal / 100).toFixed(2)}`,
-        addonChange: f.oldAddons !== f.newAddons
-          ? `$${(f.oldAddons / 100).toFixed(2)} → $${(f.newAddons / 100).toFixed(2)}`
-          : 'unchanged',
-      })),
+      fixes,
     })
   } catch (error) {
     console.error('[Reconcile] Fix failed:', error)
