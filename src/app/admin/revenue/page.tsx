@@ -18,6 +18,8 @@ import {
   ExternalLink,
   Package,
   PercentCircle,
+  Receipt,
+  Undo2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -41,6 +43,9 @@ interface AdminRevenueOverview {
   totalBaseRegistrationRevenue: number
   totalDiscounts: number
   netRevenue: number
+  totalTaxRevenue: number
+  totalRefunds: number
+  refundCount: number
   sessionsHeld: number
   totalCampers: number
   averageEnrollmentPerSession: number
@@ -58,6 +63,8 @@ interface AdminRevenueTrendPoint {
   baseRevenue: number
   totalDiscounts: number
   netRevenue: number
+  taxRevenue: number
+  refunds: number
   royaltyIncome: number
   sessionsHeld: number
   campers: number
@@ -73,6 +80,8 @@ interface AdminRevenueByLicenseeItem {
   baseRevenue: number
   totalDiscounts: number
   netRevenue: number
+  taxRevenue: number
+  refunds: number
   sessionsHeld: number
   campers: number
   arpc: number
@@ -88,6 +97,7 @@ interface AdminRevenueByProgramItem {
   baseRevenue: number
   totalDiscounts: number
   netRevenue: number
+  taxRevenue: number
   sessionsHeld: number
   campers: number
   arpc: number
@@ -109,6 +119,7 @@ interface AdminRevenueSessionItem {
   upsellRevenue: number
   totalDiscounts: number
   netRevenue: number
+  taxRevenue: number
   royaltyExpected: number
   royaltyPaid: number
 }
@@ -246,6 +257,12 @@ function RevenueTrendsChart({
                 {point.totalDiscounts > 0 && (
                   <p className="text-xs text-magenta">Discounts: -{formatCurrency(point.totalDiscounts)}</p>
                 )}
+                {point.taxRevenue > 0 && (
+                  <p className="text-xs text-white/60">Tax: {formatCurrency(point.taxRevenue)}</p>
+                )}
+                {point.refunds > 0 && (
+                  <p className="text-xs text-magenta">Refunds: -{formatCurrency(point.refunds)}</p>
+                )}
                 <p className="text-xs text-magenta">Royalty: {formatCurrency(point.royaltyIncome)}</p>
                 <p className="text-xs text-white/40">Campers: {point.campers}</p>
               </div>
@@ -369,6 +386,8 @@ function LicenseeRevenueTable({
             <SortHeader label="Gross Revenue" field="grossRevenue" />
             <SortHeader label="Upsell" field="upsellRevenue" />
             <SortHeader label="Base" field="baseRevenue" />
+            <SortHeader label="Tax" field="taxRevenue" />
+            <SortHeader label="Refunds" field="refunds" />
             <SortHeader label="Sessions" field="sessionsHeld" />
             <SortHeader label="Campers" field="campers" />
             <SortHeader label="ARPC" field="arpc" />
@@ -391,6 +410,8 @@ function LicenseeRevenueTable({
               <td className="px-4 py-3 text-sm text-neon font-medium">{formatCurrency(row.grossRevenue)}</td>
               <td className="px-4 py-3 text-sm text-white/60">{formatCurrency(row.upsellRevenue)}</td>
               <td className="px-4 py-3 text-sm text-white/60">{formatCurrency(row.baseRevenue)}</td>
+              <td className="px-4 py-3 text-sm text-white/60">{formatCurrency(row.taxRevenue)}</td>
+              <td className={cn("px-4 py-3 text-sm", row.refunds > 0 ? "text-magenta" : "text-white/60")}>{formatCurrency(row.refunds)}</td>
               <td className="px-4 py-3 text-sm text-white/80">{row.sessionsHeld}</td>
               <td className="px-4 py-3 text-sm text-white/80">{row.campers}</td>
               <td className="px-4 py-3 text-sm text-white/80">{formatCurrency(row.arpc)}</td>
@@ -454,6 +475,7 @@ function SessionRevenueTable({ data }: { data: AdminRevenueSessionItem[] }) {
             <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-white/40">Gross</th>
             <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-white/40">Base</th>
             <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-white/40">Upsell</th>
+            <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-white/40">Tax</th>
             <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-white/40">Royalty</th>
           </tr>
         </thead>
@@ -472,6 +494,7 @@ function SessionRevenueTable({ data }: { data: AdminRevenueSessionItem[] }) {
               <td className="px-4 py-3 text-sm text-neon font-medium">{formatCurrency(row.grossRevenue)}</td>
               <td className="px-4 py-3 text-sm text-white/60">{formatCurrency(row.baseRevenue)}</td>
               <td className="px-4 py-3 text-sm text-white/60">{formatCurrency(row.upsellRevenue)}</td>
+              <td className="px-4 py-3 text-sm text-white/60">{formatCurrency(row.taxRevenue)}</td>
               <td className="px-4 py-3 text-sm text-magenta">{formatCurrency(row.royaltyExpected)}</td>
             </tr>
           ))}
@@ -604,7 +627,7 @@ export default function AdminRevenuePage() {
 
       {/* KPI Summary Grid */}
       <KpiGrid
-        columns={4}
+        columns={3}
         items={[
           {
             label: 'Net Revenue',
@@ -629,6 +652,22 @@ export default function AdminRevenuePage() {
             icon: PercentCircle,
             variant: 'magenta',
             subLabel: overview?.totalSystemGrossRevenue ? `${((overview.totalDiscounts / overview.totalSystemGrossRevenue) * 100).toFixed(1)}% of gross` : '0% of gross',
+          },
+          {
+            label: 'Tax Collected',
+            value: overview?.totalTaxRevenue ?? 0,
+            format: 'currency',
+            icon: Receipt,
+            variant: 'default',
+            subLabel: overview?.netRevenue ? `${((overview.totalTaxRevenue / overview.netRevenue) * 100).toFixed(1)}% of net` : '0% of net',
+          },
+          {
+            label: 'Refunds Issued',
+            value: overview?.totalRefunds ?? 0,
+            format: 'currency',
+            icon: Undo2,
+            variant: 'magenta',
+            subLabel: `${overview?.refundCount ?? 0} registrations`,
           },
           {
             label: 'Avg Revenue Per Camper',
