@@ -1,7 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useSearchParams, useRouter } from 'next/navigation'
+import { useState, useEffect, use } from 'react'
 import Link from 'next/link'
 import {
   CheckCircle2,
@@ -17,13 +16,6 @@ import {
   Receipt,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-
-/**
- * Registration Success Page
- *
- * Handles the redirect from Stripe Checkout after successful payment.
- * Confirms the registration and displays confirmation details.
- */
 
 interface ReceiptRegistration {
   athleteName: string
@@ -55,111 +47,45 @@ interface RegistrationDetails {
   totalPaid: string
   registrationIds: string[]
   receipt: ReceiptData
-  squadName?: string
 }
 
 function formatCents(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`
 }
 
-export default function RegistrationSuccessPage() {
-  const searchParams = useSearchParams()
-  const router = useRouter()
+export default function ConfirmationPage({
+  params,
+}: {
+  params: Promise<{ confirmationNumber: string }>
+}) {
+  const { confirmationNumber } = use(params)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [registration, setRegistration] = useState<RegistrationDetails | null>(null)
 
-  const sessionId = searchParams.get('session_id')
-  const isDemo = searchParams.get('demo') === 'true'
-  const isFree = searchParams.get('free') === 'true'
-
   useEffect(() => {
-    async function confirmRegistration() {
-      if (!sessionId && !isFree) {
-        setError('Missing payment session. Please contact support.')
-        setIsLoading(false)
-        return
-      }
-
+    async function loadConfirmation() {
       try {
-        const response = await fetch('/api/registration', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'confirm',
-            sessionId: sessionId || 'free_registration',
-          }),
-        })
-
+        const response = await fetch(`/api/registration/confirmation/${confirmationNumber}`)
         const result = await response.json()
 
         if (result.error) {
           setError(result.error)
         } else if (result.data) {
-          const data = result.data
-
-          // Redirect to persistent confirmation page if we have a stored confirmation number
-          if (data.confirmationNumber) {
-            router.replace(`/register/confirmation/${data.confirmationNumber}`)
-            return
-          }
-
-          // Fallback for old registrations without stored confirmation numbers
-          setRegistration({
-            confirmationNumber: `EA-${(sessionId || 'FREE').slice(-8).toUpperCase()}`,
-            campName: data.campName || 'Camp Registration',
-            campDates: data.campDates || '',
-            campTimes: data.campTimes || '',
-            location: data.location || '',
-            locationAddress: data.locationAddress || '',
-            athleteNames: data.athleteNames || [],
-            totalPaid: data.totalPaid || (isFree ? '$0.00' : 'Paid'),
-            registrationIds: data.registrationIds || [],
-            receipt: data.receipt || {
-              registrations: [],
-              subtotalCents: 0,
-              totalDiscountCents: 0,
-              totalAddonsCents: 0,
-              taxCents: 0,
-              grandTotalCents: 0,
-            },
-            squadName: data.squadName,
-          })
+          setRegistration(result.data)
         } else {
-          setError('No registration data returned. Please contact support.')
+          setError('Confirmation not found.')
         }
       } catch (err) {
-        console.error('Failed to confirm registration:', err)
-        if (isDemo || isFree) {
-          setRegistration({
-            confirmationNumber: `EA-${Date.now().toString(36).toUpperCase()}`,
-            campName: 'Camp Registration',
-            campDates: '',
-            campTimes: '',
-            location: '',
-            locationAddress: '',
-            athleteNames: [],
-            totalPaid: isFree ? '$0.00' : 'Paid (Demo)',
-            registrationIds: [],
-            receipt: {
-              registrations: [],
-              subtotalCents: 0,
-              totalDiscountCents: 0,
-              totalAddonsCents: 0,
-              taxCents: 0,
-              grandTotalCents: 0,
-            },
-          })
-        } else {
-          setError('Failed to confirm your registration. Please contact support with your session ID.')
-        }
+        console.error('Failed to load confirmation:', err)
+        setError('Failed to load confirmation details. Please try again.')
       } finally {
         setIsLoading(false)
       }
     }
 
-    confirmRegistration()
-  }, [sessionId, isDemo, isFree])
+    loadConfirmation()
+  }, [confirmationNumber])
 
   const handleDownloadReceipt = () => {
     if (!registration) return
@@ -397,8 +323,8 @@ export default function RegistrationSuccessPage() {
       <div className="min-h-screen bg-black flex items-center justify-center">
         <div className="text-center space-y-4">
           <Loader2 className="h-12 w-12 text-neon animate-spin mx-auto" />
-          <h1 className="text-2xl font-bold text-white">Confirming Your Registration</h1>
-          <p className="text-white/60">Please wait while we finalize your registration...</p>
+          <h1 className="text-2xl font-bold text-white">Loading Confirmation</h1>
+          <p className="text-white/60">Retrieving your registration details...</p>
         </div>
       </div>
     )
@@ -412,19 +338,17 @@ export default function RegistrationSuccessPage() {
             <AlertCircle className="h-10 w-10 text-red-500" />
           </div>
           <h1 className="text-3xl font-black uppercase tracking-wider text-white">
-            Something Went Wrong
+            Confirmation Not Found
           </h1>
           <p className="text-white/60">{error}</p>
-          {sessionId && (
-            <p className="text-xs text-white/40">
-              Session ID: {sessionId}
-            </p>
-          )}
+          <p className="text-xs text-white/40">
+            Confirmation #: {confirmationNumber}
+          </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
-            <Button variant="outline-white" onClick={() => router.push('/camps')}>
+            <Button variant="outline-white" onClick={() => window.location.href = '/camps'}>
               Back to Camps
             </Button>
-            <Button variant="neon" onClick={() => router.push('/contact')}>
+            <Button variant="neon" onClick={() => window.location.href = '/contact'}>
               Contact Support
             </Button>
           </div>
@@ -446,7 +370,7 @@ export default function RegistrationSuccessPage() {
       <div className="relative max-w-2xl mx-auto px-4 py-16 sm:py-24">
         {/* Success Header */}
         <div className="text-center space-y-6 mb-12">
-          <div className="h-24 w-24 rounded-full bg-neon/10 border-2 border-neon flex items-center justify-center mx-auto animate-pulse">
+          <div className="h-24 w-24 rounded-full bg-neon/10 border-2 border-neon flex items-center justify-center mx-auto">
             <CheckCircle2 className="h-12 w-12 text-neon" />
           </div>
           <div>
@@ -457,12 +381,6 @@ export default function RegistrationSuccessPage() {
               Registration Confirmed
             </p>
           </div>
-          {isDemo && (
-            <div className="inline-flex items-center gap-2 px-4 py-2 bg-yellow-500/10 border border-yellow-500/30 text-yellow-500 text-sm">
-              <AlertCircle className="h-4 w-4" />
-              Demo Mode - No actual payment processed
-            </div>
-          )}
         </div>
 
         {/* Confirmation Details */}
@@ -535,20 +453,6 @@ export default function RegistrationSuccessPage() {
                       </span>
                     ))}
                   </div>
-                </div>
-              </div>
-            )}
-
-            {/* Squad */}
-            {registration?.squadName && (
-              <div className="flex items-start gap-3 p-4 bg-magenta/5 border border-magenta/30">
-                <Users className="h-5 w-5 text-magenta flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-xs text-magenta/70 uppercase tracking-wider">Her Squad</p>
-                  <p className="text-white font-medium">{registration.squadName}</p>
-                  <p className="text-xs text-white/50 mt-1">
-                    Squad members will be grouped together at camp!
-                  </p>
                 </div>
               </div>
             )}

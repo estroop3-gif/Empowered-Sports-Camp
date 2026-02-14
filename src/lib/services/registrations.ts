@@ -29,6 +29,7 @@ export interface Registration {
   shirt_size: string | null
   waiver_signed: boolean
   waiver_signed_at: string | null
+  confirmation_number: string | null
   created_at: string
   updated_at: string
   // Joined data
@@ -106,6 +107,7 @@ export async function fetchRegistrationsByParent(
         shirt_size: r.shirtSize,
         waiver_signed: r.waiverSigned,
         waiver_signed_at: r.waiverSignedAt?.toISOString() || null,
+        confirmation_number: r.confirmationNumber,
         created_at: r.createdAt.toISOString(),
         updated_at: r.updatedAt.toISOString(),
         athletes: {
@@ -170,6 +172,7 @@ export async function fetchRegistrationsByCamp(
         shirt_size: r.shirtSize,
         waiver_signed: r.waiverSigned,
         waiver_signed_at: r.waiverSignedAt?.toISOString() || null,
+        confirmation_number: r.confirmationNumber,
         created_at: r.createdAt.toISOString(),
         updated_at: r.updatedAt.toISOString(),
         athletes: {
@@ -242,6 +245,7 @@ export async function fetchRegistrationById(
         shirt_size: r.shirtSize,
         waiver_signed: r.waiverSigned,
         waiver_signed_at: r.waiverSignedAt?.toISOString() || null,
+        confirmation_number: r.confirmationNumber,
         created_at: r.createdAt.toISOString(),
         updated_at: r.updatedAt.toISOString(),
         athletes: {

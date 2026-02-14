@@ -53,6 +53,7 @@ interface RegistrationDetails {
   id: string
   status: string
   payment_status: string
+  confirmation_number: string | null
   shirt_size: string | null
   special_considerations: string | null
   created_at: string
@@ -413,7 +414,7 @@ export default function RegistrationDetailPage() {
           </div>
 
           <div class="footer">
-            <p>Confirmation #: <span class="confirmation-number">${registration.id.slice(0, 8).toUpperCase()}</span></p>
+            <p>Confirmation #: <span class="confirmation-number">${registration.confirmation_number || registration.id.slice(0, 8).toUpperCase()}</span></p>
             <p style="margin-top: 10px;">Thank you for registering with Empowered Sports Camp!</p>
             <p style="margin-top: 5px;">Questions? Contact us at support@empoweredsportscamp.com</p>
           </div>
@@ -665,7 +666,15 @@ export default function RegistrationDetailPage() {
 
                 <div>
                   <p className="text-xs text-white/40 uppercase tracking-wider mb-1">Confirmation #</p>
-                  <p className="text-white font-mono">{registration.id.slice(0, 8).toUpperCase()}</p>
+                  <p className="text-white font-mono">{registration.confirmation_number || registration.id.slice(0, 8).toUpperCase()}</p>
+                  {registration.confirmation_number && (
+                    <Link
+                      href={`/register/confirmation/${registration.confirmation_number}`}
+                      className="inline-block mt-2 text-xs font-bold text-neon hover:text-neon/80 transition-colors"
+                    >
+                      View Confirmation Page
+                    </Link>
+                  )}
                 </div>
               </div>
             </div>

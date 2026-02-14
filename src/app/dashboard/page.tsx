@@ -67,6 +67,7 @@ interface Registration {
   camp_id: string
   status: string
   payment_status: string
+  confirmation_number: string | null
   notes: string | null
   created_at: string
   athletes?: {
@@ -610,62 +611,79 @@ export default function ParentDashboard() {
                   ) : (
                     <div className="space-y-4">
                       {upcomingRegistrations.map((reg) => (
-                        <Link
+                        <div
                           key={reg.id}
-                          href={`/dashboard/registrations/${reg.id}`}
                           className={cn(
-                            'block p-4 border transition-all cursor-pointer hover:border-neon/50',
+                            'p-4 border transition-all',
                             reg.status === 'pending_payment'
-                              ? 'bg-magenta/5 border-magenta/30 hover:bg-magenta/10'
-                              : 'bg-black/50 border-white/10 hover:bg-neon/5'
+                              ? 'bg-magenta/5 border-magenta/30'
+                              : 'bg-black/50 border-white/10'
                           )}
                         >
-                          <div className="flex items-start justify-between gap-4">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <h4 className="font-bold text-white">{reg.camps.name}</h4>
-                                {reg.status === 'confirmed' || reg.status === 'registered' ? (
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-neon/10 text-neon text-xs font-bold uppercase tracking-wider border border-neon/30">
-                                    <CheckCircle className="h-3 w-3" />
-                                    Confirmed
-                                  </span>
-                                ) : reg.status === 'pending_payment' ? (
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-magenta/10 text-magenta text-xs font-bold uppercase tracking-wider border border-magenta/30">
-                                    <AlertCircle className="h-3 w-3" />
-                                    Payment Due
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-white/10 text-white/60 text-xs font-bold uppercase tracking-wider border border-white/20">
-                                    {reg.status}
-                                  </span>
-                                )}
-                              </div>
-                              <p className="text-sm text-white/60 mt-1">
-                                Athlete: <span className="text-white">{reg.athletes.first_name} {reg.athletes.last_name}</span>
-                              </p>
-                              <div className="flex items-center gap-4 mt-2 flex-wrap">
-                                <span className="flex items-center gap-1 text-xs text-white/40">
-                                  <Calendar className="h-3 w-3" />
-                                  {formatDateRange(reg.camps.start_date, reg.camps.end_date)}
-                                </span>
-                                {(reg.camps.location_name || reg.camps.city) && (
+                          <Link
+                            href={`/dashboard/registrations/${reg.id}`}
+                            className="block hover:opacity-90 transition-opacity"
+                          >
+                            <div className="flex items-start justify-between gap-4">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <h4 className="font-bold text-white">{reg.camps.name}</h4>
+                                  {reg.status === 'confirmed' || reg.status === 'registered' ? (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-neon/10 text-neon text-xs font-bold uppercase tracking-wider border border-neon/30">
+                                      <CheckCircle className="h-3 w-3" />
+                                      Confirmed
+                                    </span>
+                                  ) : reg.status === 'pending_payment' ? (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-magenta/10 text-magenta text-xs font-bold uppercase tracking-wider border border-magenta/30">
+                                      <AlertCircle className="h-3 w-3" />
+                                      Payment Due
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-white/10 text-white/60 text-xs font-bold uppercase tracking-wider border border-white/20">
+                                      {reg.status}
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-sm text-white/60 mt-1">
+                                  Athlete: <span className="text-white">{reg.athletes.first_name} {reg.athletes.last_name}</span>
+                                </p>
+                                <div className="flex items-center gap-4 mt-2 flex-wrap">
                                   <span className="flex items-center gap-1 text-xs text-white/40">
-                                    <MapPin className="h-3 w-3" />
-                                    {reg.camps.location_name || reg.camps.city}
+                                    <Calendar className="h-3 w-3" />
+                                    {formatDateRange(reg.camps.start_date, reg.camps.end_date)}
                                   </span>
+                                  {(reg.camps.location_name || reg.camps.city) && (
+                                    <span className="flex items-center gap-1 text-xs text-white/40">
+                                      <MapPin className="h-3 w-3" />
+                                      {reg.camps.location_name || reg.camps.city}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <p className="font-black text-neon">{formatCurrency(reg.camps.price_cents)}</p>
+                                {reg.payment_status === 'paid' ? (
+                                  <p className="text-xs text-neon/70 mt-1 font-semibold">Paid</p>
+                                ) : (
+                                  <p className="text-xs text-white/40 mt-1">View Details</p>
                                 )}
                               </div>
                             </div>
-                            <div className="text-right">
-                              <p className="font-black text-neon">{formatCurrency(reg.camps.price_cents)}</p>
-                              {reg.payment_status === 'paid' ? (
-                                <p className="text-xs text-neon/70 mt-1 font-semibold">Paid — View Receipt</p>
-                              ) : (
-                                <p className="text-xs text-white/40 mt-1">View Details</p>
-                              )}
+                          </Link>
+                          {reg.confirmation_number && reg.payment_status === 'paid' && (
+                            <div className="mt-3 pt-3 border-t border-white/5 flex items-center justify-between">
+                              <span className="text-xs text-white/40">
+                                Confirmation: <span className="font-mono text-white/60">{reg.confirmation_number}</span>
+                              </span>
+                              <Link
+                                href={`/register/confirmation/${reg.confirmation_number}`}
+                                className="text-xs font-bold text-neon hover:text-neon/80 transition-colors"
+                              >
+                                View Confirmation & Receipt
+                              </Link>
                             </div>
-                          </div>
-                        </Link>
+                          )}
+                        </div>
                       ))}
                     </div>
                   )
@@ -678,26 +696,43 @@ export default function ParentDashboard() {
                   ) : (
                     <div className="space-y-4">
                       {pastRegistrations.map((reg) => (
-                        <Link
+                        <div
                           key={reg.id}
-                          href={`/dashboard/registrations/${reg.id}`}
-                          className="block p-4 bg-black/30 border border-white/5 hover:border-white/20 hover:bg-black/40 transition-all"
+                          className="p-4 bg-black/30 border border-white/5"
                         >
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <h4 className="font-bold text-white/70">{reg.camps.name}</h4>
-                              <p className="text-sm text-white/40 mt-1">
-                                {reg.athletes.first_name} {reg.athletes.last_name}
-                              </p>
-                              <p className="text-xs text-white/30 mt-1">
-                                {formatDateRange(reg.camps.start_date, reg.camps.end_date)}
-                              </p>
+                          <Link
+                            href={`/dashboard/registrations/${reg.id}`}
+                            className="block hover:opacity-90 transition-opacity"
+                          >
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <h4 className="font-bold text-white/70">{reg.camps.name}</h4>
+                                <p className="text-sm text-white/40 mt-1">
+                                  {reg.athletes.first_name} {reg.athletes.last_name}
+                                </p>
+                                <p className="text-xs text-white/30 mt-1">
+                                  {formatDateRange(reg.camps.start_date, reg.camps.end_date)}
+                                </p>
+                              </div>
+                              <span className="text-xs font-bold uppercase tracking-wider text-white/30">
+                                Completed
+                              </span>
                             </div>
-                            <span className="text-xs font-bold uppercase tracking-wider text-white/30">
-                              Completed
-                            </span>
-                          </div>
-                        </Link>
+                          </Link>
+                          {reg.confirmation_number && (
+                            <div className="mt-3 pt-3 border-t border-white/5 flex items-center justify-between">
+                              <span className="text-xs text-white/30">
+                                Confirmation: <span className="font-mono text-white/40">{reg.confirmation_number}</span>
+                              </span>
+                              <Link
+                                href={`/register/confirmation/${reg.confirmation_number}`}
+                                className="text-xs font-bold text-white/40 hover:text-white/60 transition-colors"
+                              >
+                                View Receipt
+                              </Link>
+                            </div>
+                          )}
+                        </div>
                       ))}
                     </div>
                   )

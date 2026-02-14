@@ -104,6 +104,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       id: registration.id,
       status: registration.status,
       payment_status: registration.paymentStatus,
+      confirmation_number: registration.confirmationNumber,
       shirt_size: registration.shirtSize,
       special_considerations: registration.specialConsiderations,
       created_at: registration.createdAt.toISOString(),

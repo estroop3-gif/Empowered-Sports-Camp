@@ -73,6 +73,7 @@ interface Registration {
   camp_id: string
   status: string
   payment_status: string
+  confirmation_number: string | null
   notes: string | null
   created_at: string
   camps?: {
@@ -955,6 +956,22 @@ export default function ParentAthleteDetailPage({ params }: PageProps) {
                             )}
                           </div>
                         </div>
+                        {reg.confirmation_number && reg.payment_status === 'paid' && (
+                          <div className="mt-3 pt-3 border-t border-white/5 flex items-center justify-between">
+                            <span className="text-xs text-white/40">
+                              Confirmation: <span className="font-mono text-white/60">{reg.confirmation_number}</span>
+                            </span>
+                            <Link
+                              href={`/register/confirmation/${reg.confirmation_number}`}
+                              className={cn(
+                                'text-xs font-bold transition-colors',
+                                isPast ? 'text-white/40 hover:text-white/60' : 'text-neon hover:text-neon/80'
+                              )}
+                            >
+                              View Confirmation
+                            </Link>
+                          </div>
+                        )}
                       </div>
                     )
                   })}

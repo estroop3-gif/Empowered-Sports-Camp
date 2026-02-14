@@ -29,7 +29,7 @@ interface RoleDashboardRouterProps {
 export function RoleDashboardRouter({ children }: RoleDashboardRouterProps) {
   const router = useRouter()
   const pathname = usePathname()
-  const { role, viewingAsRole, actualRole, loading, isViewingAsOtherRole } = useAuth()
+  const { role, viewingAsRole, actualRole, loading, isViewingAsOtherRole, hasParentRole } = useAuth()
 
   // When viewingAsRole changes, redirect to the appropriate dashboard
   useEffect(() => {
@@ -54,6 +54,10 @@ export function RoleDashboardRouter({ children }: RoleDashboardRouterProps) {
 
     // Only redirect at root dashboard pages to avoid disrupting deep navigation
     if (isAtDashboardRoot && !pathname.startsWith(targetHome)) {
+      // Allow multi-role users to access the parent dashboard
+      if (pathname === '/dashboard' && hasParentRole) {
+        return
+      }
       router.push(targetHome)
     }
   }, [viewingAsRole, actualRole, loading, pathname, router])
