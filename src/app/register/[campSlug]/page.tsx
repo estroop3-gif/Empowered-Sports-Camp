@@ -298,6 +298,8 @@ function RegistrationContent({ camp, addons }: { camp: CampSession; addons: AddO
   // If they log in via the login modal in AccountCreationStep, that component handles advancement itself
   useEffect(() => {
     if (state.step === 'account' && isAuthenticated === true && !loggedInViaModalRef.current) {
+      // Ensure the already-logged-in user has a parent role (e.g. coaches, admins registering campers)
+      fetch('/api/auth/ensure-parent-role', { method: 'POST' }).catch(() => {})
       nextStep() // Skip to payment
     }
   }, [state.step, isAuthenticated, nextStep])

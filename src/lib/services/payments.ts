@@ -28,6 +28,7 @@ import Stripe from 'stripe'
 import { prisma } from '@/lib/db/client'
 import type { PaymentStatus, OrderStatus } from '@/generated/prisma'
 import { createNotification } from './notifications'
+import { ensureParentRole } from './users'
 import { onSpotOpened, reorderPositions } from './waitlist'
 
 // =============================================================================
@@ -153,6 +154,12 @@ export async function createStripeCheckoutSession(params: {
           paidAt: new Date(),
         },
       })
+
+      // Ensure parent has the parent role (for dashboard access)
+      const parentIds = [...new Set(registrations.map(r => r.parentId))]
+      for (const pid of parentIds) {
+        ensureParentRole(pid).catch(err => console.error('[Payments] ensureParentRole failed:', err))
+      }
 
       return {
         data: {
@@ -613,6 +620,12 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session): Promise
         athlete: true,
       },
     })
+
+    // Ensure parent has the parent role (for dashboard access)
+    const parentIds = [...new Set(registrations.map(r => r.parentId))]
+    for (const pid of parentIds) {
+      ensureParentRole(pid).catch(err => console.error('[Payments] ensureParentRole failed:', err))
+    }
 
     if (registrations.length > 0) {
       const primaryReg = registrations[0]

@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/client'
+import { ensureParentRole } from '@/lib/services/users'
 
 export async function POST(request: NextRequest) {
   // Only allow in development mode
@@ -43,6 +44,16 @@ export async function POST(request: NextRequest) {
         paidAt: new Date(),
       },
     })
+
+    // Ensure parent has the parent role for dashboard access
+    const regs = await prisma.registration.findMany({
+      where: { id: { in: registrationIds } },
+      select: { parentId: true },
+    })
+    const parentIds = [...new Set(regs.map(r => r.parentId))]
+    for (const pid of parentIds) {
+      await ensureParentRole(pid)
+    }
 
     console.log(`[DevConfirm] Marked ${registrationIds.length} registrations as paid`)
 

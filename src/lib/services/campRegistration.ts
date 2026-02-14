@@ -11,6 +11,7 @@
 import { prisma } from '@/lib/db/client'
 import { createNotification } from './notifications'
 import { createStripeCheckoutSession } from './payments'
+import { ensureParentRole } from './users'
 import type { PaymentStatus, RegistrationStatus, CampFriendSquad, CampFriendSquadMember } from '@/generated/prisma'
 
 // =============================================================================
@@ -616,6 +617,7 @@ function formatTimeValue(time: Date | null): string {
 function buildConfirmResponse(
   regs: Array<{
     id: string
+    confirmationNumber: string | null
     basePriceCents: number
     discountCents: number
     promoDiscountCents: number
@@ -687,7 +689,7 @@ function buildConfirmResponse(
 
   return {
     confirmed: confirmedCount,
-    confirmationNumber: `EA-${sessionId.slice(-8).toUpperCase()}`,
+    confirmationNumber: regs[0].confirmationNumber || `EA-${sessionId.slice(-8).toUpperCase()}`,
     campName: camp.name,
     campDates: `${startDate} - ${endDate}`,
     campTimes,
@@ -769,6 +771,12 @@ export async function confirmRegistrationsFromPayment(params: {
         paidAt: new Date(),
       },
     })
+
+    // Ensure parent has the parent role (for dashboard access)
+    const parentIds = [...new Set(registrations.map(r => r.parentId))]
+    for (const parentId of parentIds) {
+      await ensureParentRole(parentId)
+    }
 
     // Create CamperSessionData for each registration
     for (const reg of registrations) {

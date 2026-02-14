@@ -524,3 +524,38 @@ export async function createUser(params: {
     return { data: null, error: error as Error }
   }
 }
+
+// =============================================================================
+// Parent Role Management
+// =============================================================================
+
+/**
+ * Ensure a user has an active parent role assignment.
+ * No-op if they already have one. Does NOT replace existing roles.
+ *
+ * Call this whenever a registration is created or confirmed to guarantee
+ * the parent can access the parent dashboard.
+ */
+export async function ensureParentRole(userId: string): Promise<boolean> {
+  try {
+    const existing = await prisma.userRoleAssignment.findFirst({
+      where: { userId, role: 'parent', isActive: true },
+      select: { id: true },
+    })
+
+    if (existing) return false
+
+    await prisma.userRoleAssignment.create({
+      data: { userId, role: 'parent', isActive: true },
+    })
+
+    console.log('[Users] Added parent role for user:', userId)
+    return true
+  } catch (error) {
+    // Swallow duplicate key errors (race condition between webhook + client)
+    const msg = error instanceof Error ? error.message : ''
+    if (msg.includes('Unique constraint')) return false
+    console.error('[Users] Failed to ensure parent role:', error)
+    return false
+  }
+}

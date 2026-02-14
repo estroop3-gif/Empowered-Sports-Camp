@@ -10,6 +10,7 @@ import { prisma } from '@/lib/db/client'
 import { createRegistration, addRegistrationAddon } from '@/lib/services/registrations'
 import { createStripeCheckoutSession } from '@/lib/services/payments'
 import { markDraftCompleted } from '@/lib/services/registrationDrafts'
+import { ensureParentRole } from '@/lib/services/users'
 import { getAuthenticatedUserFromRequest } from '@/lib/auth/cognito-server'
 import type { RegistrationPayload } from '@/types/registration'
 
@@ -17,6 +18,16 @@ import type { RegistrationPayload } from '@/types/registration'
 function isValidUUID(str: string): boolean {
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
   return uuidRegex.test(str)
+}
+
+// Generate a unique confirmation number for this checkout group
+function generateConfirmationNumber(): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789' // no 0/O/1/I confusion
+  let code = ''
+  for (let i = 0; i < 6; i++) {
+    code += chars[Math.floor(Math.random() * chars.length)]
+  }
+  return `EA-${code}`
 }
 
 export async function POST(request: NextRequest) {
@@ -413,8 +424,18 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Ensure parent has the parent role for dashboard access (non-blocking)
+    ensureParentRole(parentProfile.id).catch(() => {})
+
     // Mark any saved draft as completed (non-blocking)
     markDraftCompleted(parent.email, campId).catch(() => {})
+
+    // Generate a unique confirmation number and store on all registrations
+    const confirmationNumber = generateConfirmationNumber()
+    await prisma.registration.updateMany({
+      where: { id: { in: registrationIds } },
+      data: { confirmationNumber },
+    })
 
     // Create Stripe checkout session for ALL registrations
     // This ensures all campers' prices, add-ons, and taxes are included

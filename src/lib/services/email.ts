@@ -61,6 +61,8 @@ export type EmailTemplateCode =
   // System
   | 'SYSTEM_ALERT'
   | 'BROADCAST'
+  // Reports
+  | 'WEEKLY_REPORT'
 
 // Map template codes to Prisma EmailType values
 const templateToEmailType: Record<EmailTemplateCode, EmailType> = {
@@ -95,6 +97,7 @@ const templateToEmailType: Record<EmailTemplateCode, EmailType> = {
   JOB_APPLICATION: 'system_alert',
   SYSTEM_ALERT: 'system_alert',
   BROADCAST: 'broadcast',
+  WEEKLY_REPORT: 'weekly_report',
 }
 
 export interface EmailResult {
@@ -436,6 +439,8 @@ function getEmailSubject(templateCode: EmailTemplateCode, context: EmailContext)
       return `${context.severity === 'error' ? '⚠️ ' : ''}System Alert`
     case 'BROADCAST':
       return String(context.subject || 'Message from Empowered Sports Camp')
+    case 'WEEKLY_REPORT':
+      return `Weekly Business Report — ${context.reportDate || new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`
     default:
       return 'Message from Empowered Sports Camp'
   }
@@ -534,7 +539,7 @@ export async function sendRegistrationConfirmationEmail(params: {
       taxCents: String(registration.taxCents),
       promoCodeStr: registration.promoCode?.code || '',
       addonsJson: JSON.stringify(addons),
-      confirmationNumber: registration.id.slice(0, 8).toUpperCase(),
+      confirmationNumber: registration.confirmationNumber || `EA-${registration.id.slice(0, 8).toUpperCase()}`,
       registrationId: registration.id,
       directorName: registration.tenant?.name || 'Empowered Sports Camp',
       directorPhone: registration.tenant?.contactPhone || '',
@@ -997,6 +1002,262 @@ export async function sendBroadcastEmail(params: {
   }
 
   return { data: { sent, failed }, error: null }
+}
+
+// =============================================================================
+// Weekly Business Report
+// =============================================================================
+
+/**
+ * Send weekly business report email to the owner
+ */
+export async function sendWeeklyReportEmail(): Promise<{ data: EmailResult | null; error: Error | null }> {
+  try {
+    const now = new Date()
+    const sevenDaysAgo = new Date(now)
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+    const thirtyDaysAgo = new Date(now)
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+
+    // Query all data in parallel
+    const [
+      allConfirmedRegistrations,
+      recentRegistrations,
+      camps,
+      paymentBreakdown,
+      revenueAllTime,
+      revenue30d,
+      revenue7d,
+    ] = await Promise.all([
+      // Total confirmed registrations
+      prisma.registration.findMany({
+        where: { status: 'confirmed' },
+        select: {
+          id: true,
+          totalPriceCents: true,
+          athleteId: true,
+        },
+      }),
+      // Registrations from last 7 days
+      prisma.registration.findMany({
+        where: {
+          createdAt: { gte: sevenDaysAgo },
+        },
+        select: {
+          id: true,
+          createdAt: true,
+          totalPriceCents: true,
+          paymentStatus: true,
+          status: true,
+          athlete: { select: { firstName: true, lastName: true } },
+          camp: { select: { name: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      // All non-draft camps
+      prisma.camp.findMany({
+        where: { status: { not: 'draft' } },
+        select: {
+          id: true,
+          name: true,
+          startDate: true,
+          endDate: true,
+          capacity: true,
+          status: true,
+          _count: {
+            select: {
+              registrations: { where: { status: 'confirmed' } },
+            },
+          },
+        },
+        orderBy: { startDate: 'asc' },
+      }),
+      // Payment status breakdown
+      prisma.registration.groupBy({
+        by: ['paymentStatus'],
+        where: { status: { in: ['confirmed', 'pending'] } },
+        _count: { id: true },
+        _sum: { totalPriceCents: true },
+      }),
+      // Revenue all-time
+      prisma.registration.aggregate({
+        where: { status: 'confirmed', paymentStatus: 'paid' },
+        _sum: { totalPriceCents: true },
+      }),
+      // Revenue last 30 days
+      prisma.registration.aggregate({
+        where: { status: 'confirmed', paymentStatus: 'paid', paidAt: { gte: thirtyDaysAgo } },
+        _sum: { totalPriceCents: true },
+      }),
+      // Revenue last 7 days
+      prisma.registration.aggregate({
+        where: { status: 'confirmed', paymentStatus: 'paid', paidAt: { gte: sevenDaysAgo } },
+        _sum: { totalPriceCents: true },
+      }),
+    ])
+
+    const fmtCents = (c: number) => `$${(c / 100).toFixed(2)}`
+    const uniqueAthletes = new Set(allConfirmedRegistrations.map(r => r.athleteId)).size
+    const totalRevenue = allConfirmedRegistrations.reduce((sum, r) => sum + r.totalPriceCents, 0)
+    const activeCamps = camps.filter(c => ['registration_open', 'registration_closed', 'in_progress'].includes(c.status)).length
+
+    // Build overview section
+    const overviewHtml = emailDetailsCard([
+      { label: 'Total Confirmed Registrations', value: String(allConfirmedRegistrations.length) },
+      { label: 'Total Revenue', value: fmtCents(totalRevenue) },
+      { label: 'Unique Athletes', value: String(uniqueAthletes) },
+      { label: 'Active Camps', value: String(activeCamps) },
+    ], 'Overview')
+
+    // Build recent registrations table
+    let recentHtml = ''
+    if (recentRegistrations.length > 0) {
+      const rows = recentRegistrations.map(r => {
+        const name = `${r.athlete?.firstName || ''} ${r.athlete?.lastName || ''}`.trim() || 'Unknown'
+        const camp = r.camp?.name || 'Unknown'
+        const statusColor = r.paymentStatus === 'paid' ? BRAND.success
+          : r.paymentStatus === 'failed' ? BRAND.error
+          : BRAND.warning
+        return `
+          <tr>
+            <td style="padding: 8px 12px; border-bottom: 1px solid ${BRAND.borderSubtle}; color: ${BRAND.textPrimary}; font-size: 13px; font-family: 'Poppins', Arial, sans-serif;">${name}</td>
+            <td style="padding: 8px 12px; border-bottom: 1px solid ${BRAND.borderSubtle}; color: ${BRAND.textSecondary}; font-size: 13px; font-family: 'Poppins', Arial, sans-serif;">${camp}</td>
+            <td style="padding: 8px 12px; border-bottom: 1px solid ${BRAND.borderSubtle}; color: ${statusColor}; font-size: 13px; font-weight: 600; font-family: 'Poppins', Arial, sans-serif;">${r.paymentStatus}</td>
+            <td style="padding: 8px 12px; border-bottom: 1px solid ${BRAND.borderSubtle}; color: ${BRAND.textPrimary}; font-size: 13px; font-family: 'Poppins', Arial, sans-serif; text-align: right;">${fmtCents(r.totalPriceCents)}</td>
+          </tr>`
+      }).join('')
+
+      recentHtml = `
+        ${emailSubheading("This Week's Registrations")}
+        ${emailParagraph(`${recentRegistrations.length} new registration(s) in the last 7 days.`)}
+        <table cellpadding="0" cellspacing="0" style="width: 100%; margin: 0 0 24px; border-radius: 6px; overflow: hidden; background-color: rgba(204,255,0,0.04); border: 1px solid rgba(204,255,0,0.12);">
+          <tr>
+            <th style="padding: 10px 12px; text-align: left; color: ${BRAND.neon}; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid ${BRAND.borderSubtle}; font-family: 'Poppins', Arial, sans-serif;">Athlete</th>
+            <th style="padding: 10px 12px; text-align: left; color: ${BRAND.neon}; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid ${BRAND.borderSubtle}; font-family: 'Poppins', Arial, sans-serif;">Camp</th>
+            <th style="padding: 10px 12px; text-align: left; color: ${BRAND.neon}; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid ${BRAND.borderSubtle}; font-family: 'Poppins', Arial, sans-serif;">Payment</th>
+            <th style="padding: 10px 12px; text-align: right; color: ${BRAND.neon}; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid ${BRAND.borderSubtle}; font-family: 'Poppins', Arial, sans-serif;">Amount</th>
+          </tr>
+          ${rows}
+        </table>`
+    } else {
+      recentHtml = `
+        ${emailSubheading("This Week's Registrations")}
+        ${emailCallout('No new registrations in the past 7 days.')}`
+    }
+
+    // Build camp status section
+    const campRows = camps.map(c => {
+      const registered = c._count.registrations
+      const cap = c.capacity || 0
+      const fillPct = cap > 0 ? Math.round((registered / cap) * 100) : 0
+      const fillColor = fillPct >= 90 ? BRAND.error : fillPct >= 70 ? BRAND.warning : BRAND.success
+      const dates = `${c.startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${c.endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+      return `
+        <tr>
+          <td style="padding: 8px 12px; border-bottom: 1px solid ${BRAND.borderSubtle}; color: ${BRAND.textPrimary}; font-size: 13px; font-family: 'Poppins', Arial, sans-serif;">${c.name}</td>
+          <td style="padding: 8px 12px; border-bottom: 1px solid ${BRAND.borderSubtle}; color: ${BRAND.textSecondary}; font-size: 13px; font-family: 'Poppins', Arial, sans-serif;">${dates}</td>
+          <td style="padding: 8px 12px; border-bottom: 1px solid ${BRAND.borderSubtle}; color: ${BRAND.textPrimary}; font-size: 13px; font-family: 'Poppins', Arial, sans-serif;">${registered}/${cap}</td>
+          <td style="padding: 8px 12px; border-bottom: 1px solid ${BRAND.borderSubtle}; color: ${fillColor}; font-size: 13px; font-weight: 600; font-family: 'Poppins', Arial, sans-serif; text-align: right;">${fillPct}%</td>
+        </tr>`
+    }).join('')
+
+    const campStatusHtml = camps.length > 0 ? `
+      ${emailSubheading('Camp Status')}
+      <table cellpadding="0" cellspacing="0" style="width: 100%; margin: 0 0 24px; border-radius: 6px; overflow: hidden; background-color: rgba(204,255,0,0.04); border: 1px solid rgba(204,255,0,0.12);">
+        <tr>
+          <th style="padding: 10px 12px; text-align: left; color: ${BRAND.neon}; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid ${BRAND.borderSubtle}; font-family: 'Poppins', Arial, sans-serif;">Camp</th>
+          <th style="padding: 10px 12px; text-align: left; color: ${BRAND.neon}; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid ${BRAND.borderSubtle}; font-family: 'Poppins', Arial, sans-serif;">Dates</th>
+          <th style="padding: 10px 12px; text-align: left; color: ${BRAND.neon}; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid ${BRAND.borderSubtle}; font-family: 'Poppins', Arial, sans-serif;">Registered</th>
+          <th style="padding: 10px 12px; text-align: right; color: ${BRAND.neon}; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid ${BRAND.borderSubtle}; font-family: 'Poppins', Arial, sans-serif;">Fill Rate</th>
+        </tr>
+        ${campRows}
+      </table>` : ''
+
+    // Build payment summary
+    const paymentRows = paymentBreakdown.map(p => {
+      const statusColor = p.paymentStatus === 'paid' ? BRAND.success
+        : p.paymentStatus === 'failed' ? BRAND.error
+        : p.paymentStatus === 'refunded' ? BRAND.magenta
+        : BRAND.warning
+      return { label: p.paymentStatus.toUpperCase(), value: `${p._count.id} registrations — ${fmtCents(p._sum.totalPriceCents || 0)}`, color: statusColor }
+    })
+
+    const paymentHtml = paymentBreakdown.length > 0 ? `
+      ${emailSubheading('Payment Summary')}
+      ${paymentRows.map(r => emailCallout(
+        `<strong style="color: ${r.color};">${r.label}:</strong> ${r.value}`,
+        r.label === 'PAID' ? 'success' : r.label === 'FAILED' ? 'warning' : 'info'
+      )).join('')}` : ''
+
+    // Build revenue snapshot
+    const revenueHtml = emailDetailsCard([
+      { label: 'All-Time Revenue', value: fmtCents(revenueAllTime._sum.totalPriceCents || 0) },
+      { label: 'Last 30 Days', value: fmtCents(revenue30d._sum.totalPriceCents || 0) },
+      { label: 'Last 7 Days', value: fmtCents(revenue7d._sum.totalPriceCents || 0) },
+    ], 'Revenue Snapshot')
+
+    const reportDate = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+
+    const bodyContent = `
+      ${emailLabel('Weekly Report')}
+      ${emailHeading(`Business<br/><span style="color: ${BRAND.neon};">Report</span>`)}
+      ${emailParagraph(`Here is your weekly business snapshot for <strong style="color: ${BRAND.textPrimary};">${reportDate}</strong>.`)}
+      ${overviewHtml}
+      ${recentHtml}
+      ${campStatusHtml}
+      ${paymentHtml}
+      ${revenueHtml}
+      ${emailParagraph(`This report is sent automatically every Monday at 9:00 AM UTC.`)}
+    `
+
+    const html = brandWrap(bodyContent)
+    const subject = `Weekly Business Report — ${reportDate}`
+    const toEmail = 'coledanellerich@gmail.com'
+    const fromEmail = DEFAULT_FROM_EMAIL
+
+    // Send directly (bypass template system since content is dynamically built)
+    if (IS_DEVELOPMENT && !isEmailConfigured()) {
+      console.log('[Email] Would send weekly report to', toEmail)
+      const emailLogId = await logEmail({
+        toEmail,
+        fromEmail,
+        subject,
+        emailType: 'weekly_report',
+        payload: { reportDate },
+        providerMessageId: `dev-${Date.now()}`,
+        status: 'sent',
+      })
+      return {
+        data: { success: true, messageId: `dev-${Date.now()}`, sentAt: new Date().toISOString(), emailLogId: emailLogId || undefined },
+        error: null,
+      }
+    }
+
+    const result = await sesSendEmail({ from: fromEmail, to: toEmail, subject, html })
+
+    if (!result.success) {
+      await logEmail({ toEmail, fromEmail, subject, emailType: 'weekly_report', payload: { reportDate }, status: 'failed', errorMessage: result.error })
+      return { data: null, error: new Error(result.error) }
+    }
+
+    const emailLogId = await logEmail({
+      toEmail,
+      fromEmail,
+      subject,
+      emailType: 'weekly_report',
+      payload: { reportDate },
+      providerMessageId: result.messageId || null,
+      status: 'sent',
+    })
+
+    return {
+      data: { success: true, messageId: result.messageId || null, sentAt: new Date().toISOString(), emailLogId: emailLogId || undefined },
+      error: null,
+    }
+  } catch (error) {
+    console.error('[Email] Failed to send weekly report:', error)
+    return { data: null, error: error as Error }
+  }
 }
 
 // =============================================================================

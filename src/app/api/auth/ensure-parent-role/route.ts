@@ -13,7 +13,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedUserFromRequest } from '@/lib/auth/cognito-server'
-import prisma from '@/lib/db/client'
+import { prisma } from '@/lib/db/client'
+import { ensureParentRole } from '@/lib/services/users'
 
 export async function POST(request: NextRequest) {
   const authUser = await getAuthenticatedUserFromRequest(request)
@@ -31,31 +32,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 })
     }
 
-    // Check if they already have an active parent role
-    const existingParentRole = await prisma.userRoleAssignment.findFirst({
-      where: {
-        userId: profile.id,
-        role: 'parent',
-        isActive: true,
-      },
-    })
+    const added = await ensureParentRole(profile.id)
 
-    if (existingParentRole) {
-      return NextResponse.json({ added: false, message: 'Parent role already exists' })
-    }
-
-    // Add parent role (no tenantId — parent role is global)
-    await prisma.userRoleAssignment.create({
-      data: {
-        userId: profile.id,
-        role: 'parent',
-        isActive: true,
-      },
-    })
-
-    console.log('[EnsureParentRole] Added parent role for user:', profile.id)
-
-    return NextResponse.json({ added: true })
+    return NextResponse.json({ added })
   } catch (error) {
     console.error('[EnsureParentRole] Error:', error)
     return NextResponse.json(
