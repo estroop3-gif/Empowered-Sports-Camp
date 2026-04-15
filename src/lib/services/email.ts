@@ -521,17 +521,42 @@ export async function sendRegistrationConfirmationEmail(params: {
       priceCents: ra.priceCents,
     }))
 
+    const camperName = `${registration.athlete?.firstName || ''} ${registration.athlete?.lastName || ''}`.trim() || 'Your Athlete'
+    const facilityName = registration.camp.location?.name || 'TBA'
+
+    // Recalculate the total from component parts — this catches cases where
+    // totalPriceCents was stored as 0 because the camp price wasn't set at
+    // registration-creation time but has since been updated in admin.
+    const addonActualTotal = registration.registrationAddons.reduce((s, ra) => s + ra.priceCents, 0)
+    const recalculatedTotal =
+      registration.basePriceCents -
+      registration.discountCents -
+      registration.promoDiscountCents +
+      addonActualTotal +
+      registration.taxCents
+
+    // Use the recalculated value when the stored total is 0 but the camp has a price.
+    // A legitimate $0 registration has basePriceCents = 0 (or a 100% promo code).
+    const effectiveTotalPriceCents =
+      registration.totalPriceCents === 0 &&
+      registration.basePriceCents === 0 &&
+      registration.camp.priceCents > 0
+        ? registration.camp.priceCents  // camp price set after registration was created
+        : recalculatedTotal > 0
+          ? recalculatedTotal
+          : registration.totalPriceCents
+
     const context: EmailContext = {
       parentName: registration.parent?.firstName || 'Parent',
-      camperName: `${registration.athlete?.firstName || ''} ${registration.athlete?.lastName || ''}`.trim() || 'Your Athlete',
+      camperName,
       campName: registration.camp.name,
       sessionDates: `${startDate} – ${endDate}`,
       campTimes,
-      facilityName: registration.camp.location?.name || 'TBA',
+      facilityName,
       facilityAddress: registration.camp.location?.address || '',
       facilityCity: registration.camp.location?.city || '',
       facilityState: registration.camp.location?.state || '',
-      totalPaid: fmtCents(registration.totalPriceCents),
+      totalPaid: fmtCents(effectiveTotalPriceCents),
       basePriceCents: String(registration.basePriceCents),
       discountCents: String(registration.discountCents),
       promoDiscountCents: String(registration.promoDiscountCents),
@@ -543,6 +568,13 @@ export async function sendRegistrationConfirmationEmail(params: {
       registrationId: registration.id,
       directorName: registration.tenant?.name || 'Empowered Sports Camp',
       directorPhone: registration.tenant?.contactPhone || '',
+      // Aliases for DB templates that use different variable names
+      athleteName: camperName,
+      campDates: `${startDate} – ${endDate}`,
+      campTime: campTimes,
+      campLocation: facilityName,
+      campStartDate: startDate,
+      campEndDate: endDate,
     }
 
     return sendTransactionalEmail({

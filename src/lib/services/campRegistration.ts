@@ -352,7 +352,11 @@ export async function createOrUpdateRegistrationDraft(
       : false
     const basePrice = isEarlyBird && camp.earlyBirdPriceCents
       ? camp.earlyBirdPriceCents
-      : camp.priceCents
+      : (camp.priceCents ?? 0)
+
+    if (basePrice === 0) {
+      console.warn(`[CampRegistration] Camp ${campId} has priceCents=0. Registrations will be created as free. Set camp price in admin if this is unintentional.`)
+    }
 
     // Handle promo code if provided
     let promoDiscount = 0

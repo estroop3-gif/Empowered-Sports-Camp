@@ -555,6 +555,13 @@ export default function AdminCampsPage() {
                                 Grouping
                               </Link>
                               <Link
+                                href={`/admin/camps/${camp.id}/squads`}
+                                className="flex items-center gap-3 px-4 py-3 text-sm text-white/70 hover:bg-white/5 hover:text-white transition-colors"
+                              >
+                                <Users className="h-4 w-4" />
+                                Squad Pairings
+                              </Link>
+                              <Link
                                 href={`/admin/camps/${camp.id}/addons`}
                                 className="flex items-center gap-3 px-4 py-3 text-sm text-white/70 hover:bg-white/5 hover:text-white transition-colors"
                               >

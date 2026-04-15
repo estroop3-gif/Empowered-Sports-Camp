@@ -190,10 +190,10 @@ function checkoutReducer(state: CheckoutState, action: CheckoutAction): Checkout
       // Calculate age if DOB changed
       if (action.data.dateOfBirth) {
         const dob = new Date(action.data.dateOfBirth)
-        const today = new Date()
-        let age = today.getFullYear() - dob.getFullYear()
-        const monthDiff = today.getMonth() - dob.getMonth()
-        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
+        const refDate = state.campSession ? new Date(state.campSession.startDate) : new Date()
+        let age = refDate.getFullYear() - dob.getFullYear()
+        const monthDiff = refDate.getMonth() - dob.getMonth()
+        if (monthDiff < 0 || (monthDiff === 0 && refDate.getDate() < dob.getDate())) {
           age--
         }
         updatedCamper.age = age
@@ -217,10 +217,10 @@ function checkoutReducer(state: CheckoutState, action: CheckoutAction): Checkout
 
       // Calculate age from DOB
       const dob = new Date(action.athlete.date_of_birth)
-      const today = new Date()
-      let age = today.getFullYear() - dob.getFullYear()
-      const monthDiff = today.getMonth() - dob.getMonth()
-      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
+      const refDate = state.campSession ? new Date(state.campSession.startDate) : new Date()
+      let age = refDate.getFullYear() - dob.getFullYear()
+      const monthDiff = refDate.getMonth() - dob.getMonth()
+      if (monthDiff < 0 || (monthDiff === 0 && refDate.getDate() < dob.getDate())) {
         age--
       }
 

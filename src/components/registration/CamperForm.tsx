@@ -295,10 +295,10 @@ function CamperCard({
   const getAgeError = (): string | null => {
     if (!camper.age || !campSession) return null
     if (camper.age < campSession.minAge) {
-      return `Must be at least ${campSession.minAge} years old for this camp`
+      return `Must be at least ${campSession.minAge} years old by the start of camp`
     }
     if (camper.age > campSession.maxAge) {
-      return `Must be ${campSession.maxAge} or younger for this camp`
+      return `Must be ${campSession.maxAge} or younger by the start of camp`
     }
     return null
   }

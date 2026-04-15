@@ -588,8 +588,8 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session): Promise
       },
     })
 
-    // Fix addonsTotalCents and totalPriceCents from actual registrationAddons
-    // This ensures DB matches Stripe's actual charge regardless of checkout calculation bugs
+    // Recalculate and persist addonsTotalCents and totalPriceCents from Stripe's confirmed charge.
+    // Always runs — catches cases where camp priceCents defaulted to 0 or addons drifted.
     const regsWithAddons = await prisma.registration.findMany({
       where: { id: { in: allRegIds } },
       select: {
@@ -603,19 +603,30 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session): Promise
       },
     })
 
+    // For single-registration checkouts, use Stripe's amount_total as the source of truth
+    // so the email always reflects what was actually charged.
+    const stripeTotal = session.amount_total ?? 0
+    const isSingleReg = allRegIds.length === 1
+
     for (const reg of regsWithAddons) {
       const actualAddonTotal = reg.registrationAddons.reduce((s, a) => s + a.priceCents, 0)
-      if (actualAddonTotal !== reg.addonsTotalCents) {
-        const correctTotal = reg.basePriceCents - reg.discountCents - reg.promoDiscountCents + actualAddonTotal + reg.taxCents
-        await prisma.registration.update({
-          where: { id: reg.id },
-          data: {
-            addonsTotalCents: actualAddonTotal,
-            totalPriceCents: correctTotal,
-          },
-        })
-        console.log(`[Payments] Fixed registration ${reg.id}: addonsTotalCents ${reg.addonsTotalCents} → ${actualAddonTotal}, totalPriceCents → ${correctTotal}`)
-      }
+      const calculatedTotal = Math.max(
+        0,
+        reg.basePriceCents - reg.discountCents - reg.promoDiscountCents + actualAddonTotal + reg.taxCents
+      )
+      // For a single-reg paid checkout, trust Stripe's total if our calculated value is 0
+      // (camp priceCents may not have been set when draft was created)
+      const correctTotal = isSingleReg && stripeTotal > 0 && calculatedTotal === 0
+        ? stripeTotal
+        : calculatedTotal
+
+      await prisma.registration.update({
+        where: { id: reg.id },
+        data: {
+          addonsTotalCents: actualAddonTotal,
+          totalPriceCents: correctTotal,
+        },
+      })
     }
 
     // Get all registration details for notifications
