@@ -1,9 +1,9 @@
 'use client'
 
 /**
- * CIT Application Form Component
+ * Volunteer Application Form Component
  *
- * Comprehensive application form for the Coaches-In-Training program.
+ * Comprehensive application form for the Volunteer program.
  * Updated to work with database-backed API.
  */
 
@@ -29,9 +29,9 @@ interface FormData {
   gradeLevel: string
   graduationYear: string
 
-  // Sports Experience
-  sportsPlayed: string
-  experienceSummary: string
+  // Background
+  priorExperience: string
+  backgroundSummary: string
 
   // Parent/Guardian Info
   parentName: string
@@ -39,7 +39,11 @@ interface FormData {
   parentPhone: string
 
   // Availability
+  availabilityWindows: string[]
   availabilityNotes: string
+
+  // Volunteer Roles
+  volunteerRoles: string[]
 
   // Essays
   whyCit: string
@@ -126,6 +130,43 @@ const howHeardOptions = [
   { value: 'other', label: 'Other' },
 ]
 
+const availabilityWindowOptions = [
+  { value: 'june-early', label: 'Early June', hint: 'First two weeks of June' },
+  { value: 'june-late', label: 'Late June', hint: 'Last two weeks of June' },
+  { value: 'july-early', label: 'Early July', hint: 'First two weeks of July' },
+  { value: 'july-late', label: 'Late July', hint: 'Last two weeks of July' },
+  { value: 'august', label: 'August', hint: 'Any time in August' },
+  { value: 'flexible', label: 'Flexible', hint: 'Available most of the summer' },
+]
+
+const volunteerRoleOptions = [
+  {
+    value: 'check-in-out',
+    label: 'Athlete Check-In / Check-Out',
+    description: 'Welcoming athletes and families, managing sign-in sheets and wristbands',
+  },
+  {
+    value: 'concessions',
+    label: 'Concessions',
+    description: 'Helping run the snack stand, handling cash/card transactions, keeping inventory stocked',
+  },
+  {
+    value: 'timekeeping',
+    label: 'Time Keeping',
+    description: 'Tracking game clocks, reporting scores, and keeping schedules on time',
+  },
+  {
+    value: 'equipment-inventory',
+    label: 'Equipment Inventory',
+    description: 'Organizing, distributing, and collecting gear, balls, cones, and other supplies',
+  },
+  {
+    value: 'setup-teardown',
+    label: 'Set Up & Tear Down',
+    description: 'Arriving early or staying late to arrange fields, tents, tables, and signage',
+  },
+]
+
 export default function CITApplicationForm() {
   const [formData, setFormData] = useState<FormData>({
     firstName: '',
@@ -137,12 +178,14 @@ export default function CITApplicationForm() {
     schoolName: '',
     gradeLevel: '',
     graduationYear: '',
-    sportsPlayed: '',
-    experienceSummary: '',
+    priorExperience: '',
+    backgroundSummary: '',
     parentName: '',
     parentEmail: '',
     parentPhone: '',
+    availabilityWindows: [],
     availabilityNotes: '',
+    volunteerRoles: [],
     whyCit: '',
     leadershipExperience: '',
     howHeard: '',
@@ -168,8 +211,8 @@ export default function CITApplicationForm() {
     if (!formData.schoolName.trim()) newErrors.schoolName = 'School name is required'
     if (!formData.gradeLevel) newErrors.gradeLevel = 'Grade level is required'
 
-    // Required sports experience
-    if (!formData.sportsPlayed.trim()) newErrors.sportsPlayed = 'Sports experience is required'
+    // Required background field
+    if (!formData.priorExperience.trim()) newErrors.priorExperience = 'Please tell us about your background'
 
     // Required parent fields
     if (!formData.parentName.trim()) newErrors.parentName = 'Parent/guardian name is required'
@@ -182,7 +225,7 @@ export default function CITApplicationForm() {
 
     // Required essays
     if (!formData.whyCit.trim()) {
-      newErrors.whyCit = 'Please tell us why you want to be a CIT'
+      newErrors.whyCit = 'Please tell us why you want to volunteer'
     } else if (formData.whyCit.trim().length < 50) {
       newErrors.whyCit = 'Please provide a more detailed response (at least 50 characters)'
     }
@@ -199,6 +242,24 @@ export default function CITApplicationForm() {
     if (errors[name]) {
       setErrors((prev) => ({ ...prev, [name]: undefined }))
     }
+  }
+
+  const handleRoleToggle = (value: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      volunteerRoles: prev.volunteerRoles.includes(value)
+        ? prev.volunteerRoles.filter((r) => r !== value)
+        : [...prev.volunteerRoles, value],
+    }))
+  }
+
+  const handleWindowToggle = (value: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      availabilityWindows: prev.availabilityWindows.includes(value)
+        ? prev.availabilityWindows.filter((w) => w !== value)
+        : [...prev.availabilityWindows, value],
+    }))
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -240,7 +301,7 @@ export default function CITApplicationForm() {
               Application Submitted!
             </h2>
             <p className="text-white/70 mb-4">
-              Thank you for applying to become a Coach-In-Training at Empowered Athletes.
+              Thank you for applying to volunteer with Empowered Athletes!
             </p>
             <p className="text-white/60 text-sm mb-8">
               We'll review your application and reach out to you and your parent/guardian
@@ -250,7 +311,7 @@ export default function CITApplicationForm() {
               <Link href="/programs/cit-program">
                 <Button variant="outline-neon">
                   <ArrowLeft className="mr-2 h-4 w-4" />
-                  Back to CIT Program
+                  Back to Volunteer Program
                 </Button>
               </Link>
               <Link href="/programs">
@@ -277,7 +338,7 @@ export default function CITApplicationForm() {
           className="inline-flex items-center gap-2 text-white/60 hover:text-magenta transition-colors mb-8"
         >
           <ArrowLeft className="h-4 w-4" />
-          <span className="text-sm">Back to CIT Program</span>
+          <span className="text-sm">Back to Volunteer Program</span>
         </Link>
 
         <form onSubmit={handleSubmit} className="space-y-10">
@@ -488,43 +549,43 @@ export default function CITApplicationForm() {
           {/* Divider */}
           <div className="border-t border-white/10" />
 
-          {/* Section: Sports Experience */}
+          {/* Section: Your Background */}
           <div>
-            <h3 className="text-lg font-bold text-white mb-1">Sports Experience</h3>
-            <p className="text-white/50 text-sm mb-6">Tell us about your athletic background.</p>
+            <h3 className="text-lg font-bold text-white mb-1">Your Background</h3>
+            <p className="text-white/50 text-sm mb-6">Tell us about your background.</p>
 
             <div className="space-y-6">
-              {/* Sports played */}
+              {/* Prior experience */}
               <div>
-                <label htmlFor="sportsPlayed" className="block text-sm font-medium text-white/80 mb-2">
-                  What sports do you play or have played? <span className="text-magenta">*</span>
+                <label htmlFor="priorExperience" className="block text-sm font-medium text-white/80 mb-2">
+                  Do you have any prior volunteer, work, or camp experience? <span className="text-magenta">*</span>
                 </label>
                 <Input
-                  id="sportsPlayed"
-                  name="sportsPlayed"
+                  id="priorExperience"
+                  name="priorExperience"
                   type="text"
-                  value={formData.sportsPlayed}
+                  value={formData.priorExperience}
                   onChange={handleChange}
-                  placeholder="e.g., Soccer, Basketball, Volleyball"
-                  className={errors.sportsPlayed ? 'border-red-500' : ''}
+                  placeholder="e.g., Volunteered at local food bank, camp counselor, babysitting"
+                  className={errors.priorExperience ? 'border-red-500' : ''}
                 />
-                {errors.sportsPlayed && (
-                  <p className="mt-1 text-xs text-red-400">{errors.sportsPlayed}</p>
+                {errors.priorExperience && (
+                  <p className="mt-1 text-xs text-red-400">{errors.priorExperience}</p>
                 )}
               </div>
 
-              {/* Experience summary */}
+              {/* Background summary */}
               <div>
-                <label htmlFor="experienceSummary" className="block text-sm font-medium text-white/80 mb-2">
-                  Tell us more about your sports experience
+                <label htmlFor="backgroundSummary" className="block text-sm font-medium text-white/80 mb-2">
+                  Anything else you'd like to share about your background?
                 </label>
                 <textarea
-                  id="experienceSummary"
-                  name="experienceSummary"
+                  id="backgroundSummary"
+                  name="backgroundSummary"
                   rows={3}
-                  value={formData.experienceSummary}
+                  value={formData.backgroundSummary}
                   onChange={handleChange}
-                  placeholder="How long have you played? Current teams, leagues, or clubs? Any achievements or positions?"
+                  placeholder="Feel free to share any additional context about your experience, interests, or skills."
                   className="w-full px-3 py-2 bg-dark-100 border border-white/20 text-white placeholder:text-white/40 focus:border-magenta focus:outline-none focus:ring-1 focus:ring-magenta transition-colors resize-none"
                 />
               </div>
@@ -608,21 +669,72 @@ export default function CITApplicationForm() {
           {/* Section: Availability */}
           <div>
             <h3 className="text-lg font-bold text-white mb-1">Availability</h3>
-            <p className="text-white/50 text-sm mb-6">When can you participate as a CIT?</p>
+            <p className="text-white/50 text-sm mb-6">When are you available to volunteer? Select all that apply.</p>
 
-            <div>
-              <label htmlFor="availabilityNotes" className="block text-sm font-medium text-white/80 mb-2">
-                Describe your availability
-              </label>
-              <textarea
-                id="availabilityNotes"
-                name="availabilityNotes"
-                rows={3}
-                value={formData.availabilityNotes}
-                onChange={handleChange}
-                placeholder="e.g., Available all summer, weekdays only in June, weekends in July, etc."
-                className="w-full px-3 py-2 bg-dark-100 border border-white/20 text-white placeholder:text-white/40 focus:border-magenta focus:outline-none focus:ring-1 focus:ring-magenta transition-colors resize-none"
-              />
+            <div className="space-y-4">
+              {availabilityWindowOptions.map((window) => (
+                <label
+                  key={window.value}
+                  className="flex items-start gap-3 p-4 border border-white/10 cursor-pointer hover:border-magenta/40 transition-colors"
+                >
+                  <input
+                    type="checkbox"
+                    checked={formData.availabilityWindows.includes(window.value)}
+                    onChange={() => handleWindowToggle(window.value)}
+                    className="mt-0.5 h-4 w-4 accent-magenta flex-shrink-0"
+                  />
+                  <div>
+                    <p className="text-sm font-medium text-white">{window.label}</p>
+                    <p className="text-xs text-white/50 mt-0.5">{window.hint}</p>
+                  </div>
+                </label>
+              ))}
+
+              <div className="mt-4">
+                <label htmlFor="availabilityNotes" className="block text-sm font-medium text-white/80 mb-2">
+                  Any additional availability notes?
+                </label>
+                <textarea
+                  id="availabilityNotes"
+                  name="availabilityNotes"
+                  rows={3}
+                  value={formData.availabilityNotes}
+                  onChange={handleChange}
+                  placeholder="e.g., Can't do the week of July 4th, prefer mornings, etc."
+                  className="w-full px-3 py-2 bg-dark-100 border border-white/20 text-white placeholder:text-white/40 focus:border-magenta focus:outline-none focus:ring-1 focus:ring-magenta transition-colors resize-none"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Divider */}
+          <div className="border-t border-white/10" />
+
+          {/* Section: Volunteer Roles */}
+          <div>
+            <h3 className="text-lg font-bold text-white mb-1">Volunteer Roles</h3>
+            <p className="text-white/50 text-sm mb-6">
+              Select all areas you're willing to help with. We'll do our best to match you based on your preferences.
+            </p>
+
+            <div className="space-y-4">
+              {volunteerRoleOptions.map((role) => (
+                <label
+                  key={role.value}
+                  className="flex items-start gap-3 p-4 border border-white/10 cursor-pointer hover:border-magenta/40 transition-colors"
+                >
+                  <input
+                    type="checkbox"
+                    checked={formData.volunteerRoles.includes(role.value)}
+                    onChange={() => handleRoleToggle(role.value)}
+                    className="mt-0.5 h-4 w-4 accent-magenta flex-shrink-0"
+                  />
+                  <div>
+                    <p className="text-sm font-medium text-white">{role.label}</p>
+                    <p className="text-xs text-white/50 mt-0.5">{role.description}</p>
+                  </div>
+                </label>
+              ))}
             </div>
           </div>
 
@@ -635,10 +747,10 @@ export default function CITApplicationForm() {
             <p className="text-white/50 text-sm mb-6">Help us get to know you better.</p>
 
             <div className="space-y-6">
-              {/* Why CIT */}
+              {/* Why volunteer */}
               <div>
                 <label htmlFor="whyCit" className="block text-sm font-medium text-white/80 mb-2">
-                  Why do you want to be a Coach-In-Training? <span className="text-magenta">*</span>
+                  Why do you want to volunteer with us? <span className="text-magenta">*</span>
                 </label>
                 <textarea
                   id="whyCit"
@@ -646,7 +758,7 @@ export default function CITApplicationForm() {
                   rows={4}
                   value={formData.whyCit}
                   onChange={handleChange}
-                  placeholder="Tell us what draws you to this program and what you hope to gain from the experience..."
+                  placeholder="Tell us what draws you to volunteering and how you hope to make a difference at camp..."
                   className={`w-full px-3 py-2 bg-dark-100 border ${
                     errors.whyCit ? 'border-red-500' : 'border-white/20'
                   } text-white placeholder:text-white/40 focus:border-magenta focus:outline-none focus:ring-1 focus:ring-magenta transition-colors resize-none`}
@@ -656,11 +768,11 @@ export default function CITApplicationForm() {
                 )}
               </div>
 
-              {/* Leadership experience */}
+              {/* Prior volunteer/work experience */}
               <div>
                 <label htmlFor="leadershipExperience" className="block text-sm font-medium text-white/80 mb-2">
-                  Describe any leadership experience you have
-                  <span className="text-white/50 font-normal ml-2">(sports, school, community)</span>
+                  Tell us about any prior volunteer or work experience
+                  <span className="text-white/50 font-normal ml-2">(school, community, jobs)</span>
                 </label>
                 <textarea
                   id="leadershipExperience"
@@ -668,7 +780,7 @@ export default function CITApplicationForm() {
                   rows={3}
                   value={formData.leadershipExperience}
                   onChange={handleChange}
-                  placeholder="Team captain, club president, volunteer work, mentoring, etc..."
+                  placeholder="Community service, part-time jobs, school clubs, helping at events, etc..."
                   className="w-full px-3 py-2 bg-dark-100 border border-white/20 text-white placeholder:text-white/40 focus:border-magenta focus:outline-none focus:ring-1 focus:ring-magenta transition-colors resize-none"
                 />
               </div>
@@ -685,7 +797,7 @@ export default function CITApplicationForm() {
 
             <div className="md:w-1/2">
               <label htmlFor="howHeard" className="block text-sm font-medium text-white/80 mb-2">
-                How did you hear about the CIT Program?
+                How did you hear about our Volunteer Program?
               </label>
               <select
                 id="howHeard"

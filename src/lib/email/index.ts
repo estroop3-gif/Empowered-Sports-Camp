@@ -64,7 +64,9 @@ export interface CitApplicationEmailData {
   phone?: string | null
   schoolName?: string | null
   gradeLevel?: string | null
-  sportsPlayed?: string | null
+  priorExperience?: string | null
+  volunteerRoles?: string[] | null
+  availabilityWindows?: string[] | null
   whyCit?: string | null
   parentName?: string | null
   parentEmail?: string | null
@@ -223,10 +225,10 @@ function generateCitApplicantConfirmationHtml(applicantName: string): string {
   const F = `font-family: 'Poppins', Arial, sans-serif;`
   return brandWrap(`
     ${emailLabel('Application Received', BRAND.magenta)}
-    ${emailHeading(`CIT Application<br/><span style="color: ${BRAND.magenta};">Received!</span>`)}
+    ${emailHeading(`Volunteer Application<br/><span style="color: ${BRAND.magenta};">Received!</span>`)}
 
     ${emailParagraph(`Hi ${applicantName},`)}
-    ${emailParagraph(`Thank you for applying to our <strong style="color: ${BRAND.magenta};">Coaches-In-Training (CIT) Program</strong>! We're excited that you're interested in becoming a leader and role model for young athletes.`)}
+    ${emailParagraph(`Thank you for applying to volunteer with <strong style="color: ${BRAND.magenta};">Empowered Sports Camp</strong>! We're excited that you want to help make camp an amazing experience for young athletes.`)}
     ${emailParagraph(`We've received your application and our team will review it shortly. Here's what happens next:`)}
 
     <table cellpadding="0" cellspacing="0" style="margin: 0 0 24px; width: 100%;">
@@ -234,15 +236,15 @@ function generateCitApplicantConfirmationHtml(applicantName: string): string {
         <td style="background-color: rgba(255,45,206,0.06); border-left: 3px solid ${BRAND.magenta}; border-radius: 0 6px 6px 0; padding: 20px;">
           <ol style="margin: 0; padding-left: 20px; color: ${BRAND.textSecondary}; font-size: 14px; line-height: 2.2; ${F}">
             <li><strong style="color: ${BRAND.textPrimary};">Application Review</strong> — Our team reviews your application</li>
-            <li><strong style="color: ${BRAND.textPrimary};">Interview</strong> — If selected, we'll reach out to schedule a brief interview</li>
-            <li><strong style="color: ${BRAND.textPrimary};">Training</strong> — Complete our CIT training modules</li>
-            <li><strong style="color: ${BRAND.textPrimary};">Camp Assignment</strong> — Get matched with a camp that fits your schedule</li>
+            <li><strong style="color: ${BRAND.textPrimary};">Confirmation</strong> — We'll confirm your spot and send orientation details</li>
+            <li><strong style="color: ${BRAND.textPrimary};">Volunteer Orientation</strong> — Brief intro to camp operations and your role</li>
+            <li><strong style="color: ${BRAND.textPrimary};">Camp Day</strong> — Show up, help out, and make a difference!</li>
           </ol>
         </td>
       </tr>
     </table>
 
-    ${emailParagraph(`We'll be in touch within the next 1-2 weeks. In the meantime, if you have any questions, feel free to reach out.`)}
+    ${emailParagraph(`We'll be in touch within the next 5-7 business days. In the meantime, if you have any questions, feel free to reach out.`)}
     ${emailParagraph(`<strong style="color: ${BRAND.textPrimary};">— The Empowered Sports Camp Team</strong>`)}
   `, { accentColor: BRAND.magenta })
 }
@@ -254,17 +256,17 @@ function generateCitApplicantConfirmationText(applicantName: string): string {
   return `
 Hi ${applicantName},
 
-Thank you for applying to our Coaches-In-Training (CIT) Program! We're excited that you're interested in becoming a leader and role model for young athletes.
+Thank you for applying to volunteer with Empowered Sports Camp! We're excited that you want to help make camp an amazing experience for young athletes.
 
 We've received your application and our team will review it shortly.
 
 Here's what happens next:
 1. Application Review — Our team reviews your application
-2. Interview — If selected, we'll reach out to schedule a brief interview
-3. Training — Complete our CIT training modules
-4. Camp Assignment — Get matched with a camp that fits your schedule
+2. Confirmation — We'll confirm your spot and send orientation details
+3. Volunteer Orientation — Brief intro to camp operations and your role
+4. Camp Day — Show up, help out, and make a difference!
 
-We'll be in touch within the next 1-2 weeks. In the meantime, if you have any questions, feel free to reach out.
+We'll be in touch within the next 5-7 business days. In the meantime, if you have any questions, feel free to reach out.
 
 — The Empowered Sports Camp Team
 
@@ -283,7 +285,7 @@ export async function sendCitApplicantConfirmationEmail(
   options: CitApplicantConfirmationEmailOptions
 ): Promise<EmailResult> {
   const { to, applicantName } = options
-  const subject = 'Your CIT Application Has Been Received'
+  const subject = 'Your Volunteer Application Has Been Received'
 
   const result = await sendEmail({
     to,
@@ -314,9 +316,9 @@ export async function sendCitApplicantConfirmationEmail(
 function generateCitAdminNotificationHtml(application: CitApplicationEmailData): string {
   return brandWrap(`
     ${emailLabel('New Application', BRAND.magenta)}
-    ${emailHeading(`New CIT<br/><span style="color: ${BRAND.magenta};">Application</span>`)}
+    ${emailHeading(`New Volunteer<br/><span style="color: ${BRAND.magenta};">Application</span>`)}
 
-    ${emailParagraph('A new CIT application has been submitted. Here are the details:')}
+    ${emailParagraph('A new volunteer application has been submitted. Here are the details:')}
 
     ${emailDetailsCard([
       { label: 'Name', value: `${application.firstName} ${application.lastName}` },
@@ -327,15 +329,20 @@ function generateCitAdminNotificationHtml(application: CitApplicationEmailData):
     ${emailDetailsCard([
       { label: 'School', value: application.schoolName || 'Not provided' },
       { label: 'Grade', value: application.gradeLevel || 'Not provided' },
-      { label: 'Sports', value: application.sportsPlayed || 'Not provided' },
-    ], 'School & Sports', BRAND.magenta)}
+      { label: 'Prior Experience', value: application.priorExperience || 'Not provided' },
+    ], 'School & Background', BRAND.magenta)}
 
     ${emailDetailsCard([
       { label: 'Name', value: application.parentName || 'Not provided' },
       { label: 'Email', value: application.parentEmail || 'Not provided' },
     ], 'Parent/Guardian', BRAND.magenta)}
 
-    ${application.whyCit ? emailCallout(`<strong style="color: ${BRAND.magenta};">Why They Want to Be a CIT:</strong> ${application.whyCit}`, 'purple') : ''}
+    ${emailDetailsCard([
+      { label: 'Roles Selected', value: application.volunteerRoles?.join(', ') || 'None selected' },
+      { label: 'Available Windows', value: application.availabilityWindows?.join(', ') || 'Not specified' },
+    ], 'Volunteer Preferences', BRAND.magenta)}
+
+    ${application.whyCit ? emailCallout(`<strong style="color: ${BRAND.magenta};">Why They Want to Volunteer:</strong> ${application.whyCit}`, 'purple') : ''}
 
     ${emailParagraph('Log in to the admin portal to review and process this application.')}
   `, { accentColor: BRAND.magenta })
@@ -346,7 +353,7 @@ function generateCitAdminNotificationHtml(application: CitApplicationEmailData):
  */
 function generateCitAdminNotificationText(application: CitApplicationEmailData): string {
   return `
-NEW CIT APPLICATION
+NEW VOLUNTEER APPLICATION
 
 Applicant Information
 ---------------------
@@ -354,18 +361,23 @@ Name: ${application.firstName} ${application.lastName}
 Email: ${application.email}
 Phone: ${application.phone || 'Not provided'}
 
-School & Sports
----------------
+School & Background
+-------------------
 School: ${application.schoolName || 'Not provided'}
 Grade: ${application.gradeLevel || 'Not provided'}
-Sports: ${application.sportsPlayed || 'Not provided'}
+Prior Experience: ${application.priorExperience || 'Not provided'}
 
 Parent/Guardian
 ---------------
 Name: ${application.parentName || 'Not provided'}
 Email: ${application.parentEmail || 'Not provided'}
 
-${application.whyCit ? `Why They Want to Be a CIT
+Volunteer Preferences
+---------------------
+Roles Selected: ${application.volunteerRoles?.join(', ') || 'None selected'}
+Available Windows: ${application.availabilityWindows?.join(', ') || 'Not specified'}
+
+${application.whyCit ? `Why They Want to Volunteer
 --------------------------
 ${application.whyCit}` : ''}
 
@@ -397,7 +409,7 @@ export async function sendCitAdminNotificationEmail(
     }
   }
 
-  const subject = `New CIT Application - ${application.firstName} ${application.lastName}`
+  const subject = `New Volunteer Application - ${application.firstName} ${application.lastName}`
 
   const result = await sendEmail({
     to: CIT_NOTIFICATIONS_EMAIL,

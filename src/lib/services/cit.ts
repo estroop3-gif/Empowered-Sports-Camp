@@ -26,6 +26,10 @@ export interface CitApplication {
   graduation_year: string | null
   sports_played: string | null
   experience_summary: string | null
+  prior_experience: string | null
+  background_summary: string | null
+  volunteer_roles: string[]
+  availability_windows: string[]
   why_cit: string | null
   leadership_experience: string | null
   availability_notes: string | null
@@ -81,10 +85,12 @@ export interface CreateCitApplicationInput {
   school_name?: string
   grade_level?: string
   graduation_year?: string
-  sports_played?: string
-  experience_summary?: string
+  prior_experience?: string
+  background_summary?: string
+  volunteer_roles?: string[]
   why_cit?: string
   leadership_experience?: string
+  availability_windows?: string[]
   availability_notes?: string
   parent_name?: string
   parent_email?: string
@@ -133,10 +139,12 @@ export async function createCitApplication(
         schoolName: input.school_name || null,
         gradeLevel: input.grade_level || null,
         graduationYear: input.graduation_year || null,
-        sportsPlayed: input.sports_played || null,
-        experienceSummary: input.experience_summary || null,
+        priorExperience: input.prior_experience || null,
+        backgroundSummary: input.background_summary || null,
+        volunteerRoles: input.volunteer_roles || [],
         whyCit: input.why_cit || null,
         leadershipExperience: input.leadership_experience || null,
+        availabilityWindows: input.availability_windows || [],
         availabilityNotes: input.availability_notes || null,
         parentName: input.parent_name || null,
         parentEmail: input.parent_email || null,
@@ -173,6 +181,10 @@ export async function createCitApplication(
       graduation_year: application.graduationYear,
       sports_played: application.sportsPlayed,
       experience_summary: application.experienceSummary,
+      prior_experience: application.priorExperience,
+      background_summary: application.backgroundSummary,
+      volunteer_roles: application.volunteerRoles,
+      availability_windows: application.availabilityWindows,
       why_cit: application.whyCit,
       leadership_experience: application.leadershipExperience,
       availability_notes: application.availabilityNotes,
@@ -259,6 +271,10 @@ export async function listCitApplications(
       graduation_year: app.graduationYear,
       sports_played: app.sportsPlayed,
       experience_summary: app.experienceSummary,
+      prior_experience: app.priorExperience,
+      background_summary: app.backgroundSummary,
+      volunteer_roles: app.volunteerRoles,
+      availability_windows: app.availabilityWindows,
       why_cit: app.whyCit,
       leadership_experience: app.leadershipExperience,
       availability_notes: app.availabilityNotes,
@@ -329,6 +345,10 @@ export async function getCitApplicationById(
       graduation_year: application.graduationYear,
       sports_played: application.sportsPlayed,
       experience_summary: application.experienceSummary,
+      prior_experience: application.priorExperience,
+      background_summary: application.backgroundSummary,
+      volunteer_roles: application.volunteerRoles,
+      availability_windows: application.availabilityWindows,
       why_cit: application.whyCit,
       leadership_experience: application.leadershipExperience,
       availability_notes: application.availabilityNotes,
@@ -437,6 +457,10 @@ export async function updateCitApplicationStatus(
       graduation_year: updated.graduationYear,
       sports_played: updated.sportsPlayed,
       experience_summary: updated.experienceSummary,
+      prior_experience: updated.priorExperience,
+      background_summary: updated.backgroundSummary,
+      volunteer_roles: updated.volunteerRoles,
+      availability_windows: updated.availabilityWindows,
       why_cit: updated.whyCit,
       leadership_experience: updated.leadershipExperience,
       availability_notes: updated.availabilityNotes,
@@ -538,6 +562,10 @@ export async function updateCitApplicationNotes(
       graduation_year: updated.graduationYear,
       sports_played: updated.sportsPlayed,
       experience_summary: updated.experienceSummary,
+      prior_experience: updated.priorExperience,
+      background_summary: updated.backgroundSummary,
+      volunteer_roles: updated.volunteerRoles,
+      availability_windows: updated.availabilityWindows,
       why_cit: updated.whyCit,
       leadership_experience: updated.leadershipExperience,
       availability_notes: updated.availabilityNotes,

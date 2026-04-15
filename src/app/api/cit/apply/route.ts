@@ -28,9 +28,9 @@ interface CITApplicationFormData {
   gradeLevel?: string
   graduationYear?: string
 
-  // Sports Experience
-  sportsPlayed?: string
-  experienceSummary?: string
+  // Background
+  priorExperience?: string
+  backgroundSummary?: string
 
   // Parent/Guardian Info
   parentName?: string
@@ -38,7 +38,11 @@ interface CITApplicationFormData {
   parentPhone?: string
 
   // Availability
+  availabilityWindows?: string[]
   availabilityNotes?: string
+
+  // Volunteer Roles
+  volunteerRoles?: string[]
 
   // Essays
   whyCit?: string
@@ -92,10 +96,12 @@ export async function POST(request: NextRequest) {
       school_name: formData.schoolName,
       grade_level: formData.gradeLevel,
       graduation_year: formData.graduationYear,
-      sports_played: formData.sportsPlayed,
-      experience_summary: formData.experienceSummary,
+      prior_experience: formData.priorExperience,
+      background_summary: formData.backgroundSummary,
+      volunteer_roles: formData.volunteerRoles,
       why_cit: formData.whyCit,
       leadership_experience: formData.leadershipExperience,
+      availability_windows: formData.availabilityWindows,
       availability_notes: formData.availabilityNotes,
       parent_name: formData.parentName,
       parent_email: formData.parentEmail,
@@ -133,7 +139,9 @@ export async function POST(request: NextRequest) {
         phone: formData.phone,
         schoolName: formData.schoolName,
         gradeLevel: formData.gradeLevel,
-        sportsPlayed: formData.sportsPlayed,
+        priorExperience: formData.priorExperience,
+        volunteerRoles: formData.volunteerRoles,
+        availabilityWindows: formData.availabilityWindows,
         whyCit: formData.whyCit,
         parentName: formData.parentName,
         parentEmail: formData.parentEmail,
@@ -149,7 +157,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: 'CIT application submitted successfully',
+      message: 'Volunteer application submitted successfully',
       applicationId: application?.id,
     })
   } catch (error) {
