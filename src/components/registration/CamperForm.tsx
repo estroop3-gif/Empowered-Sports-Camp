@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils'
 import { useCheckout, type ExistingAthlete, type ParentProfile } from '@/lib/checkout/context'
 import { useAuth } from '@/lib/auth/context'
 import { Button } from '@/components/ui/button'
-import type { CamperFormData, CampSession, PickupPersonInput } from '@/types/registration'
+import type { CamperFormData, CampSession, PickupPersonInput, TShirtSize } from '@/types/registration'
 
 /**
  * CamperForm
@@ -396,7 +396,7 @@ function CamperCard({
             />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <FormInput
               label="Date of Birth"
               type="date"
@@ -422,6 +422,21 @@ function CamperCard({
                 Female (Females-Only)
               </div>
             </div>
+            <FormSelect
+              label="T-Shirt Size"
+              value={camper.tshirtSize}
+              onChange={(e) => onUpdate({ tshirtSize: e.target.value as TShirtSize })}
+              options={[
+                { value: 'YXS', label: 'Youth XS' },
+                { value: 'YS', label: 'Youth S' },
+                { value: 'YM', label: 'Youth M' },
+                { value: 'YL', label: 'Youth L' },
+                { value: 'AS', label: 'Adult S' },
+                { value: 'AM', label: 'Adult M' },
+                { value: 'AL', label: 'Adult L' },
+                { value: 'AXL', label: 'Adult XL' },
+              ]}
+            />
           </div>
 
           {/* Medical Info */}

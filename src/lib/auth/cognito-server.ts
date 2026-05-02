@@ -104,13 +104,26 @@ export async function getAuthenticatedUser(): Promise<VerifiedUser | null> {
       })
 
       if (profile) {
-        // Get active role assignment
-        const roleAssignment = await prisma.userRoleAssignment.findFirst({
+        // Get all active role assignments and pick highest-priority one
+        const ROLE_PRIORITY: Record<string, number> = {
+          hq_admin: 0,
+          licensee_owner: 1,
+          director: 2,
+          coach: 3,
+          cit_volunteer: 4,
+          parent: 5,
+        }
+
+        const roleAssignments = await prisma.userRoleAssignment.findMany({
           where: {
             userId: profile.id,
             isActive: true,
           },
         })
+
+        const roleAssignment = roleAssignments.sort(
+          (a, b) => (ROLE_PRIORITY[a.role] ?? 99) - (ROLE_PRIORITY[b.role] ?? 99)
+        )[0] || null
 
         if (roleAssignment) {
           user.role = roleAssignment.role
@@ -200,13 +213,26 @@ export async function getAuthenticatedUserFromRequest(
       console.log('[auth] Profile lookup result:', profile?.id || 'not found')
 
       if (profile) {
-        // Get active role assignment
-        const roleAssignment = await prisma.userRoleAssignment.findFirst({
+        // Get all active role assignments and pick highest-priority one
+        const ROLE_PRIORITY: Record<string, number> = {
+          hq_admin: 0,
+          licensee_owner: 1,
+          director: 2,
+          coach: 3,
+          cit_volunteer: 4,
+          parent: 5,
+        }
+
+        const roleAssignments = await prisma.userRoleAssignment.findMany({
           where: {
             userId: profile.id,
             isActive: true,
           },
         })
+
+        const roleAssignment = roleAssignments.sort(
+          (a, b) => (ROLE_PRIORITY[a.role] ?? 99) - (ROLE_PRIORITY[b.role] ?? 99)
+        )[0] || null
         console.log('[auth] Role assignment:', roleAssignment?.role || 'not found')
 
         if (roleAssignment) {

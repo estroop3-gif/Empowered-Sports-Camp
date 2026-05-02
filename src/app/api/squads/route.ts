@@ -16,6 +16,7 @@ import {
   claimPendingSquadInvites,
   getOtherRegisteredCampers,
   requestSquadWithCamper,
+  updateSquadMemberNotes,
 } from '@/lib/services/campSquads'
 
 export async function GET(request: NextRequest) {
@@ -216,8 +217,28 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ data })
       }
 
+      case 'updateNotes': {
+        const { memberId: notesMemberId, notes } = body
+
+        if (!notesMemberId) {
+          return NextResponse.json({ error: 'memberId required' }, { status: 400 })
+        }
+
+        const { data: notesData, error: notesError } = await updateSquadMemberNotes({
+          memberId: notesMemberId,
+          parentId: user.id,
+          notes: notes || '',
+        })
+
+        if (notesError) {
+          return NextResponse.json({ error: notesError.message }, { status: 500 })
+        }
+
+        return NextResponse.json({ data: notesData })
+      }
+
       case 'requestSquad': {
-        const { campId, tenantId, athleteIds, targetAthleteId } = body
+        const { campId, tenantId, athleteIds, targetAthleteId, notes: reqNotes } = body
 
         if (!campId || !tenantId || !targetAthleteId) {
           return NextResponse.json(
@@ -232,6 +253,7 @@ export async function POST(request: NextRequest) {
           requestingParentId: user.id,
           requestingAthleteIds: athleteIds || [],
           targetAthleteId,
+          notes: reqNotes,
         })
 
         if (error) {

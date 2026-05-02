@@ -24,6 +24,67 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'campId is required' }, { status: 400 })
     }
 
+    // ── Backfill: ensure every pending invite from a known parent has a squad ──
+    // Guest-invite emails sent before this fix was deployed have squadId = null.
+    // Resolve them now so they appear in the squad table immediately.
+    const uninkedInvites = await prisma.pendingSquadInvite.findMany({
+      where: { campId, squadId: null },
+    })
+
+    for (const inv of uninkedInvites) {
+      if (!inv.inviterEmail) continue
+      const inviterProfile = await prisma.profile.findFirst({
+        where: { email: inv.inviterEmail.toLowerCase() },
+      })
+      if (!inviterProfile) continue
+
+      const squad = await prisma.campFriendSquad.upsert({
+        where: {
+          campId_createdByParentId: {
+            campId,
+            createdByParentId: inviterProfile.id,
+          },
+        },
+        update: {},
+        create: {
+          campId,
+          tenantId: inv.tenantId,
+          createdByParentId: inviterProfile.id,
+          label: `${inviterProfile.firstName || 'Her'}'s Squad`,
+        },
+      })
+
+      // Add the inviter's registered athletes (auto-accepted)
+      const regs = await prisma.registration.findMany({
+        where: {
+          campId,
+          athlete: { parentId: inviterProfile.id },
+          status: { in: ['pending', 'confirmed'] },
+        },
+        select: { athleteId: true },
+      })
+      for (const { athleteId } of regs) {
+        await prisma.campFriendSquadMember.upsert({
+          where: { squadId_athleteId: { squadId: squad.id, athleteId } },
+          update: {},
+          create: {
+            squadId: squad.id,
+            parentId: inviterProfile.id,
+            athleteId,
+            status: 'accepted',
+            respondedAt: new Date(),
+          },
+        })
+      }
+
+      // Link the invite to its squad
+      await prisma.pendingSquadInvite.update({
+        where: { id: inv.id },
+        data: { squadId: squad.id },
+      })
+    }
+    // ── End backfill ──────────────────────────────────────────────────────────
+
     // Fetch all squads for this camp with full member + parent + athlete details
     const squads = await prisma.campFriendSquad.findMany({
       where: { campId },

@@ -35,6 +35,8 @@ export interface RosterCamper {
   hasAllergies: boolean
   hasSpecialConsiderations: boolean
   hasUpsells: boolean
+  upsellsSummary: { name: string; variant: string | null; quantity: number; priceCents: number }[]
+  upsellsTotal: number
   shirtSize: string | null
   photoUrl: string | null
   parentName: string | null
@@ -149,11 +151,14 @@ function calculateAge(dateOfBirth: Date): number {
   return age
 }
 
-function gradeToDisplay(grade: number | null): string {
-  if (grade === null) return 'N/A'
-  if (grade === 0) return 'K'
-  if (grade === -1) return 'Pre-K'
-  return `${grade}`
+function gradeToDisplay(gradeValidated: number | null, gradeFromRegistration?: string | null): string {
+  if (gradeValidated !== null) {
+    if (gradeValidated === 0) return 'K'
+    if (gradeValidated === -1) return 'Pre-K'
+    return `${gradeValidated}`
+  }
+  if (gradeFromRegistration) return gradeFromRegistration
+  return 'N/A'
 }
 
 // ============================================================================
@@ -239,6 +244,7 @@ export async function listCampersForSession(params: {
             allergies: true,
             emergencyContactName: true,
             emergencyContactPhone: true,
+            grade: true,
           },
         },
         parent: {
@@ -253,6 +259,7 @@ export async function listCampersForSession(params: {
           select: {
             id: true,
             gradeValidated: true,
+            gradeFromRegistration: true,
             assignedGroupId: true,
             friendGroupId: true,
             specialConsiderations: true,
@@ -330,7 +337,7 @@ export async function listCampersForSession(params: {
         dateOfBirth: r.athlete.dateOfBirth?.toISOString().split('T')[0] || null,
         age: r.athlete.dateOfBirth ? calculateAge(r.athlete.dateOfBirth) : null,
         gradeLevel: sessionData?.gradeValidated ?? null,
-        gradeDisplay: gradeToDisplay(sessionData?.gradeValidated ?? null),
+        gradeDisplay: gradeToDisplay(sessionData?.gradeValidated ?? null, sessionData?.gradeFromRegistration ?? r.athlete.grade),
         groupId: sessionData?.assignedGroupId ?? null,
         groupName: sessionData?.assignedGroup?.groupName ?? null,
         groupNumber: sessionData?.assignedGroup?.groupNumber ?? null,
@@ -341,6 +348,13 @@ export async function listCampersForSession(params: {
         hasAllergies: !!(r.athlete.allergies),
         hasSpecialConsiderations: !!(r.specialConsiderations || sessionData?.specialConsiderations),
         hasUpsells: r.registrationAddons.length > 0,
+        upsellsSummary: r.registrationAddons.map((ra) => ({
+          name: ra.addon.name,
+          variant: ra.variant?.name || null,
+          quantity: ra.quantity,
+          priceCents: ra.priceCents,
+        })),
+        upsellsTotal: r.registrationAddons.reduce((sum, ra) => sum + ra.priceCents * ra.quantity, 0),
         shirtSize: r.shirtSize,
         photoUrl: r.athlete.photoUrl,
         parentName: r.parent.firstName && r.parent.lastName
@@ -576,7 +590,7 @@ export async function getCamperDetail(params: {
           ? calculateAge(registration.athlete.dateOfBirth)
           : null,
         gradeLevel: camperSessionData.gradeValidated ?? null,
-        gradeDisplay: gradeToDisplay(camperSessionData.gradeValidated ?? null),
+        gradeDisplay: gradeToDisplay(camperSessionData.gradeValidated ?? null, camperSessionData.gradeFromRegistration ?? registration.athlete.grade),
         groupId: camperSessionData.assignedGroup?.id ?? null,
         groupName: camperSessionData.assignedGroup?.groupName ?? null,
         groupNumber: camperSessionData.assignedGroup?.groupNumber ?? null,
@@ -589,6 +603,8 @@ export async function getCamperDetail(params: {
           registration.specialConsiderations || camperSessionData.specialConsiderations
         ),
         hasUpsells: upsells.length > 0,
+        upsellsSummary: upsells,
+        upsellsTotal,
         shirtSize: registration.shirtSize,
         photoUrl: registration.athlete.photoUrl,
         parentName: shouldMaskContact
@@ -612,7 +628,6 @@ export async function getCamperDetail(params: {
         waiverSignedAt: registration.waiverSignedAt?.toISOString() || null,
         registeredAt: registration.createdAt.toISOString(),
         upsells,
-        upsellsTotal,
         attendanceHistory,
         primarySportInterest: registration.athlete.primarySportInterest,
         secondarySportInterest: registration.athlete.secondarySportInterest,
@@ -760,7 +775,7 @@ export async function getCamperDetail(params: {
         ? calculateAge(registration.athlete.dateOfBirth)
         : null,
       gradeLevel: camperSessionData?.gradeValidated ?? null,
-      gradeDisplay: gradeToDisplay(camperSessionData?.gradeValidated ?? null),
+      gradeDisplay: gradeToDisplay(camperSessionData?.gradeValidated ?? null, camperSessionData?.gradeFromRegistration ?? registration.athlete.grade),
       groupId: camperSessionData?.assignedGroup?.id ?? null,
       groupName: camperSessionData?.assignedGroup?.groupName ?? null,
       groupNumber: camperSessionData?.assignedGroup?.groupNumber ?? null,
@@ -773,6 +788,8 @@ export async function getCamperDetail(params: {
         registration.specialConsiderations || camperSessionData?.specialConsiderations
       ),
       hasUpsells: upsells.length > 0,
+      upsellsSummary: upsells,
+      upsellsTotal,
       shirtSize: registration.shirtSize,
       photoUrl: registration.athlete.photoUrl,
       // Contact info (masked for coaches)
@@ -800,7 +817,6 @@ export async function getCamperDetail(params: {
       registeredAt: registration.createdAt.toISOString(),
       // Upsells
       upsells,
-      upsellsTotal,
       // Attendance
       attendanceHistory,
       // Sports & Preferences

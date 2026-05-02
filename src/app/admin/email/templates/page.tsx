@@ -24,6 +24,7 @@ import {
   Eye,
   Code,
   AlertCircle,
+  Radio,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
@@ -31,6 +32,8 @@ import { cn } from '@/lib/utils'
 const SECTION_TABS = [
   { value: 'logs', label: 'Email Logs', href: '/admin/email', icon: History },
   { value: 'templates', label: 'Templates', href: '/admin/email/templates', icon: FileText },
+  { value: 'broadcasts', label: 'Camp Broadcasts', href: '/admin/email/broadcasts', icon: Radio },
+  { value: 'tshirt-sizes', label: 'T-Shirt Sizes', href: '/admin/email/tshirt-sizes', icon: Mail },
 ]
 
 interface EmailTemplate {

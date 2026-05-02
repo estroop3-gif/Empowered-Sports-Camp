@@ -277,8 +277,11 @@ export default function TheRoster({ campId, role, backUrl }: TheRosterProps) {
     try {
       const res = await fetch(`/api/camps/${campId}/roster/${camperId}`)
       const json = await res.json()
+      console.log('[Roster] Detail API response:', res.status, 'shirtSize:', json.data?.shirtSize, 'tShirtSize:', json.data?.tShirtSize, 'upsells:', json.data?.upsells?.length)
       if (res.ok) {
         setCamperDetail(json.data)
+      } else {
+        console.error('[Roster] Detail API error:', json)
       }
     } catch (err) {
       console.error('Failed to load camper detail:', err)
@@ -707,6 +710,24 @@ export default function TheRoster({ campId, role, backUrl }: TheRosterProps) {
                               {role !== 'coach' && camper.parentEmail && (
                                 <div className="text-xs text-white/40">{camper.parentEmail}</div>
                               )}
+                              {camper.hasUpsells && camper.upsellsSummary.length > 0 && (
+                                <div className="mt-1.5 flex flex-wrap gap-1">
+                                  {camper.upsellsSummary.map((addon, idx) => (
+                                    <span
+                                      key={idx}
+                                      className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] bg-purple-500/10 border border-purple-500/20 text-purple-300"
+                                    >
+                                      {addon.name}{addon.variant ? ` (${addon.variant})` : ''}{addon.quantity > 1 ? ` ×${addon.quantity}` : ''}
+                                      <span className="text-purple-400 font-medium">${(addon.priceCents * addon.quantity / 100).toFixed(2)}</span>
+                                    </span>
+                                  ))}
+                                  {camper.upsellsSummary.length > 1 && (
+                                    <span className="inline-flex items-center px-1.5 py-0.5 text-[10px] bg-purple-500/20 text-purple-200 font-medium">
+                                      Total: ${(camper.upsellsTotal / 100).toFixed(2)}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           </button>
                         </td>
@@ -758,7 +779,7 @@ export default function TheRoster({ campId, role, backUrl }: TheRosterProps) {
                               </span>
                             )}
                             {camper.hasUpsells && (
-                              <span className="w-6 h-6 flex items-center justify-center bg-purple-100 text-purple-600 rounded-full text-xs" title="Purchased Add-ons">
+                              <span className="w-6 h-6 flex items-center justify-center bg-purple-100 text-purple-600 rounded-full text-xs" title={`Add-ons: ${camper.upsellsSummary.map(u => u.name).join(', ')}`}>
                                 $
                               </span>
                             )}

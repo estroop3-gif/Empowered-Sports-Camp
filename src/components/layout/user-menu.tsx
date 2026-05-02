@@ -308,6 +308,18 @@ export function UserMenu({ variant = 'navbar', className }: UserMenuProps) {
               </Link>
             )}
 
+            {/* Always show HQ Dashboard link for admins viewing as another role */}
+            {actualRole === 'hq_admin' && role !== 'hq_admin' && !isViewingAsOtherRole && (
+              <Link
+                href="/admin"
+                onClick={() => setIsOpen(false)}
+                className="flex items-center gap-3 px-4 py-2.5 text-sm text-white/70 hover:text-white hover:bg-white/5 transition-colors"
+              >
+                <Shield className="h-4 w-4" />
+                <span className="font-medium">HQ Dashboard</span>
+              </Link>
+            )}
+
             {/* Show link to actual admin dashboard when viewing as another role */}
             {isViewingAsOtherRole && (
               <Link

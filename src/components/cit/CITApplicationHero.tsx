@@ -23,35 +23,35 @@ export default function CITApplicationHero() {
           <div className="inline-flex items-center gap-2 px-4 py-2 bg-magenta/10 border border-magenta/30 mb-6">
             <Award className="h-4 w-4 text-magenta" />
             <span className="text-xs font-bold uppercase tracking-widest text-magenta">
-              CIT Application
+              Volunteer Application
             </span>
           </div>
 
           {/* Headline */}
           <h1 className="headline-display headline-lg text-white mb-6">
-            Become A <span className="text-magenta">Coach-In-Training</span>
+            Become A <span className="text-magenta">Camp Volunteer</span>
           </h1>
 
           {/* Description */}
           <p className="text-xl text-white/70 leading-relaxed mb-8">
-            Ready to step into a leadership role? Apply to become a CIT and gain
-            hands-on coaching experience, mentorship skills, and certifications
-            that set you apart.
+            Want to make a difference behind the scenes? Our volunteers are the backbone of every
+            successful camp day — keeping things running smoothly so athletes can focus on what
+            they love.
           </p>
 
           {/* What you'll get */}
           <div className="flex flex-wrap justify-center gap-4 text-sm">
             <div className="flex items-center gap-2 text-white/60">
               <CheckCircle className="h-4 w-4 text-magenta" />
-              <span>Leadership Training</span>
+              <span>Community Service Hours</span>
             </div>
             <div className="flex items-center gap-2 text-white/60">
               <CheckCircle className="h-4 w-4 text-magenta" />
-              <span>Coaching Experience</span>
+              <span>Real Camp Experience</span>
             </div>
             <div className="flex items-center gap-2 text-white/60">
               <CheckCircle className="h-4 w-4 text-magenta" />
-              <span>Career Certifications</span>
+              <span>Make a Difference</span>
             </div>
           </div>
         </div>

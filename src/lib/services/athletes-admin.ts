@@ -60,6 +60,13 @@ export interface AdminAthlete {
   completed_camps_count?: number
 }
 
+export interface AthleteRegistrationAddon {
+  name: string
+  variant: string | null
+  quantity: number
+  priceCents: number
+}
+
 export interface AthleteRegistration {
   id: string
   camp_id: string
@@ -73,6 +80,7 @@ export interface AthleteRegistration {
   payment_status: string
   total_price_cents: number
   created_at: string
+  addons: AthleteRegistrationAddon[]
 }
 
 export interface ListAthletesParams {
@@ -780,6 +788,18 @@ export async function listAthleteRegistrations(params: {
             },
           },
         },
+        registrationAddons: {
+          select: {
+            quantity: true,
+            priceCents: true,
+            addon: {
+              select: { name: true },
+            },
+            variant: {
+              select: { name: true },
+            },
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
     })
@@ -797,6 +817,12 @@ export async function listAthleteRegistrations(params: {
       payment_status: reg.paymentStatus,
       total_price_cents: reg.totalPriceCents,
       created_at: reg.createdAt.toISOString(),
+      addons: reg.registrationAddons.map(ra => ({
+        name: ra.addon.name,
+        variant: ra.variant?.name || null,
+        quantity: ra.quantity,
+        priceCents: ra.priceCents,
+      })),
     }))
 
     return { data: transformed, error: null }

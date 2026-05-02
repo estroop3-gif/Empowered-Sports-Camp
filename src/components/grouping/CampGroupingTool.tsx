@@ -105,6 +105,16 @@ interface CampGroupingToolProps {
   backUrl?: string
 }
 
+function formatGrade(gradeLevel: number | null): string {
+  if (gradeLevel === null) return '?'
+  if (gradeLevel === -1) return 'Pre-K'
+  if (gradeLevel === 0) return 'K'
+  if (gradeLevel === 1) return '1st'
+  if (gradeLevel === 2) return '2nd'
+  if (gradeLevel === 3) return '3rd'
+  return `${gradeLevel}th`
+}
+
 // Camper Card Component
 function CamperCard({
   camper,
@@ -153,7 +163,7 @@ function CamperCard({
         <div className="flex-1 min-w-0">
           <p className="font-medium text-white text-sm truncate">{camper.name}</p>
           <div className="flex items-center gap-2 text-xs text-white/50">
-            <span>Grade {camper.grade_level ?? '?'}</span>
+            <span>{formatGrade(camper.grade_level)}</span>
             {camper.has_medical_notes && (
               <span className="text-red-400" title="Medical notes">
                 <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
@@ -1065,7 +1075,7 @@ export default function CampGroupingTool({
                   <div>
                     <p className="font-bold text-white">{editingCamper.name}</p>
                     <p className="text-sm text-white/50">
-                      Grade {editingCamper.grade_level ?? '?'}
+                      {formatGrade(editingCamper.grade_level)}
                       {editingCamper.friend_group_number && (
                         <span className="ml-2 px-2 py-0.5 bg-magenta/20 text-magenta text-xs">
                           Friend Group {editingCamper.friend_group_number}

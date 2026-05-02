@@ -194,7 +194,7 @@ export default function CamperDetailDrawer({
       />
 
       {/* Drawer */}
-      <div className="fixed right-0 top-0 h-full w-full max-w-lg bg-white z-[70] shadow-2xl overflow-hidden flex flex-col">
+      <div className="fixed right-0 top-0 h-full w-full max-w-lg bg-white text-gray-900 z-[70] shadow-2xl overflow-hidden flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
           <div className="flex items-center gap-2 min-w-0">
@@ -402,7 +402,7 @@ function OverviewTab({
           )}
           <div className="flex justify-between">
             <dt className="text-sm text-gray-600">Shirt Size</dt>
-            <dd className="text-sm font-medium">{camper.shirtSize || 'N/A'}</dd>
+            <dd className="text-sm font-medium">{camper.tShirtSize || camper.shirtSize || 'N/A'}</dd>
           </div>
           <div className="flex justify-between">
             <dt className="text-sm text-gray-600">Status</dt>
@@ -445,11 +445,11 @@ function OverviewTab({
       </section>
 
       {/* Upsells */}
-      {camper.upsells.length > 0 && (
-        <section>
-          <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">
-            Purchased Add-ons
-          </h3>
+      <section>
+        <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">
+          Purchased Add-ons
+        </h3>
+        {camper.upsells.length > 0 ? (
           <ul className="space-y-2">
             {camper.upsells.map((upsell, idx) => (
               <li key={idx} className="flex justify-between items-center text-sm">
@@ -464,8 +464,10 @@ function OverviewTab({
               </li>
             ))}
           </ul>
-        </section>
-      )}
+        ) : (
+          <p className="text-sm text-gray-400">No purchased add-ons</p>
+        )}
+      </section>
 
       {/* Attendance History */}
       {camper.attendanceHistory.length > 0 && (

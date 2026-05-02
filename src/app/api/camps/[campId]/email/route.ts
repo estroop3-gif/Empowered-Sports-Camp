@@ -9,6 +9,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/client'
 import { getAuthUser } from '@/lib/auth/server'
 import { sendEmail, logEmail } from '@/lib/email/resend-client'
+import { brandWrap, emailLabel, emailHeading, emailParagraph, emailButton, APP_URL, BRAND } from '@/lib/email/brand-layout'
+import type { EmailType } from '@/generated/prisma'
 
 interface RouteParams {
   params: Promise<{ campId: string }>
@@ -28,7 +30,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     const { campId } = await params
     const body = await request.json()
-    const { mode, recipientIds, subject, html } = body
+    const { mode, recipientIds, subject, html, emailType: requestedEmailType, wrapInBrand } = body
 
     if (!subject || !html) {
       return NextResponse.json(
@@ -122,9 +124,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     let sent = 0
     let failed = 0
 
+    // Determine the email type to use for logging
+    const resolvedEmailType: EmailType = requestedEmailType || 'staff_message'
+
     for (const recipient of recipients) {
       // Substitute template variables
-      const personalizedHtml = html
+      let personalizedHtml = html
         .replace(/\{\{parentFirstName\}\}/g, recipient.parentFirstName)
         .replace(/\{\{camperFirstName\}\}/g, recipient.camperFirstName)
         .replace(/\{\{campName\}\}/g, camp.name)
@@ -133,6 +138,27 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         .replace(/\{\{parentFirstName\}\}/g, recipient.parentFirstName)
         .replace(/\{\{camperFirstName\}\}/g, recipient.camperFirstName)
         .replace(/\{\{campName\}\}/g, camp.name)
+
+      // Wrap in branded layout if requested
+      if (wrapInBrand) {
+        const typeLabels: Record<string, { label: string; color: string }> = {
+          broadcast: { label: 'CAMP NOTIFICATION', color: BRAND.purple },
+          camp_reminder: { label: 'CAMP REMINDER', color: BRAND.magenta },
+          staff_message: { label: 'CAMP UPDATE', color: BRAND.neon },
+        }
+        const labelInfo = typeLabels[resolvedEmailType] || typeLabels.broadcast
+
+        // Convert plain text body to branded HTML
+        const paragraphs = personalizedHtml.split(/\n\n+/).filter(Boolean)
+        const bodyContent = [
+          emailLabel(labelInfo.label, labelInfo.color),
+          emailHeading(personalizedSubject),
+          ...paragraphs.map((p: string) => emailParagraph(p.replace(/\n/g, '<br>'))),
+          emailButton('View Dashboard', `${APP_URL}/parent/dashboard`),
+        ].join('\n')
+
+        personalizedHtml = brandWrap(bodyContent)
+      }
 
       const result = await sendEmail({
         to: recipient.email,
@@ -143,7 +169,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       await logEmail({
         toEmail: recipient.email,
         subject: personalizedSubject,
-        emailType: 'staff_message',
+        emailType: resolvedEmailType,
         tenantId: camp.tenantId,
         userId: recipient.userId,
         status: result.success ? 'sent' : 'failed',

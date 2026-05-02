@@ -61,16 +61,16 @@ export default function ProgramHero({
   return (
     <section className="relative min-h-[60vh] flex items-center overflow-hidden">
       {/* Background effects */}
-      <div className="absolute inset-0 bg-gradient-to-br from-neon/10 via-purple/5 to-magenta/10" />
-      <div className="absolute inset-0 bg-black/60" />
+      <div className="absolute inset-0 bg-gradient-to-br from-neon/10 via-purple/5 to-magenta/10 pointer-events-none" />
+      <div className="absolute inset-0 bg-black/60 pointer-events-none" />
 
       {/* Glow orbs */}
-      <div className={`absolute top-20 -left-40 w-[500px] h-[500px] ${colors.glow1} rounded-full blur-[150px]`} />
-      <div className={`absolute bottom-0 right-0 w-[400px] h-[400px] ${colors.glow2} rounded-full blur-[120px]`} />
-      <div className="absolute top-1/2 right-1/4 w-[300px] h-[300px] bg-purple/10 rounded-full blur-[100px]" />
+      <div className={`absolute top-20 -left-40 w-[500px] h-[500px] ${colors.glow1} rounded-full blur-[150px] pointer-events-none`} />
+      <div className={`absolute bottom-0 right-0 w-[400px] h-[400px] ${colors.glow2} rounded-full blur-[120px] pointer-events-none`} />
+      <div className="absolute top-1/2 right-1/4 w-[300px] h-[300px] bg-purple/10 rounded-full blur-[100px] pointer-events-none" />
 
       {/* Content */}
-      <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-20 lg:py-28">
+      <div className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-20 lg:py-28">
         <div className="max-w-4xl">
           {/* Badge */}
           {badge && (
@@ -130,7 +130,7 @@ export default function ProgramHero({
       </div>
 
       {/* Bottom fade */}
-      <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-black to-transparent" />
+      <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-black to-transparent pointer-events-none" />
     </section>
   )
 }

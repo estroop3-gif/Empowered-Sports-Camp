@@ -12,6 +12,14 @@ import { getProgramTagMap } from '@/lib/services/program-tags'
 import { fetchActiveProgramTags } from '@/lib/services/program-tags'
 import type { VenueGroupData, CampProgramData, NearZipSearchResult, CampListingItem, CampBadge, ProgramTypeSection, ProgramTypeGroupedResult } from '@/types'
 
+/** Build a Prisma filter that matches a slug with either hyphens or underscores */
+function programTypeFilter(slug: string): string | { in: string[] } {
+  const withUnderscores = slug.replace(/-/g, '_')
+  const withHyphens = slug.replace(/_/g, '-')
+  const variants = new Set([slug, withUnderscores, withHyphens])
+  return variants.size === 1 ? slug : { in: Array.from(variants) }
+}
+
 // ============================================================================
 // TYPES
 // ============================================================================
@@ -277,7 +285,7 @@ export async function fetchPublicCamps(
 
   // Program type
   if (filters.program_type) {
-    where.programType = filters.program_type
+    where.programType = programTypeFilter(filters.program_type)
   }
 
   // Date filters
@@ -624,7 +632,7 @@ export async function fetchProgramTypes(): Promise<{ slug: string; name: string 
 
   const tagMap = await getProgramTagMap()
   return camps.map(c => ({
-    slug: c.programType,
+    slug: c.programType.replace(/_/g, '-'),
     name: tagMap.get(c.programType) || c.programType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
   }))
 }
@@ -681,7 +689,7 @@ export async function fetchCampsNearZip(
   }
 
   if (filters.programType) {
-    where.programType = filters.programType
+    where.programType = programTypeFilter(filters.programType)
   }
   if (filters.minAge !== undefined) {
     where.maxAge = { gte: filters.minAge }
@@ -866,7 +874,7 @@ export async function fetchAllPublicCamps(
   }
 
   if (filters.programType) {
-    where.programType = filters.programType
+    where.programType = programTypeFilter(filters.programType)
   }
   if (filters.minAge !== undefined) {
     where.maxAge = { gte: filters.minAge }
@@ -1075,7 +1083,7 @@ export async function fetchCampsGroupedByProgramType(
   }
 
   if (filters.programType) {
-    where.programType = filters.programType
+    where.programType = programTypeFilter(filters.programType)
   }
   if (filters.minAge !== undefined) {
     where.maxAge = { gte: filters.minAge }

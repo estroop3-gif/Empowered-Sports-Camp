@@ -58,6 +58,8 @@ export type EmailTemplateCode =
   | 'CERTIFICATION_UPDATE'
   | 'INCENTIVE_UPDATE'
   | 'JOB_APPLICATION'
+  // T-Shirt
+  | 'TSHIRT_SIZE_CONFIRMATION'
   // System
   | 'SYSTEM_ALERT'
   | 'BROADCAST'
@@ -95,6 +97,7 @@ const templateToEmailType: Record<EmailTemplateCode, EmailType> = {
   CERTIFICATION_UPDATE: 'system_alert',
   INCENTIVE_UPDATE: 'system_alert',
   JOB_APPLICATION: 'system_alert',
+  TSHIRT_SIZE_CONFIRMATION: 'system_alert', // No dedicated Prisma EmailType, map to system_alert
   SYSTEM_ALERT: 'system_alert',
   BROADCAST: 'broadcast',
   WEEKLY_REPORT: 'weekly_report',
@@ -1912,4 +1915,92 @@ function buildEmailContent(templateCode: EmailTemplateCode, context: EmailContex
   }
 
   return brandWrap(bodyContent)
+}
+
+// =============================================================================
+// T-Shirt Size Confirmation Email
+// =============================================================================
+
+interface CamperSizeInfo {
+  camperName: string
+  addonName: string
+  sizeName: string
+}
+
+export async function sendTshirtSizeConfirmationEmail(params: {
+  parentEmail: string
+  parentFirstName: string
+  campName: string
+  campStartDate: string
+  camperSizes: CamperSizeInfo[]
+  tenantId?: string | null
+}): Promise<{ success: boolean; error?: string }> {
+  const { parentEmail, parentFirstName, campName, campStartDate, camperSizes, tenantId } = params
+
+  const sizeRows = camperSizes.map((cs) => ({
+    label: cs.camperName,
+    value: `${cs.sizeName} (${cs.addonName})`,
+  }))
+
+  const bodyContent = `
+    ${emailLabel('Apparel')}
+    ${emailHeading('T-Shirt Size<br/>Confirmation')}
+    ${emailParagraph(`Hi ${parentFirstName},`)}
+    ${emailParagraph(`Here are the apparel sizes on file for <strong style="color: ${BRAND.neon};">${campName}</strong> starting <strong>${campStartDate}</strong>:`)}
+    ${emailDetailsCard(sizeRows, 'Sizes Selected')}
+    ${emailCallout('If you need to change a size, please reply to this email or contact us as soon as possible.', 'info')}
+    ${emailParagraph('See you at camp!')}
+  `
+
+  const html = brandWrap(bodyContent)
+  const subject = `T-Shirt Size Confirmation — ${campName}`
+  const fromEmail = DEFAULT_FROM_EMAIL
+
+  try {
+    if (IS_DEVELOPMENT && !isEmailConfigured()) {
+      console.log('[Email] Would send t-shirt confirmation:', { to: parentEmail, subject, camperSizes })
+      await logEmail({
+        tenantId,
+        toEmail: parentEmail,
+        fromEmail,
+        subject,
+        emailType: 'system_alert',
+        payload: { type: 'tshirt_size_confirmation', campName, camperSizes: camperSizes.map(c => c.camperName) },
+        providerMessageId: `dev-${Date.now()}`,
+        status: 'sent',
+      })
+      return { success: true }
+    }
+
+    const result = await sesSendEmail({ from: fromEmail, to: parentEmail, subject, html })
+
+    if (!result.success) {
+      await logEmail({
+        tenantId,
+        toEmail: parentEmail,
+        fromEmail,
+        subject,
+        emailType: 'system_alert',
+        payload: { type: 'tshirt_size_confirmation', campName },
+        status: 'failed',
+        errorMessage: result.error,
+      })
+      return { success: false, error: result.error }
+    }
+
+    await logEmail({
+      tenantId,
+      toEmail: parentEmail,
+      fromEmail,
+      subject,
+      emailType: 'system_alert',
+      payload: { type: 'tshirt_size_confirmation', campName },
+      providerMessageId: result.messageId || null,
+      status: 'sent',
+    })
+    return { success: true }
+  } catch (err) {
+    console.error('[Email] T-shirt confirmation error:', err)
+    return { success: false, error: err instanceof Error ? err.message : 'Unknown error' }
+  }
 }

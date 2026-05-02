@@ -35,6 +35,11 @@ export async function GET(
       userId: user.id,
     })
 
+    console.log('[Roster Detail] camperId:', camperId, 'data keys:', data ? Object.keys(data) : 'null', 'error:', error?.message || 'none')
+    if (data) {
+      console.log('[Roster Detail] age:', data.age, 'grade:', data.gradeDisplay, 'shirtSize:', data.shirtSize, 'totalPriceCents:', data.totalPriceCents, 'upsells:', data.upsells?.length)
+    }
+
     if (error) {
       const status = error.message.includes('Not authorized') ? 403 :
                      error.message.includes('not found') ? 404 : 500

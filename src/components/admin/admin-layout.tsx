@@ -84,7 +84,7 @@ const licensorNavItems: NavItem[] = [
     icon: Inbox,
     roles: ['hq_admin'],
     children: [
-      { label: 'CIT Applications', href: '/admin/cit' },
+      { label: 'Volunteer Applications', href: '/admin/cit' },
       { label: 'Job Submissions', href: '/admin/job-submissions' },
       { label: 'Licensee Applications', href: '/admin/licensee-applications' },
       { label: 'Contact Messages', href: '/admin/contact' },
@@ -220,6 +220,7 @@ const licensorNavItems: NavItem[] = [
     children: [
       { label: 'Email Logs', href: '/admin/email' },
       { label: 'Templates', href: '/admin/email/templates' },
+      { label: 'Camp Broadcasts', href: '/admin/email/broadcasts' },
     ],
   },
   {
