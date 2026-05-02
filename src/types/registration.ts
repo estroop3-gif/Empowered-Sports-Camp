@@ -211,6 +211,7 @@ export interface RegistrationPayload {
   promoCode: string | null
   paymentIntentId: string
   totals: CheckoutTotals
+  squadId?: string | null
 }
 
 export interface RegistrationResult {

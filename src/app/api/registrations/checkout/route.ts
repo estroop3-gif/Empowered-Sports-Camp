@@ -11,6 +11,7 @@ import { createRegistration, addRegistrationAddon } from '@/lib/services/registr
 import { createStripeCheckoutSession } from '@/lib/services/payments'
 import { markDraftCompleted } from '@/lib/services/registrationDrafts'
 import { ensureParentRole } from '@/lib/services/users'
+import { syncFriendGroupIdsForSquad } from '@/lib/services/campSquads'
 import { getAuthenticatedUserFromRequest } from '@/lib/auth/cognito-server'
 import type { RegistrationPayload } from '@/types/registration'
 
@@ -46,6 +47,7 @@ export async function POST(request: NextRequest) {
       addOns,
       promoCode,
       totals,
+      squadId,
     } = body
 
     // Validate required fields with specific error messages
@@ -436,6 +438,18 @@ export async function POST(request: NextRequest) {
       where: { id: { in: registrationIds } },
       data: { confirmationNumber },
     })
+
+    // Link registrations to squad if squadId provided
+    if (squadId) {
+      await prisma.registration.updateMany({
+        where: { id: { in: registrationIds } },
+        data: { friendSquadId: squadId },
+      })
+      // Sync friend group so the grouping algorithm picks up this squad
+      syncFriendGroupIdsForSquad({ squadId }).catch((err) =>
+        console.error('[Checkout] Squad sync failed (non-blocking):', err)
+      )
+    }
 
     // Create Stripe checkout session for ALL registrations
     // This ensures all campers' prices, add-ons, and taxes are included

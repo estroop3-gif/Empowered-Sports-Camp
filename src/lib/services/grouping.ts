@@ -15,6 +15,7 @@
 import prisma from '@/lib/db/client'
 import { AssignmentType, GroupingStatus, ViolationType, ViolationSeverity } from '@/generated/prisma'
 import { syncFriendGroupIdsForCamp } from './campSquads'
+import { parseGradeToNumeric, computeGradeFromDob } from '@/lib/grouping/standardization'
 
 // ============================================================================
 // TYPES
@@ -326,6 +327,12 @@ export async function syncCamperSessionData(
       const ageMonths = (campStart.getFullYear() - dob.getFullYear()) * 12 +
         (campStart.getMonth() - dob.getMonth())
 
+      // Compute grade from registration string and from DOB
+      const gradeFromReg = reg.athlete.grade || null
+      const parsedGrade = parseGradeToNumeric(gradeFromReg)
+      const gradeFromDob = computeGradeFromDob(dob, campStart)
+      const gradeValidated = parsedGrade ?? gradeFromDob
+
       await prisma.camperSessionData.create({
         data: {
           registrationId: reg.id,
@@ -335,6 +342,8 @@ export async function syncCamperSessionData(
           ageAtCampStart: ageAtCamp,
           ageMonthsAtCampStart: ageMonths,
           gradeFromRegistration: reg.athlete.grade,
+          gradeValidated,
+          gradeComputedFromDob: gradeFromDob,
           medicalNotes: reg.athlete.medicalNotes,
           allergies: reg.athlete.allergies,
           specialConsiderations: reg.specialConsiderations,
@@ -345,6 +354,35 @@ export async function syncCamperSessionData(
       })
 
       syncedCount++
+    }
+
+    // Backfill gradeValidated for existing CamperSessionData rows that are missing it
+    const missingGrade = await prisma.camperSessionData.findMany({
+      where: {
+        campId,
+        gradeValidated: null,
+      },
+      include: {
+        athlete: { select: { grade: true, dateOfBirth: true } },
+        camp: { select: { startDate: true } },
+      },
+    })
+
+    for (const csd of missingGrade) {
+      const cStart = new Date(csd.camp.startDate)
+      const cDob = csd.athlete.dateOfBirth
+      const parsed = parseGradeToNumeric(csd.gradeFromRegistration || csd.athlete.grade)
+      const fromDob = computeGradeFromDob(cDob, cStart)
+      const validated = parsed ?? fromDob
+
+      await prisma.camperSessionData.update({
+        where: { id: csd.id },
+        data: {
+          gradeValidated: validated,
+          gradeComputedFromDob: csd.gradeComputedFromDob ?? fromDob,
+          gradeFromRegistration: csd.gradeFromRegistration || csd.athlete.grade,
+        },
+      })
     }
 
     return { synced: syncedCount, error: null }
@@ -631,6 +669,9 @@ export async function autoGroupCampers(
 ): Promise<{ data: GroupingResult | null; error: Error | null }> {
   try {
     const startTime = Date.now()
+
+    // Ensure CamperSessionData rows exist before syncing squads
+    await syncCamperSessionData(campId)
 
     // Sync squad memberships to friend groups before grouping
     // This ensures mutual squad requests become friendGroupId entries

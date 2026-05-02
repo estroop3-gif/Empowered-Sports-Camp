@@ -614,6 +614,7 @@ model CampFriendSquadMember {
   athleteId      String            @map("athlete_id") @db.Uuid
   status         SquadMemberStatus @default(requested)
   invitedByEmail String?           @map("invited_by_email")
+  notes          String?           @map("notes")
   respondedAt    DateTime?         @map("responded_at") @db.Timestamptz(6)
   createdAt      DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt      DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -637,7 +638,7 @@ model PendingSquadInvite {
   campName        String    @map("camp_name")
   campId          String    @map("camp_id") @db.Uuid
   tenantId        String    @map("tenant_id") @db.Uuid
-  expiresAt       DateTime  @map("expires_at") @db.Timestamptz(6)
+  expiresAt       DateTime? @map("expires_at") @db.Timestamptz(6)
   claimedAt       DateTime? @map("claimed_at") @db.Timestamptz(6)
   claimedByUserId String?   @map("claimed_by_user_id") @db.Uuid
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)

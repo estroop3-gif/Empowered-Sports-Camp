@@ -88,9 +88,61 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // If the inviter already has an account, create/get their squad now so it
+    // shows up immediately in the admin squad view (instead of only appearing
+    // in the pending-invites tab with no linked squad row).
+    let linkedSquadId: string | null = null
+    const inviterProfile = await prisma.profile.findFirst({
+      where: { email: inviterEmail.toLowerCase() },
+    })
+    if (inviterProfile) {
+      const squad = await prisma.campFriendSquad.upsert({
+        where: {
+          campId_createdByParentId: {
+            campId,
+            createdByParentId: inviterProfile.id,
+          },
+        },
+        update: {},
+        create: {
+          campId,
+          tenantId: resolvedTenantId,
+          createdByParentId: inviterProfile.id,
+          label: `${inviterProfile.firstName || 'Her'}'s Squad`,
+        },
+      })
+      linkedSquadId = squad.id
+
+      // Add the inviter's registered athletes to the squad (auto-accepted)
+      // so the squad shows real members in the admin view, not just an empty row.
+      const inviterRegistrations = await prisma.registration.findMany({
+        where: {
+          campId,
+          athlete: { parentId: inviterProfile.id },
+          status: { in: ['pending', 'confirmed'] },
+        },
+        select: { athleteId: true },
+      })
+
+      for (const { athleteId } of inviterRegistrations) {
+        await prisma.campFriendSquadMember.upsert({
+          where: { squadId_athleteId: { squadId: squad.id, athleteId } },
+          update: {},
+          create: {
+            squadId: squad.id,
+            parentId: inviterProfile.id,
+            athleteId,
+            status: 'accepted',
+            respondedAt: new Date(),
+          },
+        })
+      }
+    }
+
     // Create pending squad invite
     const invite = await prisma.pendingSquadInvite.create({
       data: {
+        squadId: linkedSquadId,
         inviterEmail: inviterEmail.toLowerCase(),
         invitedByName: inviterName || 'A friend',
         invitedEmail: inviteeEmail.toLowerCase(),
@@ -99,7 +151,7 @@ export async function POST(request: NextRequest) {
         tenantId: resolvedTenantId,
         athleteNames: athleteNames || [],
         status: 'pending',
-        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+        expiresAt: null, // No expiration — valid until camp registration closes
       },
     })
 
@@ -176,7 +228,6 @@ export async function GET(request: NextRequest) {
       where: {
         invitedEmail: email.toLowerCase(),
         status: 'pending',
-        expiresAt: { gt: new Date() },
         ...(campId ? { campId: campId } : {}),
       },
       select: {

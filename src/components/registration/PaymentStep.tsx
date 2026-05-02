@@ -370,6 +370,7 @@ export function PaymentStep({ onComplete, onBack }: PaymentStepProps) {
         addOns: state.selectedAddOns,
         promoCode: state.promoCode?.code || null,
         totals,
+        squadId: state.squadId,
       }
 
       // Call checkout API to create registrations
@@ -441,6 +442,7 @@ export function PaymentStep({ onComplete, onBack }: PaymentStepProps) {
         addOns: state.selectedAddOns,
         promoCode: state.promoCode?.code || null,
         totals,
+        squadId: state.squadId,
       }
 
       console.log('[PaymentStep] Checkout payload:', JSON.stringify(payload, null, 2))

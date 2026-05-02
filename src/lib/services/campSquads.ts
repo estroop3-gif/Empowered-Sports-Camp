@@ -373,10 +373,7 @@ export async function sendSquadInvite(params: {
 
       return { data: { sent: true, isNewUser: false }, error: null }
     } else {
-      // Parent doesn't exist - create pending invite
-      const expiresAt = new Date()
-      expiresAt.setDate(expiresAt.getDate() + 30) // 30 day expiry
-
+      // Parent doesn't exist - create pending invite (no expiration — valid until camp closes)
       await prisma.pendingSquadInvite.create({
         data: {
           squadId,
@@ -385,7 +382,7 @@ export async function sendSquadInvite(params: {
           campName: squad.camp.name,
           campId: squad.campId,
           tenantId,
-          expiresAt,
+          expiresAt: null,
         },
       })
 
@@ -615,12 +612,12 @@ export async function syncFriendGroupIdsForSquad(params: {
   try {
     const { squadId } = params
 
-    // Get squad with accepted members
+    // Get squad with accepted OR requested members (requested members who registered should still be grouped)
     const squad = await prisma.campFriendSquad.findUnique({
       where: { id: squadId },
       include: {
         members: {
-          where: { status: 'accepted' },
+          where: { status: { in: ['accepted', 'requested'] } },
         },
       },
     })
@@ -629,7 +626,33 @@ export async function syncFriendGroupIdsForSquad(params: {
       return { data: { synced: 0 }, error: null }
     }
 
-    const athleteIds = squad.members.map((m) => m.athleteId)
+    // For 'requested' members, verify they have an active registration for this camp
+    const requestedAthleteIds = squad.members
+      .filter((m) => m.status === 'requested')
+      .map((m) => m.athleteId)
+
+    let verifiedRequestedIds: string[] = []
+    if (requestedAthleteIds.length > 0) {
+      const activeRegs = await prisma.registration.findMany({
+        where: {
+          campId: squad.campId,
+          athleteId: { in: requestedAthleteIds },
+          status: { in: ['pending', 'confirmed'] },
+        },
+        select: { athleteId: true },
+      })
+      verifiedRequestedIds = activeRegs.map((r) => r.athleteId)
+    }
+
+    const acceptedAthleteIds = squad.members
+      .filter((m) => m.status === 'accepted')
+      .map((m) => m.athleteId)
+
+    const athleteIds = [...acceptedAthleteIds, ...verifiedRequestedIds]
+
+    if (athleteIds.length === 0) {
+      return { data: { synced: 0 }, error: null }
+    }
 
     // Update registrations with the squad ID as friendSquadId
     const result = await prisma.registration.updateMany({
@@ -711,12 +734,12 @@ export async function syncFriendGroupIdsForCamp(params: {
   try {
     const { campId } = params
 
-    // Get all squads for this camp with accepted members
+    // Get all squads for this camp with accepted or requested members
     const squads = await prisma.campFriendSquad.findMany({
       where: { campId },
       include: {
         members: {
-          where: { status: 'accepted' },
+          where: { status: { in: ['accepted', 'requested'] } },
         },
       },
     })
@@ -724,8 +747,8 @@ export async function syncFriendGroupIdsForCamp(params: {
     let totalSynced = 0
 
     for (const squad of squads) {
+      // Sync any squad with 2+ members (syncFriendGroupIdsForSquad handles verification)
       if (squad.members.length >= 2) {
-        // Only sync if there are at least 2 accepted members
         const result = await syncFriendGroupIdsForSquad({ squadId: squad.id })
         if (result.data) {
           totalSynced += result.data.synced
@@ -929,9 +952,10 @@ export async function requestSquadWithCamper(params: {
   requestingParentId: string
   requestingAthleteIds: string[]
   targetAthleteId: string
+  notes?: string
 }): Promise<{ data: { requestSent: boolean; squadId?: string } | null; error: Error | null }> {
   try {
-    const { campId, tenantId, requestingParentId, requestingAthleteIds, targetAthleteId } = params
+    const { campId, tenantId, requestingParentId, requestingAthleteIds, targetAthleteId, notes } = params
 
     // Get target athlete's parent
     const targetAthlete = await prisma.athlete.findUnique({
@@ -1014,6 +1038,7 @@ export async function requestSquadWithCamper(params: {
           parentId: targetParentId,
           athleteId: targetAthleteId,
           status: 'requested',
+          ...(notes ? { notes } : {}),
         },
       })
     }
@@ -1052,6 +1077,44 @@ export async function requestSquadWithCamper(params: {
 }
 
 /**
+ * Update notes on a squad member record.
+ * Only the squad owner can update notes.
+ */
+export async function updateSquadMemberNotes(params: {
+  memberId: string
+  parentId: string
+  notes: string
+}): Promise<{ data: { success: boolean } | null; error: Error | null }> {
+  try {
+    const { memberId, parentId, notes } = params
+
+    // Get the member and verify the parent owns the squad
+    const member = await prisma.campFriendSquadMember.findUnique({
+      where: { id: memberId },
+      include: { squad: true },
+    })
+
+    if (!member) {
+      return { data: null, error: new Error('Member not found') }
+    }
+
+    if (member.squad.createdByParentId !== parentId) {
+      return { data: null, error: new Error('Only the squad owner can update notes') }
+    }
+
+    await prisma.campFriendSquadMember.update({
+      where: { id: memberId },
+      data: { notes },
+    })
+
+    return { data: { success: true }, error: null }
+  } catch (error) {
+    console.error('[CampSquads] Failed to update member notes:', error)
+    return { data: null, error: error as Error }
+  }
+}
+
+/**
  * Claim pending squad invites after user signs up.
  * Call this after a new user creates an account.
  */
@@ -1062,12 +1125,11 @@ export async function claimPendingSquadInvites(params: {
   try {
     const { email, userId } = params
 
-    // Find pending invites for this email
+    // Find pending invites for this email (no expiry check — invites are valid until camp closes)
     const pendingInvites = await prisma.pendingSquadInvite.findMany({
       where: {
         invitedEmail: email.toLowerCase(),
         claimedAt: null,
-        expiresAt: { gt: new Date() },
       },
     })
 
