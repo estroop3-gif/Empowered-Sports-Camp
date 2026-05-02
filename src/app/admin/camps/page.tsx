@@ -451,7 +451,12 @@ export default function AdminCampsPage() {
                   <tr key={camp.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
                     <td className="py-4 px-4">
                       <div>
-                        <div className="font-bold text-white">{camp.name}</div>
+                        <Link
+                          href={`/admin/camps/${camp.id}/hq`}
+                          className="font-bold text-white hover:text-neon hover:underline transition-colors"
+                        >
+                          {camp.name}
+                        </Link>
                         <div className="text-sm text-white/40">Ages {camp.age_min}-{camp.age_max}</div>
                       </div>
                     </td>

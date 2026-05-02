@@ -11,7 +11,7 @@
  */
 
 import { useState, useEffect, use, useRef } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Image from 'next/image'
 import { AdminLayout, PageHeader, ContentCard } from '@/components/admin/admin-layout'
 import { AuthorizedPickupManager } from '@/components/athletes/AuthorizedPickupManager'
@@ -48,6 +48,7 @@ import {
   Edit,
   X,
   Camera,
+  Package,
 } from 'lucide-react'
 
 interface Athlete {
@@ -108,6 +109,7 @@ interface Registration {
   payment_status: string
   total_price_cents: number
   created_at: string
+  addons?: { name: string; variant: string | null; quantity: number; priceCents: number }[]
 }
 
 interface SquadMembership {
@@ -146,6 +148,7 @@ interface PageProps {
 export default function AdminAthleteDetailPage({ params }: PageProps) {
   const { athleteId } = use(params)
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { user } = useAuth()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -163,7 +166,10 @@ export default function AdminAthleteDetailPage({ params }: PageProps) {
 
   // Form state
   const [formData, setFormData] = useState<Partial<Athlete>>({})
-  const [activeTab, setActiveTab] = useState<'profile' | 'safety' | 'sports' | 'internal' | 'history' | 'squads'>('profile')
+  const initialTab = searchParams.get('tab') as 'profile' | 'safety' | 'sports' | 'internal' | 'history' | 'squads' | 'addons' | null
+  const [activeTab, setActiveTab] = useState<'profile' | 'safety' | 'sports' | 'internal' | 'history' | 'squads' | 'addons'>(
+    initialTab && ['profile', 'safety', 'sports', 'internal', 'history', 'squads', 'addons'].includes(initialTab) ? initialTab : 'profile'
+  )
 
   // Internal tab independent state
   const [internalRiskFlag, setInternalRiskFlag] = useState<string>('none')
@@ -693,6 +699,7 @@ export default function AdminAthleteDetailPage({ params }: PageProps) {
           { id: 'safety', label: 'Contact & Safety', icon: Heart },
           { id: 'sports', label: 'Sports & Preferences', icon: Trophy },
           { id: 'squads', label: 'Squad Pairings', icon: Users },
+          { id: 'addons', label: 'Add-ons', icon: Package },
           { id: 'internal', label: 'Internal', icon: ShieldAlert },
           { id: 'history', label: 'Enrollment History', icon: Clock },
         ].map((tab) => (
@@ -1162,6 +1169,69 @@ export default function AdminAthleteDetailPage({ params }: PageProps) {
               ))}
             </div>
           )}
+        </ContentCard>
+      )}
+
+      {activeTab === 'addons' && (
+        <ContentCard title="Purchased Add-ons" accent="purple">
+          {(() => {
+            const regsWithAddons = registrations.filter(r => r.addons && r.addons.length > 0)
+            if (regsWithAddons.length === 0) {
+              return (
+                <div className="text-center py-8">
+                  <Package className="h-10 w-10 text-white/20 mx-auto mb-3" />
+                  <p className="text-white/40">No add-ons purchased</p>
+                  <p className="text-xs text-white/30 mt-2">
+                    Add-ons will appear here when purchased as part of a camp registration.
+                  </p>
+                </div>
+              )
+            }
+            return (
+              <div className="space-y-4">
+                {regsWithAddons.map((reg) => {
+                  const addonsTotal = reg.addons!.reduce((sum, a) => sum + a.priceCents * a.quantity, 0)
+                  return (
+                    <div key={reg.id} className="p-4 bg-black/50 border border-white/10">
+                      <div className="flex items-start justify-between gap-4 mb-3">
+                        <div>
+                          <h4 className="font-bold text-white">{reg.camp_name}</h4>
+                          <p className="text-xs text-white/40 mt-1">
+                            {formatDate(reg.camp_start_date)} - {formatDate(reg.camp_end_date)}
+                          </p>
+                        </div>
+                        <span className="text-sm font-mono font-medium text-purple">
+                          {formatCurrency(addonsTotal)}
+                        </span>
+                      </div>
+                      <table className="w-full">
+                        <thead>
+                          <tr className="border-b border-white/10">
+                            <th className="text-left px-2 py-2 text-xs font-bold uppercase tracking-wider text-white/40">Add-on</th>
+                            <th className="text-left px-2 py-2 text-xs font-bold uppercase tracking-wider text-white/40">Variant</th>
+                            <th className="text-center px-2 py-2 text-xs font-bold uppercase tracking-wider text-white/40">Qty</th>
+                            <th className="text-right px-2 py-2 text-xs font-bold uppercase tracking-wider text-white/40">Unit Price</th>
+                            <th className="text-right px-2 py-2 text-xs font-bold uppercase tracking-wider text-white/40">Total</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {reg.addons!.map((addon, idx) => (
+                            <tr key={idx} className="border-b border-white/5">
+                              <td className="px-2 py-2 text-sm text-white">{addon.name}</td>
+                              <td className="px-2 py-2 text-sm text-white/60">{addon.variant || '—'}</td>
+                              <td className="px-2 py-2 text-sm text-white/60 text-center">{addon.quantity}</td>
+                              <td className="px-2 py-2 text-sm text-white/60 text-right font-mono">{formatCurrency(addon.priceCents)}</td>
+                              <td className="px-2 py-2 text-sm text-white text-right font-mono">{formatCurrency(addon.priceCents * addon.quantity)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          })()}
         </ContentCard>
       )}
 

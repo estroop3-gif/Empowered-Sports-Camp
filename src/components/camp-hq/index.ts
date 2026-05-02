@@ -14,5 +14,8 @@ export { SendEmailModal } from './SendEmailModal'
 export { AddStaffModal } from './staffing/AddStaffModal'
 export { EditStaffModal } from './staffing/EditStaffModal'
 
+// Re-export add-on purchases
+export { CampAddonPurchasesTab } from './CampAddonPurchasesTab'
+
 // Re-export schedule components
 export { ScheduleBuilder } from './schedule'

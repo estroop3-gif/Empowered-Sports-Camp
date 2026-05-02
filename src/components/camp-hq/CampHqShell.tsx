@@ -45,6 +45,7 @@ import {
   Trash2,
   Flag,
   Lock,
+  Package,
 } from 'lucide-react'
 import { IncentiveSummaryPanel, GuestSpeakerManager } from '@/components/incentives'
 import { ScheduleBuilder } from '@/components/camp-hq/schedule'
@@ -54,6 +55,7 @@ import { EndDayModal } from './EndDayModal'
 import { ConcludeCampModal } from './ConcludeCampModal'
 import { SendEmailModal } from './SendEmailModal'
 import { WaitlistTab } from './WaitlistTab'
+import { CampAddonPurchasesTab } from './CampAddonPurchasesTab'
 import type {
   CampHqOverview,
   CampHqDay,
@@ -77,6 +79,7 @@ export type CampHqTab =
   | 'reports'
   | 'incentives'
   | 'waitlist'
+  | 'addons'
 
 interface CampHqShellProps {
   campId: string
@@ -109,6 +112,7 @@ const TABS: TabConfig[] = [
   { id: 'reports', label: 'Reports', icon: FileBarChart },
   { id: 'incentives', label: 'Incentives', icon: DollarSign },
   { id: 'waitlist', label: 'Waitlist', icon: ClipboardList },
+  { id: 'addons', label: 'Add-ons', icon: Package },
 ]
 
 // ============================================================================
@@ -283,6 +287,9 @@ export function CampHqShell({
         )}
         {activeTab === 'waitlist' && (
           <WaitlistTab campId={campId} />
+        )}
+        {activeTab === 'addons' && (
+          <CampAddonPurchasesTab campId={campId} routePrefix={routePrefix} />
         )}
       </div>
     </div>
