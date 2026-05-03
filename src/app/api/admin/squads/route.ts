@@ -167,7 +167,7 @@ export async function GET(request: NextRequest) {
       campName: inv.campName,
       athleteNames: inv.athleteNames,
       status: inv.status,
-      expiresAt: inv.expiresAt.toISOString(),
+      expiresAt: inv.expiresAt?.toISOString() ?? null,
       claimedAt: inv.claimedAt?.toISOString() ?? null,
       claimedByUserId: inv.claimedByUserId,
       createdAt: inv.createdAt.toISOString(),
