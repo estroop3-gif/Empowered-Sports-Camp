@@ -899,11 +899,11 @@ export async function getOtherRegisteredCampers(params: {
   try {
     const { campId, excludeParentId } = params
 
-    // Get confirmed/pending registrations for this camp, optionally excluding current user's athletes
+    // Get all active registrations for this camp (pending, confirmed, waitlisted), excluding cancelled/refunded
     const registrations = await prisma.registration.findMany({
       where: {
         campId,
-        status: { in: ['pending', 'confirmed'] },
+        status: { in: ['pending', 'confirmed', 'waitlisted'] },
         ...(excludeParentId ? { athlete: { parentId: { not: excludeParentId } } } : {}),
       },
       include: {
