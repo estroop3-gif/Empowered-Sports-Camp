@@ -47,6 +47,7 @@ interface CampFormData {
   early_bird_deadline: string | null
   status: 'draft' | 'published' | 'open' | 'closed'
   featured: boolean
+  waitlist_enabled: boolean
   image_url: string | null
 }
 
@@ -709,6 +710,7 @@ export default function CreateCampPage() {
     early_bird_deadline: null,
     status: 'draft',
     featured: false,
+    waitlist_enabled: true,
     image_url: null,
   })
 
@@ -1413,6 +1415,21 @@ export default function CreateCampPage() {
                     <div>
                       <div className="font-bold text-white">Featured Camp</div>
                       <div className="text-sm text-white/50">Show prominently on Find Camps page</div>
+                    </div>
+                  </label>
+                </div>
+
+                <div className="mt-6">
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.waitlist_enabled}
+                      onChange={(e) => setFormData(prev => ({ ...prev, waitlist_enabled: e.target.checked }))}
+                      className="w-5 h-5"
+                    />
+                    <div>
+                      <div className="font-bold text-white">Enable Waitlist</div>
+                      <div className="text-sm text-white/50">Allow parents to join waitlist when camp is full</div>
                     </div>
                   </label>
                 </div>
