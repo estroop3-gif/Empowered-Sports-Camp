@@ -22,6 +22,7 @@ const footerLinks = {
     { label: 'All Girls Sports Camp', href: '/programs/all-girls-sports-camp' },
     { label: 'CIT Program', href: '/programs/cit-program' },
     { label: 'Soccer & Strength', href: '/programs/soccer-and-strength' },
+    { label: 'CITs Abroad', href: '/programs/cits-abroad' },
   ],
   company: [
     { label: 'About Us', href: '/about' },
@@ -29,6 +30,7 @@ const footerLinks = {
     { label: 'Testimonials', href: '/testimonies' },
     { label: 'Host a Camp', href: '/host-a-camp' },
     { label: 'Careers', href: '/careers' },
+    { label: 'Volunteer', href: '/volunteer/apply' },
   ],
   support: [
     { label: 'FAQ', href: '/faq' },

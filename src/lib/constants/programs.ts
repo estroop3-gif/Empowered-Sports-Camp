@@ -46,6 +46,26 @@ export const PROGRAMS: Program[] = [
     color: 'purple',
     grades: '6th–12th grade',
   },
+  {
+    slug: 'cits-abroad',
+    name: 'CITs Abroad Leadership Program',
+    tagline: 'CITs take on Costa Rica.',
+    description:
+      'An international leadership experience where our top Coaches-in-Training travel to Costa Rica to coach, mentor, and lead alongside local athletes — building global confidence and cross-cultural connections.',
+    href: '/programs/cits-abroad',
+    color: 'magenta',
+    ages: 'High school',
+  },
+  {
+    slug: 'volunteer',
+    name: 'Volunteer Program',
+    tagline: 'Give back and make a difference at camp.',
+    description:
+      'Help with check-in, concessions, equipment, and more. Volunteers play a vital role in making every camp day run smoothly and ensuring every athlete has an amazing experience.',
+    href: '/volunteer/apply',
+    color: 'neon',
+    ages: 'Adults & High School',
+  },
 ]
 
 export const SPORTS_LIST = [

@@ -289,7 +289,7 @@ export function CampHqShell({
           <WaitlistTab campId={campId} />
         )}
         {activeTab === 'addons' && (
-          <CampAddonPurchasesTab campId={campId} routePrefix={routePrefix} />
+          <CampAddonPurchasesTab campId={campId} routePrefix={routePrefix} campName={overview?.camp?.name} />
         )}
       </div>
     </div>

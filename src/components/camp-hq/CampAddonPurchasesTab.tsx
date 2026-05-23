@@ -2,8 +2,10 @@
 
 import { useState, useEffect, useMemo, Fragment } from 'react'
 import Link from 'next/link'
-import { Package, Search, ChevronDown, ChevronRight, Loader2, DollarSign, Users, ShoppingBag } from 'lucide-react'
+import { Package, Search, ChevronDown, ChevronRight, Loader2, DollarSign, Users, ShoppingBag, Download, Printer } from 'lucide-react'
 import { PortalCard } from '@/components/portal'
+import { generateReportPDF } from '@/lib/utils/pdf-export'
+import { generateCSV, downloadCSV } from '@/lib/utils/csv-export'
 
 interface AddonItem {
   name: string
@@ -33,6 +35,7 @@ interface AddonPurchasesData {
 interface CampAddonPurchasesTabProps {
   campId: string
   routePrefix: string
+  campName?: string
 }
 
 function formatPrice(cents: number): string {
@@ -42,7 +45,7 @@ function formatPrice(cents: number): string {
   }).format(cents / 100)
 }
 
-export function CampAddonPurchasesTab({ campId, routePrefix }: CampAddonPurchasesTabProps) {
+export function CampAddonPurchasesTab({ campId, routePrefix, campName }: CampAddonPurchasesTabProps) {
   const [data, setData] = useState<AddonPurchasesData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -89,6 +92,97 @@ export function CampAddonPurchasesTab({ campId, routePrefix }: CampAddonPurchase
       return next
     })
   }
+
+  // Re-pivot data grouped by add-on item (for export/print)
+  const groupedByAddon = useMemo(() => {
+    if (!data) return []
+    const map = new Map<string, {
+      addonName: string
+      variant: string | null
+      athletes: { firstName: string; lastName: string; quantity: number; priceCents: number }[]
+      totalQuantity: number
+      totalRevenueCents: number
+    }>()
+    for (const camper of data.campers) {
+      for (const addon of camper.addons) {
+        const key = `${addon.name}||${addon.variant ?? ''}`
+        let group = map.get(key)
+        if (!group) {
+          group = { addonName: addon.name, variant: addon.variant, athletes: [], totalQuantity: 0, totalRevenueCents: 0 }
+          map.set(key, group)
+        }
+        group.athletes.push({ firstName: camper.firstName, lastName: camper.lastName, quantity: addon.quantity, priceCents: addon.priceCents })
+        group.totalQuantity += addon.quantity
+        group.totalRevenueCents += addon.priceCents * addon.quantity
+      }
+    }
+    // Sort groups by add-on name, then variant; sort athletes within by last name
+    const groups = Array.from(map.values())
+    groups.sort((a, b) => a.addonName.localeCompare(b.addonName) || (a.variant ?? '').localeCompare(b.variant ?? ''))
+    for (const g of groups) g.athletes.sort((a, b) => a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName))
+    return groups
+  }, [data])
+
+  const handleExportCSV = () => {
+    const rows = groupedByAddon.flatMap((g) =>
+      g.athletes.map((a) => ({
+        'Add-on': g.addonName,
+        Variant: g.variant || '',
+        'Athlete Last Name': a.lastName,
+        'Athlete First Name': a.firstName,
+        Quantity: a.quantity,
+        'Unit Price': formatPrice(a.priceCents),
+        'Line Total': formatPrice(a.priceCents * a.quantity),
+      }))
+    )
+    const csv = generateCSV(rows, [
+      { key: 'Add-on', label: 'Add-on' },
+      { key: 'Variant', label: 'Variant' },
+      { key: 'Athlete Last Name', label: 'Athlete Last Name' },
+      { key: 'Athlete First Name', label: 'Athlete First Name' },
+      { key: 'Quantity', label: 'Quantity' },
+      { key: 'Unit Price', label: 'Unit Price' },
+      { key: 'Line Total', label: 'Line Total' },
+    ])
+    const filename = campName ? `${campName.replace(/[^a-zA-Z0-9-_ ]/g, '')}-addons` : `${campId}-addons`
+    downloadCSV(csv, filename)
+  }
+
+  const handlePrintPDF = () => {
+    if (!data) return
+    const label = campName || campId
+    const stats = [
+      { label: 'Total Revenue', value: formatPrice(data.summary.totalRevenueCents) },
+      { label: 'Total Items', value: data.summary.totalItems },
+      { label: 'Campers with Add-ons', value: data.summary.totalCampersWithAddons },
+      { label: 'Unique Add-on Items', value: groupedByAddon.length },
+    ]
+    const tables = groupedByAddon.map((g) => {
+      const title = g.variant
+        ? `${g.addonName} — ${g.variant} (${g.totalQuantity} total)`
+        : `${g.addonName} (${g.totalQuantity} total)`
+      return {
+        title,
+        data: {
+          headers: ['Athlete', 'Quantity', 'Unit Price', 'Total'],
+          rows: g.athletes.map((a) => [
+            `${a.lastName}, ${a.firstName}`,
+            a.quantity,
+            formatPrice(a.priceCents),
+            formatPrice(a.priceCents * a.quantity),
+          ]),
+        },
+      }
+    })
+    const filename = campName ? `${campName.replace(/[^a-zA-Z0-9-_ ]/g, '')}-addons` : `${campId}-addons`
+    generateReportPDF(
+      { title: `${label} — Add-on Purchases`, filename },
+      stats,
+      tables
+    )
+  }
+
+  const hasData = data && data.campers.length > 0
 
   // Determine athlete detail base path from routePrefix
   const athleteBasePath = routePrefix.replace('/camps', '/athletes')
@@ -152,10 +246,10 @@ export function CampAddonPurchasesTab({ campId, routePrefix }: CampAddonPurchase
         </PortalCard>
       </div>
 
-      {/* Search + Table */}
+      {/* Search + Export + Table */}
       <PortalCard>
-        <div className="p-4 border-b border-white/10">
-          <div className="relative">
+        <div className="p-4 border-b border-white/10 flex items-center gap-3">
+          <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
             <input
               type="text"
@@ -165,6 +259,24 @@ export function CampAddonPurchasesTab({ campId, routePrefix }: CampAddonPurchase
               className="w-full pl-10 pr-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder:text-white/30 focus:outline-none focus:ring-1 focus:ring-neon/50 focus:border-neon/50"
             />
           </div>
+          {hasData && (
+            <>
+              <button
+                onClick={handleExportCSV}
+                className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg bg-white/5 border border-white/10 text-white/70 hover:bg-white/10 hover:text-white transition-colors whitespace-nowrap"
+              >
+                <Download className="h-4 w-4" />
+                Export CSV
+              </button>
+              <button
+                onClick={handlePrintPDF}
+                className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg bg-white/5 border border-white/10 text-white/70 hover:bg-white/10 hover:text-white transition-colors whitespace-nowrap"
+              >
+                <Printer className="h-4 w-4" />
+                Print PDF
+              </button>
+            </>
+          )}
         </div>
 
         {filteredCampers.length === 0 ? (
