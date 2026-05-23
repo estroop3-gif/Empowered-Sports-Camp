@@ -224,6 +224,12 @@ const licensorNavItems: NavItem[] = [
     ],
   },
   {
+    label: 'Parent Dashboard',
+    href: '/dashboard',
+    icon: UserCircle,
+    roles: ['hq_admin'],
+  },
+  {
     label: 'Settings',
     href: '/admin/settings',
     icon: Settings,

@@ -296,8 +296,8 @@ export function UserMenu({ variant = 'navbar', className }: UserMenuProps) {
               <span className="font-medium">Dashboard</span>
             </Link>
 
-            {/* Show parent dashboard link if user has parent role but is viewing as another role */}
-            {hasParentRole && role !== 'parent' && (
+            {/* Show parent dashboard link for admins/staff or users with parent role */}
+            {(hasParentRole || actualRole === 'hq_admin' || actualRole === 'licensee_owner' || actualRole === 'director') && role !== 'parent' && (
               <Link
                 href="/dashboard"
                 onClick={() => setIsOpen(false)}

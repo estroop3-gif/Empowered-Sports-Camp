@@ -208,6 +208,15 @@ export function Navbar() {
                 >
                   Dashboard
                 </Link>
+                {(isHqAdmin || isLicenseeOwner || isDirector) && (
+                  <Link
+                    href="/dashboard"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="block px-4 py-3 text-base font-semibold uppercase tracking-wider text-white/80 hover:text-white transition-colors"
+                  >
+                    Parent Dashboard
+                  </Link>
+                )}
                 <Link
                   href={`${getDashboardLink()}/settings`}
                   onClick={() => setMobileMenuOpen(false)}
