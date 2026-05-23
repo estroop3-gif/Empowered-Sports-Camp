@@ -226,8 +226,8 @@ const licensorNavItems: NavItem[] = [
   {
     label: 'Parent Dashboard',
     href: '/dashboard',
-    icon: UserCircle,
-    roles: ['hq_admin'],
+    icon: Crown,
+    roles: ['hq_admin', 'licensee_owner'],
   },
   {
     label: 'Settings',
@@ -326,6 +326,12 @@ const licenseeNavItems: NavItem[] = [
     label: 'Reports',
     href: '/portal/reports',
     icon: BarChart3,
+    roles: ['licensee_owner', 'director'],
+  },
+  {
+    label: 'Parent Dashboard',
+    href: '/dashboard',
+    icon: Crown,
     roles: ['licensee_owner', 'director'],
   },
   {

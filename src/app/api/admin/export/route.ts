@@ -235,12 +235,14 @@ async function exportAddons({ campId, tenantId }: ExportFilters) {
       registration: {
         select: {
           id: true,
+          shirtSize: true,
           camp: { select: { id: true, name: true } },
           athlete: {
             select: {
               id: true,
               firstName: true,
               lastName: true,
+              tShirtSize: true,
             },
           },
         },
@@ -253,11 +255,28 @@ async function exportAddons({ campId, tenantId }: ExportFilters) {
     ],
   })
 
+  // Helper: resolve the size for an addon purchase
+  // Priority: variant name > registration shirtSize > athlete tShirtSize
+  const resolveSize = (ra: typeof registrationAddons[number]): string => {
+    if (ra.variant?.name) return ra.variant.name
+    // For shirt/size-collecting addons, fall back to registration or athlete shirt size
+    const nameLower = ra.addon.name.toLowerCase()
+    const isShirtAddon = ra.addon.collectSize
+      || nameLower.includes('shirt') || nameLower.includes('tee')
+      || nameLower.includes('t-shirt') || nameLower.includes('jersey')
+    if (isShirtAddon) {
+      return ra.registration.shirtSize
+        || ra.registration.athlete.tShirtSize
+        || ''
+    }
+    return ''
+  }
+
   // Build flat rows grouped by camp > addon > variant
   const rows = registrationAddons.map(ra => ({
     camp_name: ra.registration.camp?.name || '',
     addon_name: ra.addon.name,
-    variant: ra.variant?.name || '',
+    variant: resolveSize(ra),
     athlete_first_name: ra.registration.athlete.firstName,
     athlete_last_name: ra.registration.athlete.lastName,
     quantity: ra.quantity,
@@ -265,18 +284,18 @@ async function exportAddons({ campId, tenantId }: ExportFilters) {
     total_cents: ra.priceCents * ra.quantity,
   }))
 
-  // Build size/variant summary for any addon that has variants (including t-shirts, concessions, etc.)
+  // Build size/variant summary for addons that have sizes
   const sizeSummary: Record<string, Record<string, number>> = {}
   for (const ra of registrationAddons) {
-    if (!ra.variant) continue // Skip addons without variants
+    const size = resolveSize(ra)
+    if (!size) continue // Skip addons without any size info
     const campName = ra.registration.camp?.name || 'Unknown'
-    const size = ra.variant.name
     const key = `${campName}|||${ra.addon.name}`
     if (!sizeSummary[key]) sizeSummary[key] = {}
     sizeSummary[key][size] = (sizeSummary[key][size] || 0) + ra.quantity
   }
 
-  // Also build a per-addon quantity summary (for addons without variants)
+  // Also build a per-addon quantity summary (for addons without sizes)
   const addonTotals: Record<string, number> = {}
   for (const ra of registrationAddons) {
     const campName = ra.registration.camp?.name || 'Unknown'
