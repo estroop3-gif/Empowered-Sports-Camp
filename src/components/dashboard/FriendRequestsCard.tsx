@@ -525,7 +525,7 @@ export default function FriendRequestsCard() {
                           className="text-xs"
                         >
                           <UserPlus className="h-3 w-3 mr-1" />
-                          Request Pairing
+                          Pair with Camper
                         </Button>
                         <Button
                           variant="outline-white"
@@ -591,7 +591,7 @@ export default function FriendRequestsCard() {
                                       {requestingTarget === camper.athleteId ? (
                                         <Loader2 className="h-3 w-3 animate-spin" />
                                       ) : (
-                                        'Request'
+                                        'Pair'
                                       )}
                                     </Button>
                                   </div>

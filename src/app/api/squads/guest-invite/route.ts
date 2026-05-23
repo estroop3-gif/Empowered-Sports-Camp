@@ -7,7 +7,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/client'
-import { sendCampInviteEmail } from '@/lib/email'
+import { sendCampInviteEmail, sendSquadConfirmationEmail } from '@/lib/email'
+import { syncFriendGroupIdsForSquad } from '@/lib/services/campSquads'
 
 export async function POST(request: NextRequest) {
   try {
@@ -161,6 +162,7 @@ export async function POST(request: NextRequest) {
       where: { email: inviteeEmail.toLowerCase() },
     })
 
+    let autoPaired = false
     if (inviteeProfile && linkedSquadId) {
       // Find their registrations for this camp
       const inviteeRegistrations = await prisma.registration.findMany({
@@ -175,12 +177,13 @@ export async function POST(request: NextRequest) {
       for (const { athleteId } of inviteeRegistrations) {
         await prisma.campFriendSquadMember.upsert({
           where: { squadId_athleteId: { squadId: linkedSquadId, athleteId } },
-          update: {},
+          update: { status: 'accepted', respondedAt: new Date() },
           create: {
             squadId: linkedSquadId,
             parentId: inviteeProfile.id,
             athleteId,
-            status: 'requested',
+            status: 'accepted',
+            respondedAt: new Date(),
           },
         })
       }
@@ -191,40 +194,80 @@ export async function POST(request: NextRequest) {
           where: { id: invite.id },
           data: { status: 'claimed' },
         })
+
+        // Sync friend group IDs immediately
+        await syncFriendGroupIdsForSquad({ squadId: linkedSquadId })
+        autoPaired = true
       }
     }
 
-    // Send branded invite email
+    // Send email — confirmation if auto-paired, invite if they need to sign up
     let emailSent = false
     let emailError: string | null = null
     try {
       const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://empoweredathletes.com'
-      const registerUrl = `${baseUrl}/register/${camp?.slug || campId}?squadInvite=${invite.id}`
 
-      // Format dates
-      const dateOpts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric' }
-      const campDates = camp
-        ? `${new Date(camp.startDate).toLocaleDateString('en-US', dateOpts)} – ${new Date(camp.endDate).toLocaleDateString('en-US', dateOpts)}`
-        : ''
+      if (autoPaired && inviteeProfile) {
+        // Send confirmation emails to both parents
+        const dashboardUrl = `${baseUrl}/portal`
+        const inviteeName = [inviteeProfile.firstName, inviteeProfile.lastName].filter(Boolean).join(' ') || 'A parent'
+        const inviterDisplayName = inviterName || 'A friend'
 
-      const campLocation = camp?.location
-        ? `${camp.location.name}${camp.location.city ? `, ${camp.location.city}` : ''}${camp.location.state ? `, ${camp.location.state}` : ''}`
-        : null
+        const result = await sendSquadConfirmationEmail({
+          to: inviteeEmail,
+          recipientName: inviteeName,
+          otherParentName: inviterDisplayName,
+          campName: campName || camp?.name || 'Camp',
+          athleteNames: athleteNames || [],
+          dashboardUrl,
+        })
 
-      const result = await sendCampInviteEmail({
-        to: inviteeEmail,
-        inviterName: inviterName || 'A friend',
-        friendName: '',
-        campName: campName || camp?.name || 'Camp',
-        campDates,
-        campLocation,
-        registerUrl,
-      })
+        // Also send confirmation to inviter
+        if (inviterEmail) {
+          await sendSquadConfirmationEmail({
+            to: inviterEmail,
+            recipientName: inviterDisplayName,
+            otherParentName: inviteeName,
+            campName: campName || camp?.name || 'Camp',
+            athleteNames: athleteNames || [],
+            dashboardUrl,
+          })
+        }
 
-      emailSent = result.success
-      if (!result.success) {
-        emailError = result.error || 'Unknown email error'
-        console.error('[Guest Squad Invite API] Email send failed:', emailError)
+        emailSent = result.success
+        if (!result.success) {
+          emailError = result.error || 'Unknown email error'
+          console.error('[Guest Squad Invite API] Confirmation email send failed:', emailError)
+        }
+      } else {
+        // Invitee doesn't have an account — send invite email
+        const registerUrl = `${baseUrl}/register/${camp?.slug || campId}?squadInvite=${invite.id}`
+
+        // Format dates
+        const dateOpts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric' }
+        const campDates = camp
+          ? `${new Date(camp.startDate).toLocaleDateString('en-US', dateOpts)} – ${new Date(camp.endDate).toLocaleDateString('en-US', dateOpts)}`
+          : ''
+
+        const campLocation = camp?.location
+          ? `${camp.location.name}${camp.location.city ? `, ${camp.location.city}` : ''}${camp.location.state ? `, ${camp.location.state}` : ''}`
+          : null
+
+        const result = await sendCampInviteEmail({
+          to: inviteeEmail,
+          inviterName: inviterName || 'A friend',
+          friendName: '',
+          campName: campName || camp?.name || 'Camp',
+          campDates,
+          campLocation,
+          registerUrl,
+        })
+
+        emailSent = result.success
+        if (!result.success) {
+          emailError = result.error || 'Unknown email error'
+          console.error('[Guest Squad Invite API] Email send failed:', emailError)
+        }
       }
     } catch (err) {
       emailError = err instanceof Error ? err.message : String(err)

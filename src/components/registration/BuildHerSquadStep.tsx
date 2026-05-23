@@ -403,7 +403,7 @@ export function BuildHerSquadStep({
             </h2>
           </div>
           <p className="text-sm text-white/50 mb-4">
-            Select campers you&apos;d like to be grouped with. Their parents will receive a request.
+            Select campers you&apos;d like to be grouped with. They&apos;ll be paired with your camper automatically.
           </p>
 
           <div className="space-y-2 mb-6">
@@ -462,7 +462,7 @@ export function BuildHerSquadStep({
                   {isRequested ? (
                     <span className="flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-neon">
                       <CheckCircle2 className="h-4 w-4" />
-                      Requested
+                      Paired!
                     </span>
                   ) : isSelected ? (
                     <span className="flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-purple">
@@ -490,7 +490,7 @@ export function BuildHerSquadStep({
               ) : (
                 <Send className="h-4 w-4 mr-2" />
               )}
-              Send Squad Request{selectedCampers.size > 1 ? 's' : ''} ({selectedCampers.size})
+              Pair with Selected ({selectedCampers.size})
             </Button>
           )}
         </div>

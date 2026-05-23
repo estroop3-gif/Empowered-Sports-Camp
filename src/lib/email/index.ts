@@ -738,3 +738,82 @@ export async function sendCampInviteEmail(
 
   return result
 }
+
+// ============================================
+// Squad Confirmation Email Functions
+// ============================================
+
+export interface SquadConfirmationEmailOptions {
+  to: string
+  recipientName: string
+  otherParentName: string
+  campName: string
+  athleteNames: string[]
+  dashboardUrl: string
+}
+
+function generateSquadConfirmationHtml(options: SquadConfirmationEmailOptions): string {
+  const athleteList = options.athleteNames.length > 0
+    ? options.athleteNames.join(', ')
+    : 'your athletes'
+
+  return brandWrap(`
+    ${emailLabel('Squad Paired', BRAND.purple)}
+    ${emailHeading(`You've Been<br/><span style="color: ${BRAND.purple};">Paired!</span>`)}
+
+    ${emailParagraph(`Hi ${options.recipientName},`)}
+    ${emailParagraph(`Great news! Your athletes have been paired with <strong style="color: ${BRAND.textPrimary};">${options.otherParentName}</strong>'s athletes for <strong style="color: ${BRAND.purple};">${options.campName}</strong>.`)}
+    ${emailParagraph(`The following athletes will be grouped together during camp activities: <strong style="color: ${BRAND.textPrimary};">${athleteList}</strong>.`)}
+
+    ${emailButton('View Dashboard', options.dashboardUrl, BRAND.purple)}
+    ${emailFallbackUrl(options.dashboardUrl)}
+  `, { accentColor: BRAND.purple })
+}
+
+function generateSquadConfirmationText(options: SquadConfirmationEmailOptions): string {
+  const athleteList = options.athleteNames.length > 0
+    ? options.athleteNames.join(', ')
+    : 'your athletes'
+
+  return `
+Hi ${options.recipientName},
+
+Great news! Your athletes have been paired with ${options.otherParentName}'s athletes for ${options.campName}.
+
+The following athletes will be grouped together during camp activities: ${athleteList}.
+
+View your dashboard: ${options.dashboardUrl}
+
+---
+Empowered Sports Camp
+  `.trim()
+}
+
+export async function sendSquadConfirmationEmail(
+  options: SquadConfirmationEmailOptions
+): Promise<EmailResult> {
+  const { to, recipientName, otherParentName, campName, athleteNames, dashboardUrl } = options
+  const subject = `You've been paired with ${otherParentName} at ${campName}!`
+
+  const result = await sendEmail({
+    to,
+    subject,
+    html: generateSquadConfirmationHtml(options),
+    text: generateSquadConfirmationText(options),
+  })
+
+  await logEmail({
+    toEmail: to,
+    subject,
+    emailType: 'camp_invite',
+    status: result.success ? 'sent' : 'failed',
+    providerMessageId: result.messageId,
+    errorMessage: result.error,
+  })
+
+  if (!result.success) {
+    console.error('Email send error (squad confirmation):', result.error)
+  }
+
+  return result
+}
