@@ -199,14 +199,29 @@ export default function ExportPage() {
   }
 
   const handleAddonsPDF = (
-    json: { data: Record<string, string | number>[]; sizeTotals?: { camp_name: string; addon_name: string; sizes: Record<string, number>; total: number }[] },
+    json: {
+      data: Record<string, string | number>[]
+      sizeTotals?: { camp_name: string; addon_name: string; is_shirt?: boolean; sizes: Record<string, number>; total: number }[]
+      quantityTotals?: { camp_name: string; addon_name: string; total: number }[]
+    },
     title: string,
     filename: string
   ) => {
     const data = json.data
     const sizeTotals = json.sizeTotals || []
+    const quantityTotals = json.quantityTotals || []
 
-    // Group rows by camp > addon for structured PDF
+    const SIZE_ORDER = ['YXS', 'YS', 'YM', 'YL', 'YXL', 'XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', 'XXL', 'XXXL']
+    const sortSizes = (sizes: string[]) => [...sizes].sort((a, b) => {
+      const ai = SIZE_ORDER.indexOf(a.toUpperCase())
+      const bi = SIZE_ORDER.indexOf(b.toUpperCase())
+      if (ai !== -1 && bi !== -1) return ai - bi
+      if (ai !== -1) return -1
+      if (bi !== -1) return 1
+      return a.localeCompare(b)
+    })
+
+    // Group rows by camp > addon for detail tables
     const byCamp = new Map<string, Map<string, { variant: string; athlete: string; qty: number; total: number }[]>>()
     for (const row of data) {
       const camp = String(row.camp_name || 'Unknown')
@@ -215,55 +230,77 @@ export default function ExportPage() {
       const campMap = byCamp.get(camp)!
       if (!campMap.has(addon)) campMap.set(addon, [])
       campMap.get(addon)!.push({
-        variant: String(row.variant || ''),
+        variant: String(row.variant || '—'),
         athlete: `${row.athlete_last_name}, ${row.athlete_first_name}`,
         qty: Number(row.quantity),
         total: Number(row.total_cents),
       })
     }
 
+    const totalItems = data.reduce((s: number, r: Record<string, string | number>) => s + Number(r.quantity), 0)
+    const totalRevenue = data.reduce((s: number, r: Record<string, string | number>) => s + Number(r.total_cents), 0)
+
     const stats = [
-      { label: 'Total Items', value: data.reduce((s: number, r: Record<string, string | number>) => s + Number(r.quantity), 0) },
-      { label: 'Total Revenue', value: formatPrice(data.reduce((s: number, r: Record<string, string | number>) => s + Number(r.total_cents), 0)) },
+      { label: 'Total Items', value: totalItems },
+      { label: 'Total Revenue', value: formatPrice(totalRevenue) },
       { label: 'Camps', value: byCamp.size },
+      { label: 'Unique Add-ons', value: new Set(data.map(r => r.addon_name)).size },
     ]
 
     const tables: { title: string; data: { headers: string[]; rows: (string | number)[][] } }[] = []
 
-    // Size summary tables first (for ordering)
-    if (sizeTotals.length > 0) {
-      // Collect all unique sizes across all items, in a logical order
-      const SIZE_ORDER = ['YXS', 'YS', 'YM', 'YL', 'YXL', 'XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', 'XXL', 'XXXL']
-      for (const st of sizeTotals) {
-        const allSizes = Object.keys(st.sizes)
-        allSizes.sort((a, b) => {
-          const ai = SIZE_ORDER.indexOf(a.toUpperCase())
-          const bi = SIZE_ORDER.indexOf(b.toUpperCase())
-          if (ai !== -1 && bi !== -1) return ai - bi
-          if (ai !== -1) return -1
-          if (bi !== -1) return 1
-          return a.localeCompare(b)
-        })
-        const headers = ['Size', 'Quantity']
-        const rows: (string | number)[][] = allSizes.map(size => [size, st.sizes[size]])
-        rows.push(['TOTAL', st.total])
-        tables.push({
-          title: `SIZE TOTALS: ${st.camp_name} — ${st.addon_name}`,
-          data: { headers, rows },
-        })
-      }
+    // === ORDER SUMMARY TABLES (most useful — put first) ===
+
+    // Size/variant summary tables (T-shirts, etc.)
+    for (const st of sizeTotals) {
+      const allSizes = sortSizes(Object.keys(st.sizes))
+      const rows: (string | number)[][] = allSizes.map(size => [size, st.sizes[size]])
+      rows.push(['TOTAL', st.total])
+      const label = st.is_shirt ? 'ORDER SUMMARY' : 'QUANTITY SUMMARY'
+      tables.push({
+        title: `${label}: ${st.camp_name} — ${st.addon_name}`,
+        data: { headers: [st.is_shirt ? 'Size' : 'Option', 'Quantity'], rows },
+      })
     }
 
-    // Detail tables per camp > addon
+    // Simple quantity totals for addons without variants
+    if (quantityTotals.length > 0) {
+      const rows: (string | number)[][] = quantityTotals.map(qt => [qt.camp_name, qt.addon_name, qt.total])
+      tables.push({
+        title: 'QUANTITY SUMMARY: Add-ons Without Sizes',
+        data: { headers: ['Camp', 'Add-on', 'Quantity'], rows },
+      })
+    }
+
+    // === DETAIL TABLES (per camp > addon with name lists) ===
     for (const [campName, addons] of byCamp) {
       for (const [addonName, items] of addons) {
+        // Sort by variant/size then by athlete name
+        items.sort((a, b) => a.variant.localeCompare(b.variant) || a.athlete.localeCompare(b.athlete))
+
         const totalQty = items.reduce((s, i) => s + i.qty, 0)
+        const totalCents = items.reduce((s, i) => s + i.total, 0)
+        const hasVariants = items.some(i => i.variant && i.variant !== '—')
+
+        const headers = hasVariants
+          ? ['Athlete', 'Size/Option', 'Qty', 'Price']
+          : ['Athlete', 'Qty', 'Price']
+
+        const rows: (string | number)[][] = items.map(i =>
+          hasVariants
+            ? [i.athlete, i.variant, i.qty, formatPrice(i.total)]
+            : [i.athlete, i.qty, formatPrice(i.total)]
+        )
+        // Add totals row
+        rows.push(
+          hasVariants
+            ? ['TOTAL', '', totalQty, formatPrice(totalCents)]
+            : ['TOTAL', totalQty, formatPrice(totalCents)]
+        )
+
         tables.push({
-          title: `${campName} — ${addonName} (${totalQty} total)`,
-          data: {
-            headers: ['Athlete', 'Variant/Size', 'Qty', 'Total'],
-            rows: items.map(i => [i.athlete, i.variant, i.qty, formatPrice(i.total)]),
-          },
+          title: `${campName} — ${addonName} (${totalQty} items)`,
+          data: { headers, rows },
         })
       }
     }

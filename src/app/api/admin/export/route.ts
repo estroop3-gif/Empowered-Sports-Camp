@@ -230,7 +230,7 @@ async function exportAddons({ campId, tenantId }: ExportFilters) {
   const registrationAddons = await prisma.registrationAddon.findMany({
     where,
     include: {
-      addon: { select: { name: true } },
+      addon: { select: { name: true, collectSize: true } },
       variant: { select: { name: true } },
       registration: {
         select: {
@@ -265,31 +265,56 @@ async function exportAddons({ campId, tenantId }: ExportFilters) {
     total_cents: ra.priceCents * ra.quantity,
   }))
 
-  // Build size summary for T-shirt add-ons
+  // Build size/variant summary for any addon that has variants (including t-shirts, concessions, etc.)
   const sizeSummary: Record<string, Record<string, number>> = {}
   for (const ra of registrationAddons) {
-    const name = ra.addon.name.toLowerCase()
-    if (name.includes('shirt') || name.includes('tee') || name.includes('t-shirt') || name.includes('jersey')) {
-      const campName = ra.registration.camp?.name || 'Unknown'
-      const size = ra.variant?.name || 'No Size'
-      const key = `${campName}|||${ra.addon.name}`
-      if (!sizeSummary[key]) sizeSummary[key] = {}
-      sizeSummary[key][size] = (sizeSummary[key][size] || 0) + ra.quantity
-    }
+    if (!ra.variant) continue // Skip addons without variants
+    const campName = ra.registration.camp?.name || 'Unknown'
+    const size = ra.variant.name
+    const key = `${campName}|||${ra.addon.name}`
+    if (!sizeSummary[key]) sizeSummary[key] = {}
+    sizeSummary[key][size] = (sizeSummary[key][size] || 0) + ra.quantity
+  }
+
+  // Also build a per-addon quantity summary (for addons without variants)
+  const addonTotals: Record<string, number> = {}
+  for (const ra of registrationAddons) {
+    const campName = ra.registration.camp?.name || 'Unknown'
+    const key = `${campName}|||${ra.addon.name}`
+    addonTotals[key] = (addonTotals[key] || 0) + ra.quantity
   }
 
   // Convert size summary to structured data
   const sizeTotals = Object.entries(sizeSummary).map(([key, sizes]) => {
     const [campName, addonName] = key.split('|||')
+    // Detect if this is a shirt/size addon for sort ordering
+    const nameLower = addonName.toLowerCase()
+    const isShirt = nameLower.includes('shirt') || nameLower.includes('tee') || nameLower.includes('t-shirt') || nameLower.includes('jersey')
     return {
       camp_name: campName,
       addon_name: addonName,
+      is_shirt: isShirt,
       sizes,
       total: Object.values(sizes).reduce((s, n) => s + n, 0),
     }
   })
 
-  return { data: rows, sizeTotals }
+  // Sort: shirts first, then alphabetical
+  sizeTotals.sort((a, b) => {
+    if (a.is_shirt && !b.is_shirt) return -1
+    if (!a.is_shirt && b.is_shirt) return 1
+    return a.camp_name.localeCompare(b.camp_name) || a.addon_name.localeCompare(b.addon_name)
+  })
+
+  // Build per-camp addon quantity totals (for addons without variants)
+  const quantityTotals = Object.entries(addonTotals)
+    .filter(([key]) => !sizeSummary[key]) // Only addons that DON'T have variants
+    .map(([key, total]) => {
+      const [campName, addonName] = key.split('|||')
+      return { camp_name: campName, addon_name: addonName, total }
+    })
+
+  return { data: rows, sizeTotals, quantityTotals }
 }
 
 async function exportWaitlist({ campId, tenantId }: ExportFilters) {
