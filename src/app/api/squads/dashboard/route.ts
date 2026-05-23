@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
       include: {
         registrations: {
           where: {
-            status: { in: ['pending', 'confirmed'] },
+            status: { in: ['pending', 'confirmed', 'waitlisted'] },
           },
           include: {
             camp: {
