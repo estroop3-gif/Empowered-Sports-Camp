@@ -80,6 +80,7 @@ interface OtherCamper {
 
 interface DashboardData {
   parentEmail: string
+  parentName: string
   athletes: AthleteData[]
   incomingInvites: IncomingInvite[]
 }
@@ -204,6 +205,7 @@ export default function FriendRequestsCard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           inviterEmail: data?.parentEmail || '',
+          inviterName: data?.parentName || undefined,
           inviteeEmail: inviteEmail.trim(),
           campId,
           campName,

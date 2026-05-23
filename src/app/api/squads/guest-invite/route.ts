@@ -155,6 +155,45 @@ export async function POST(request: NextRequest) {
       },
     })
 
+    // If invitee already has an account and is registered for this camp,
+    // create squad member records so the invite shows in their dashboard
+    const inviteeProfile = await prisma.profile.findFirst({
+      where: { email: inviteeEmail.toLowerCase() },
+    })
+
+    if (inviteeProfile && linkedSquadId) {
+      // Find their registrations for this camp
+      const inviteeRegistrations = await prisma.registration.findMany({
+        where: {
+          campId,
+          athlete: { parentId: inviteeProfile.id },
+          status: { in: ['pending', 'confirmed', 'waitlisted'] },
+        },
+        select: { athleteId: true },
+      })
+
+      for (const { athleteId } of inviteeRegistrations) {
+        await prisma.campFriendSquadMember.upsert({
+          where: { squadId_athleteId: { squadId: linkedSquadId, athleteId } },
+          update: {},
+          create: {
+            squadId: linkedSquadId,
+            parentId: inviteeProfile.id,
+            athleteId,
+            status: 'requested',
+          },
+        })
+      }
+
+      // Mark the pending invite as claimed since we created real squad members
+      if (inviteeRegistrations.length > 0) {
+        await prisma.pendingSquadInvite.update({
+          where: { id: invite.id },
+          data: { status: 'claimed' },
+        })
+      }
+    }
+
     // Send branded invite email
     let emailSent = false
     let emailError: string | null = null

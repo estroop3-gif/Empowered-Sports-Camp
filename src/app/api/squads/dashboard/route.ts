@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
     // Get parent profile for email
     const profile = await prisma.profile.findUnique({
       where: { id: parentId },
-      select: { email: true },
+      select: { email: true, firstName: true, lastName: true },
     })
 
     // Get athletes with their registrations
@@ -194,6 +194,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       data: {
         parentEmail: profile?.email || '',
+        parentName: [profile?.firstName, profile?.lastName].filter(Boolean).join(' ') || '',
         athletes: athleteData,
         incomingInvites: incomingInvites || [],
       },
