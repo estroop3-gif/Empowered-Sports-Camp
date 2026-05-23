@@ -1,9 +1,11 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { ClipboardList, Send, Trash2, Loader2, RefreshCw, AlertTriangle, Users, Clock, Search, ArrowUpDown } from 'lucide-react'
+import { ClipboardList, Send, Trash2, Loader2, RefreshCw, AlertTriangle, Users, Clock, Search, ArrowUpDown, Download, Printer } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { PortalCard } from '@/components/portal'
+import { generateSimpleReportPDF } from '@/lib/utils/pdf-export'
+import { generateCSV, downloadCSV } from '@/lib/utils/csv-export'
 
 interface WaitlistEntry {
   id: string
@@ -18,6 +20,7 @@ interface WaitlistEntry {
 
 interface WaitlistTabProps {
   campId: string
+  campName?: string
 }
 
 type StatusFilter = 'all' | 'waiting' | 'offer_sent' | 'offer_expired'
@@ -38,7 +41,7 @@ const SORT_OPTIONS: { value: SortField; label: string }[] = [
   { value: 'offerStatus', label: 'Status' },
 ]
 
-export function WaitlistTab({ campId }: WaitlistTabProps) {
+export function WaitlistTab({ campId, campName }: WaitlistTabProps) {
   const [entries, setEntries] = useState<WaitlistEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -168,6 +171,35 @@ export function WaitlistTab({ campId }: WaitlistTabProps) {
     }
   }
 
+  const handleExportCSV = () => {
+    const rows = filteredEntries.map(e => ({
+      Position: e.position ?? '',
+      'Camper Name': e.athleteName,
+      'Parent Name': e.parentName,
+      'Parent Email': e.parentEmail,
+      'Date Joined': new Date(e.joinedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+      Status: e.offerStatus === 'offer_sent' ? 'Offer Sent' : e.offerStatus === 'offer_expired' ? 'Offer Expired' : 'Waiting',
+    }))
+    const csv = generateCSV(rows)
+    const filename = campName ? `${campName.replace(/[^a-zA-Z0-9-_ ]/g, '')}-waitlist` : `${campId}-waitlist`
+    downloadCSV(csv, filename)
+  }
+
+  const handleExportPDF = () => {
+    const headers = ['#', 'Camper', 'Parent', 'Email', 'Joined', 'Status']
+    const rows = filteredEntries.map(e => [
+      e.position ?? '',
+      e.athleteName,
+      e.parentName,
+      e.parentEmail,
+      new Date(e.joinedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+      e.offerStatus === 'offer_sent' ? 'Offer Sent' : e.offerStatus === 'offer_expired' ? 'Offer Expired' : 'Waiting',
+    ])
+    const filename = campName ? `${campName.replace(/[^a-zA-Z0-9-_ ]/g, '')}-waitlist` : `${campId}-waitlist`
+    const title = campName ? `${campName} — Waitlist` : 'Waitlist'
+    generateSimpleReportPDF(title, headers, rows, filename)
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -280,13 +312,33 @@ export function WaitlistTab({ campId }: WaitlistTabProps) {
             <ClipboardList className="h-5 w-5 text-neon" />
             <h3 className="text-sm font-bold uppercase tracking-wider text-white">Waitlist Queue</h3>
           </div>
-          <button
-            onClick={loadWaitlist}
-            className="flex items-center gap-1 text-xs text-white/40 hover:text-white transition-colors"
-          >
-            <RefreshCw className="h-3 w-3" />
-            Refresh
-          </button>
+          <div className="flex items-center gap-2">
+            {entries.length > 0 && (
+              <>
+                <button
+                  onClick={handleExportCSV}
+                  className="flex items-center gap-1 text-xs text-white/40 hover:text-white transition-colors"
+                >
+                  <Download className="h-3 w-3" />
+                  CSV
+                </button>
+                <button
+                  onClick={handleExportPDF}
+                  className="flex items-center gap-1 text-xs text-white/40 hover:text-white transition-colors"
+                >
+                  <Printer className="h-3 w-3" />
+                  PDF
+                </button>
+              </>
+            )}
+            <button
+              onClick={loadWaitlist}
+              className="flex items-center gap-1 text-xs text-white/40 hover:text-white transition-colors"
+            >
+              <RefreshCw className="h-3 w-3" />
+              Refresh
+            </button>
+          </div>
         </div>
 
         {filteredEntries.length === 0 ? (

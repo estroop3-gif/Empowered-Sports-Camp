@@ -286,7 +286,7 @@ export function CampHqShell({
           />
         )}
         {activeTab === 'waitlist' && (
-          <WaitlistTab campId={campId} />
+          <WaitlistTab campId={campId} campName={overview?.camp?.name} />
         )}
         {activeTab === 'addons' && (
           <CampAddonPurchasesTab campId={campId} routePrefix={routePrefix} campName={overview?.camp?.name} />
