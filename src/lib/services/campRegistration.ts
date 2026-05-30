@@ -13,6 +13,8 @@ import { createNotification } from './notifications'
 import { sendRegistrationConfirmationEmail } from './email'
 import { createStripeCheckoutSession } from './payments'
 import { ensureParentRole } from './users'
+import { notifyAdminSubscribers } from './admin-alerts'
+import { buildRegistrationAlertEmail } from '@/lib/email/admin-alerts'
 import type { PaymentStatus, RegistrationStatus, CampFriendSquad, CampFriendSquadMember } from '@/generated/prisma'
 
 // =============================================================================
@@ -844,6 +846,22 @@ export async function confirmRegistrationsFromPayment(params: {
         severity: 'success',
         actionUrl: `/portal/camps/${reg.campId}`,
       })
+
+      // Notify admin subscribers
+      notifyAdminSubscribers({
+        category: 'camp',
+        notificationType: 'camp_registration_completed',
+        title: 'New Registration',
+        body: `${reg.athlete.firstName} ${reg.athlete.lastName} registered for ${reg.camp.name}`,
+        emailContent: buildRegistrationAlertEmail({
+          athleteFirstName: reg.athlete.firstName,
+          athleteLastName: reg.athlete.lastName,
+          campName: reg.camp.name,
+          parentName: `${reg.parent?.firstName || ''} ${reg.parent?.lastName || ''}`.trim() || 'Unknown',
+          parentEmail: reg.parent?.email || '',
+        }),
+        actionUrl: '/admin/camps',
+      }).catch(err => console.error('[CampRegistration] Admin alert failed:', err))
     }
 
     return {

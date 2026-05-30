@@ -59,10 +59,21 @@ const SETTINGS_SECTIONS = [
   { id: 'camps', label: 'Camps & Registration', icon: Users, accent: 'magenta' },
   { id: 'friendPairing', label: 'Friend Pairing', icon: Heart, accent: 'purple' },
   { id: 'notifications', label: 'Notifications', icon: Bell, accent: 'neon' },
+  { id: 'alerts', label: 'Email Alerts', icon: Mail, accent: 'magenta' },
   { id: 'storage', label: 'Storage & Media', icon: Upload, accent: 'magenta' },
   { id: 'payments', label: 'Payments', icon: CreditCard, accent: 'purple' },
   { id: 'taxes', label: 'Tax Settings', icon: Receipt, accent: 'neon' },
   { id: 'developer', label: 'Developer Mode', icon: Code, accent: 'amber' },
+]
+
+const ALERT_CATEGORIES = [
+  { key: 'system', label: 'Contact Form Submissions', description: 'Get notified when someone submits a contact form' },
+  { key: 'camp', label: 'Camp Registrations & Waitlist', description: 'New camp registrations and waitlist joins' },
+  { key: 'certification', label: 'CIT / Volunteer Applications', description: 'New CIT and volunteer applications' },
+  { key: 'licensee', label: 'Licensee Applications', description: 'New host-a-camp applications' },
+  { key: 'message', label: 'Messages', description: 'New internal messages' },
+  { key: 'royalty', label: 'Royalty Updates', description: 'Royalty invoice and payment updates' },
+  { key: 'job', label: 'Job Applications', description: 'New job applications' },
 ]
 
 export default function AdminSettingsPage() {
@@ -91,6 +102,15 @@ export default function AdminSettingsPage() {
   const [taxSaving, setTaxSaving] = useState(false)
   const [taxError, setTaxError] = useState<string | null>(null)
   const [taxSuccess, setTaxSuccess] = useState(false)
+
+  // Alert subscription state
+  const [alertEmail, setAlertEmail] = useState('')
+  const [alertCategories, setAlertCategories] = useState<string[]>([])
+  const [alertActive, setAlertActive] = useState(true)
+  const [alertLoading, setAlertLoading] = useState(false)
+  const [alertSaving, setAlertSaving] = useState(false)
+  const [alertError, setAlertError] = useState<string | null>(null)
+  const [alertSuccess, setAlertSuccess] = useState(false)
 
   const userName = user?.firstName || user?.email?.split('@')[0] || 'Admin'
 
@@ -218,10 +238,79 @@ export default function AdminSettingsPage() {
     }
   }
 
+  // Load alert subscription
+  const loadAlertSubscription = useCallback(async () => {
+    try {
+      setAlertLoading(true)
+      setAlertError(null)
+      const res = await fetch('/api/admin/alert-subscriptions')
+      const json = await res.json()
+
+      if (!res.ok) throw new Error(json.error || 'Failed to load')
+
+      if (json.data) {
+        setAlertEmail(json.data.forwardingEmail)
+        setAlertCategories(json.data.enabledCategories)
+        setAlertActive(json.data.isActive)
+      } else {
+        // Pre-fill with user's email if no subscription
+        setAlertEmail(user?.email || '')
+        setAlertCategories([])
+        setAlertActive(true)
+      }
+    } catch (err) {
+      setAlertError(err instanceof Error ? err.message : 'Failed to load')
+    } finally {
+      setAlertLoading(false)
+    }
+  }, [user?.email])
+
+  // Save alert subscription
+  const saveAlertSubscription = async () => {
+    setAlertSaving(true)
+    setAlertError(null)
+    setAlertSuccess(false)
+
+    try {
+      const res = await fetch('/api/admin/alert-subscriptions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          forwardingEmail: alertEmail,
+          enabledCategories: alertCategories,
+          isActive: alertActive,
+        }),
+      })
+
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'Failed to save')
+
+      setAlertSuccess(true)
+      setTimeout(() => setAlertSuccess(false), 3000)
+    } catch (err) {
+      setAlertError(err instanceof Error ? err.message : 'Failed to save')
+    } finally {
+      setAlertSaving(false)
+    }
+  }
+
+  const toggleAlertCategory = (key: string) => {
+    setAlertCategories(prev =>
+      prev.includes(key) ? prev.filter(c => c !== key) : [...prev, key]
+    )
+  }
+
   useEffect(() => {
     loadSettings()
     loadTenants()
   }, [loadSettings, loadTenants])
+
+  // Load alert subscription when section is active
+  useEffect(() => {
+    if (activeSection === 'alerts') {
+      loadAlertSubscription()
+    }
+  }, [activeSection, loadAlertSubscription])
 
   // Load tax settings when section is active and tenant is available
   useEffect(() => {
@@ -607,6 +696,149 @@ export default function AdminSettingsPage() {
               </ContentCard>
             )
           })}
+
+          {/* Email Alerts Section */}
+          {activeSection === 'alerts' && (
+            <ContentCard title="Email Alert Subscriptions" accent="magenta">
+              <div className="p-4 bg-magenta/10 border border-magenta/30 mb-6">
+                <div className="flex items-center gap-3">
+                  <Mail className="h-6 w-6 text-magenta" />
+                  <div>
+                    <p className="font-bold text-magenta">Admin Email Alerts</p>
+                    <p className="text-xs text-white/60">
+                      Choose which platform events send branded email alerts to your forwarding address.
+                      In-app notifications are always created for all admin users regardless of email settings.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {alertLoading ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="h-8 w-8 animate-spin text-magenta" />
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {alertError && (
+                    <div className="p-3 bg-magenta/10 border border-magenta/30 text-magenta text-sm flex items-center gap-2">
+                      <AlertCircle className="h-4 w-4" />
+                      {alertError}
+                    </div>
+                  )}
+
+                  {alertSuccess && (
+                    <div className="p-3 bg-neon/10 border border-neon/30 text-neon text-sm flex items-center gap-2">
+                      <Check className="h-4 w-4" />
+                      Alert preferences saved successfully!
+                    </div>
+                  )}
+
+                  {/* Master toggle */}
+                  <div className="flex items-center justify-between pb-4 border-b border-white/10">
+                    <div>
+                      <label className="block text-sm font-bold uppercase tracking-wider text-white">
+                        Email Alerts Enabled
+                      </label>
+                      <p className="text-xs text-white/40">
+                        Master switch — when off, no alert emails are sent to your address
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setAlertActive(!alertActive)}
+                      className={cn(
+                        'relative h-7 w-14 rounded-full transition-colors',
+                        alertActive ? 'bg-neon' : 'bg-white/20'
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          'absolute top-1 h-5 w-5 bg-white rounded-full transition-transform',
+                          alertActive ? 'left-8' : 'left-1'
+                        )}
+                      />
+                    </button>
+                  </div>
+
+                  {/* Forwarding email */}
+                  <div className="space-y-2">
+                    <label className="block text-sm font-bold uppercase tracking-wider text-white">
+                      Forwarding Email
+                    </label>
+                    <p className="text-xs text-white/40 mb-2">
+                      Alert emails will be sent to this address
+                    </p>
+                    <Input
+                      type="email"
+                      value={alertEmail}
+                      onChange={(e) => setAlertEmail(e.target.value)}
+                      placeholder="your@email.com"
+                      className="max-w-md"
+                    />
+                  </div>
+
+                  {/* Category toggles */}
+                  <div className="space-y-2">
+                    <label className="block text-sm font-bold uppercase tracking-wider text-white mb-3">
+                      Event Categories
+                    </label>
+                    <div className="space-y-3">
+                      {ALERT_CATEGORIES.map((cat) => (
+                        <div
+                          key={cat.key}
+                          className={cn(
+                            'flex items-center justify-between p-4 border transition-colors',
+                            alertCategories.includes(cat.key)
+                              ? 'bg-magenta/5 border-magenta/30'
+                              : 'bg-black/20 border-white/10'
+                          )}
+                        >
+                          <div>
+                            <p className="text-sm font-semibold text-white">{cat.label}</p>
+                            <p className="text-xs text-white/40">{cat.description}</p>
+                          </div>
+                          <button
+                            onClick={() => toggleAlertCategory(cat.key)}
+                            className={cn(
+                              'relative h-6 w-12 rounded-full transition-colors flex-shrink-0',
+                              alertCategories.includes(cat.key) ? 'bg-magenta' : 'bg-white/20'
+                            )}
+                          >
+                            <span
+                              className={cn(
+                                'absolute top-0.5 h-5 w-5 bg-white rounded-full transition-transform',
+                                alertCategories.includes(cat.key) ? 'left-6' : 'left-0.5'
+                              )}
+                            />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Save button */}
+                  <div className="pt-4 border-t border-white/10">
+                    <Button
+                      variant="neon"
+                      onClick={saveAlertSubscription}
+                      disabled={alertSaving || !alertEmail}
+                    >
+                      {alertSaving ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="h-4 w-4 mr-2" />
+                          Save Alert Preferences
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </ContentCard>
+          )}
 
           {/* Tax Settings Section */}
           {activeSection === 'taxes' && (

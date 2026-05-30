@@ -9,10 +9,9 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createCitApplication } from '@/lib/services/cit'
-import {
-  sendCitApplicantConfirmationEmail,
-  sendCitAdminNotificationEmail,
-} from '@/lib/email'
+import { sendCitApplicantConfirmationEmail } from '@/lib/email'
+import { notifyAdminSubscribers } from '@/lib/services/admin-alerts'
+import { buildCitApplicationAlertEmail } from '@/lib/email/admin-alerts'
 
 interface CITApplicationFormData {
   // Applicant Info
@@ -130,29 +129,27 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Send notification email to admin (don't fail if email fails)
-    const adminEmailResult = await sendCitAdminNotificationEmail({
-      application: {
-        firstName: formData.firstName,
-        lastName: formData.lastName,
-        email: formData.email,
-        phone: formData.phone,
-        schoolName: formData.schoolName,
-        gradeLevel: formData.gradeLevel,
-        priorExperience: formData.priorExperience,
-        volunteerRoles: formData.volunteerRoles,
-        availabilityWindows: formData.availabilityWindows,
-        whyCit: formData.whyCit,
-        parentName: formData.parentName,
-        parentEmail: formData.parentEmail,
-      },
-    })
-
-    if (!adminEmailResult.success) {
-      console.error(
-        'Failed to send admin notification email:',
-        adminEmailResult.error
-      )
+    // Notify admin subscribers (branded email + in-app notifications)
+    try {
+      await notifyAdminSubscribers({
+        category: 'certification',
+        notificationType: 'cit_application_created',
+        title: `New CIT Application: ${formData.firstName} ${formData.lastName}`,
+        body: `New CIT/volunteer application from ${formData.firstName} ${formData.lastName} (${formData.email})`,
+        emailContent: buildCitApplicationAlertEmail({
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          email: formData.email,
+          phone: formData.phone,
+          schoolName: formData.schoolName,
+          gradeLevel: formData.gradeLevel,
+          volunteerRoles: formData.volunteerRoles,
+          whyCit: formData.whyCit,
+        }),
+        actionUrl: '/admin/cit',
+      })
+    } catch (err) {
+      console.error('Failed to send admin notification:', err)
     }
 
     return NextResponse.json({

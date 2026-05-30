@@ -7,8 +7,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createLicenseeApplication } from '@/lib/services/licensee-application'
 import { sendTransactionalEmail } from '@/lib/services/email'
-
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'ops@empoweredathletes.com'
+import { notifyAdminSubscribers } from '@/lib/services/admin-alerts'
+import { buildLicenseeApplicationAlertEmail } from '@/lib/email/admin-alerts'
 
 export async function POST(request: NextRequest) {
   try {
@@ -62,19 +62,27 @@ export async function POST(request: NextRequest) {
 
     // Send email notifications
     try {
-      // Notify admin of new application
-      await sendTransactionalEmail({
-        templateCode: 'LICENSEE_APPLICATION',
-        to: ADMIN_EMAIL,
-        context: {
-          applicantName: `${body.first_name} ${body.last_name}`,
-          city: body.city || 'Not specified',
-          state: body.state || 'Not specified',
-          applicationId: data?.id,
-        },
+      // Notify admin subscribers (branded email + in-app notifications)
+      await notifyAdminSubscribers({
+        category: 'licensee',
+        notificationType: 'licensee_application_created',
+        title: `New Licensee Application: ${body.first_name} ${body.last_name}`,
+        body: `New host-a-camp application from ${body.first_name} ${body.last_name} (${body.email})`,
+        emailContent: buildLicenseeApplicationAlertEmail({
+          firstName: body.first_name,
+          lastName: body.last_name,
+          email: body.email,
+          phone: body.phone,
+          companyName: body.company_name,
+          city: body.city,
+          state: body.state,
+          territoryInterest: body.territory_interest,
+          whyInterested: body.why_interested,
+        }),
+        actionUrl: '/admin/licensee-applications',
       })
 
-      // Send confirmation to applicant
+      // Send confirmation to applicant (keep as-is)
       await sendTransactionalEmail({
         templateCode: 'LICENSEE_STATUS_UPDATE',
         to: body.email,

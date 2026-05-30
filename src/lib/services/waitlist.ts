@@ -15,6 +15,8 @@ import {
   type NearbyCampInfo,
 } from '@/lib/email/waitlist'
 import { formatPrice } from '@/lib/utils'
+import { notifyAdminSubscribers } from './admin-alerts'
+import { buildWaitlistAlertEmail } from '@/lib/email/admin-alerts'
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://empoweredsportscamp.com'
 const OFFER_EXPIRY_HOURS = 48
@@ -153,6 +155,22 @@ export async function joinWaitlist(params: JoinWaitlistParams): Promise<JoinWait
   sendNearbyCampsForRegistration(registration.id).catch(err =>
     console.error('[Waitlist] Nearby camps email failed:', err)
   )
+
+  // Notify admin subscribers
+  notifyAdminSubscribers({
+    category: 'camp',
+    notificationType: 'system_alert',
+    title: 'Waitlist Join',
+    body: `${registration.athlete.firstName} ${registration.athlete.lastName} joined waitlist for ${registration.camp.name}`,
+    emailContent: buildWaitlistAlertEmail({
+      athleteFirstName: registration.athlete.firstName,
+      athleteLastName: registration.athlete.lastName,
+      campName: registration.camp.name,
+      parentName: `${registration.parent.firstName || ''} ${registration.parent.lastName || ''}`.trim() || 'Parent',
+      waitlistPosition: nextPosition,
+    }),
+    actionUrl: '/admin/camps',
+  }).catch(err => console.error('[Waitlist] Admin alert failed:', err))
 
   return {
     registrationId: registration.id,

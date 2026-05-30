@@ -327,6 +327,7 @@ model Profile {
   waiverTemplatesUpdated        WaiverTemplate[]              @relation("WaiverTemplateUpdater")
   concessionCredits             ConcessionCredit[]
   concessionTransactions        ConcessionCreditTransaction[] @relation("ConcessionTransactionPerformer")
+  alertSubscription             AdminAlertSubscription?
 
   @@map("profiles")
 }
@@ -3175,6 +3176,7 @@ enum EmailType {
   draft_reminder_24h
   draft_reminder_72h
   weekly_report
+  admin_alert
 }
 
 enum EmailStatus {
@@ -3344,4 +3346,18 @@ model ConcessionCreditTransaction {
   @@index([creditId])
   @@index([createdAt])
   @@map("concession_credit_transactions")
+}
+
+model AdminAlertSubscription {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId            String   @unique @map("user_id") @db.Uuid
+  forwardingEmail   String   @map("forwarding_email")
+  enabledCategories String[] @map("enabled_categories")
+  isActive          Boolean  @default(true) @map("is_active")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user              Profile  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([isActive])
+  @@map("admin_alert_subscriptions")
 }
