@@ -393,16 +393,19 @@ export async function acceptOffer(token: string, baseUrl: string): Promise<Accep
     throw new Error('This offer has expired')
   }
 
-  // Verify spot is actually available
-  const activeCount = await prisma.registration.count({
-    where: {
-      campId: registration.campId,
-      status: { in: ['confirmed', 'pending'] },
-    },
-  })
+  // Skip capacity check if admin sent an active offer (the offer IS the capacity allocation)
+  const hasActiveOffer = registration.waitlistOfferSentAt !== null
+  if (!hasActiveOffer) {
+    const activeCount = await prisma.registration.count({
+      where: {
+        campId: registration.campId,
+        status: { in: ['confirmed', 'pending'] },
+      },
+    })
 
-  if (registration.camp.capacity && activeCount >= registration.camp.capacity) {
-    throw new Error('Sorry, the spot is no longer available')
+    if (registration.camp.capacity && activeCount >= registration.camp.capacity) {
+      throw new Error('Sorry, the spot is no longer available')
+    }
   }
 
   // Create Stripe checkout session

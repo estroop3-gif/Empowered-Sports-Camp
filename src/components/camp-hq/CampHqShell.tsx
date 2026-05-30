@@ -54,6 +54,7 @@ import { StartDayModal } from './StartDayModal'
 import { EndDayModal } from './EndDayModal'
 import { ConcludeCampModal } from './ConcludeCampModal'
 import { SendEmailModal } from './SendEmailModal'
+import { ManualRegistrationModal } from './ManualRegistrationModal'
 import { WaitlistTab } from './WaitlistTab'
 import { CampAddonPurchasesTab } from './CampAddonPurchasesTab'
 import type {
@@ -260,7 +261,7 @@ export function CampHqShell({
           />
         )}
         {activeTab === 'campers' && (
-          <CampersTab campId={campId} routePrefix={routePrefix} />
+          <CampersTab campId={campId} routePrefix={routePrefix} onRefresh={loadOverview} />
         )}
         {activeTab === 'groups' && (
           <GroupsTab campId={campId} routePrefix={routePrefix} canEdit={canEdit} />
@@ -1194,24 +1195,45 @@ function CampDayTab({
 // OTHER TABS (Placeholder implementations)
 // ============================================================================
 
-function CampersTab({ campId, routePrefix }: { campId: string; routePrefix: string }) {
+function CampersTab({ campId, routePrefix, onRefresh }: { campId: string; routePrefix: string; onRefresh?: () => void }) {
+  const [showManualRegistration, setShowManualRegistration] = useState(false)
+
   return (
-    <PortalCard>
-      <div className="text-center py-12">
-        <Users className="h-12 w-12 text-white/20 mx-auto mb-4" />
-        <h3 className="text-lg font-bold text-white mb-2">Camper Management</h3>
-        <p className="text-white/50 mb-6">
-          View and manage all registered campers for this camp.
-        </p>
-        <Link
-          href={`${routePrefix}/${campId}/roster`}
-          className="inline-flex items-center gap-2 px-6 py-3 bg-neon text-black font-bold uppercase tracking-wider hover:bg-neon/90 transition-colors"
-        >
-          Open The Roster
-          <ArrowRight className="h-4 w-4" />
-        </Link>
-      </div>
-    </PortalCard>
+    <>
+      <PortalCard>
+        <div className="text-center py-12">
+          <Users className="h-12 w-12 text-white/20 mx-auto mb-4" />
+          <h3 className="text-lg font-bold text-white mb-2">Camper Management</h3>
+          <p className="text-white/50 mb-6">
+            View and manage all registered campers for this camp.
+          </p>
+          <div className="flex items-center justify-center gap-3">
+            <button
+              onClick={() => setShowManualRegistration(true)}
+              className="inline-flex items-center gap-2 px-6 py-3 bg-white/10 text-white font-bold uppercase tracking-wider hover:bg-white/20 transition-colors"
+            >
+              <Plus className="h-4 w-4" />
+              Register Camper
+            </button>
+            <Link
+              href={`${routePrefix}/${campId}/roster`}
+              className="inline-flex items-center gap-2 px-6 py-3 bg-neon text-black font-bold uppercase tracking-wider hover:bg-neon/90 transition-colors"
+            >
+              Open The Roster
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
+        </div>
+      </PortalCard>
+
+      {showManualRegistration && (
+        <ManualRegistrationModal
+          campId={campId}
+          onClose={() => setShowManualRegistration(false)}
+          onSuccess={onRefresh}
+        />
+      )}
+    </>
   )
 }
 
