@@ -713,6 +713,69 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session): Promise
     return metadata.orderId
   }
 
+  if (metadata.type === 'store_purchase') {
+    const concessionCredits = parseInt(metadata.concessionCredits || '0', 10)
+
+    if (concessionCredits > 0 && metadata.athleteId && metadata.campId && metadata.registrationId) {
+      // Upsert concession credit balance
+      const existing = await prisma.concessionCredit.findUnique({
+        where: {
+          athleteId_campId: {
+            athleteId: metadata.athleteId,
+            campId: metadata.campId,
+          },
+        },
+      })
+
+      let creditRecord
+      if (existing) {
+        creditRecord = await prisma.concessionCredit.update({
+          where: { id: existing.id },
+          data: {
+            balanceCents: { increment: concessionCredits },
+          },
+        })
+      } else {
+        creditRecord = await prisma.concessionCredit.create({
+          data: {
+            athleteId: metadata.athleteId,
+            parentId: metadata.userId,
+            campId: metadata.campId,
+            registrationId: metadata.registrationId,
+            balanceCents: concessionCredits,
+          },
+        })
+      }
+
+      // Create transaction record
+      await prisma.concessionCreditTransaction.create({
+        data: {
+          creditId: creditRecord.id,
+          type: 'purchase',
+          amountCents: concessionCredits,
+          balanceAfterCents: creditRecord.balanceCents,
+          description: `Concession credits purchase`,
+          performedBy: metadata.userId,
+          stripeCheckoutSessionId: session.id,
+        },
+      })
+
+      // Send notification
+      createNotification({
+        userId: metadata.userId,
+        type: 'payment_confirmed',
+        title: 'Concession Credits Added!',
+        body: `$${(concessionCredits / 100).toFixed(2)} in concession credits have been added.`,
+        category: 'camp',
+        severity: 'success',
+      }).catch((err) => console.error('[Payments] Failed to send concession notification:', err))
+
+      console.log('[Payments] Concession credits added:', concessionCredits, 'for athlete:', metadata.athleteId)
+    }
+
+    return metadata.registrationId || session.id
+  }
+
   return null
 }
 

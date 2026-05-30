@@ -20,6 +20,7 @@ import {
   Coins,
   Save,
   Trash2,
+  Shirt,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn, parseDateSafe } from '@/lib/utils'
@@ -118,6 +119,9 @@ export default function ParentDashboard() {
   const [registrations, setRegistrations] = useState<Registration[]>([])
   const [savedDrafts, setSavedDrafts] = useState<SavedDraft[]>([])
   const [deletingDraft, setDeletingDraft] = useState<string | null>(null)
+  const [editingSizeAthleteId, setEditingSizeAthleteId] = useState<string | null>(null)
+  const [savingSize, setSavingSize] = useState(false)
+  const [creditBalances, setCreditBalances] = useState<Record<string, number>>({})
 
   useEffect(() => {
     if (!authLoading) {
@@ -174,6 +178,26 @@ export default function ParentDashboard() {
 
       if (registrationsResult.data) {
         setRegistrations(registrationsResult.data)
+      }
+
+      // Load concession credit balances (non-blocking)
+      if (athletesResult.data?.length) {
+        try {
+          const balances: Record<string, number> = {}
+          await Promise.all(
+            athletesResult.data.map(async (a: Athlete) => {
+              const res = await fetch(`/api/concession-credits?athleteId=${a.id}`)
+              const result = await res.json()
+              if (result.data) {
+                const total = result.data.reduce((sum: number, c: { balance_cents: number }) => sum + c.balance_cents, 0)
+                if (total > 0) balances[a.id] = total
+              }
+            })
+          )
+          setCreditBalances(balances)
+        } catch {
+          // Non-critical
+        }
       }
 
       // Load saved registration drafts (non-blocking)
@@ -282,6 +306,37 @@ export default function ParentDashboard() {
     payment: 'Payment',
   }
 
+  const TSHIRT_SIZES = [
+    { value: 'YXS', label: 'Youth XS' },
+    { value: 'YS', label: 'Youth S' },
+    { value: 'YM', label: 'Youth M' },
+    { value: 'YL', label: 'Youth L' },
+    { value: 'YXL', label: 'Youth XL' },
+    { value: 'AS', label: 'Adult S' },
+    { value: 'AM', label: 'Adult M' },
+    { value: 'AL', label: 'Adult L' },
+    { value: 'AXL', label: 'Adult XL' },
+  ]
+
+  const handleSizeChange = async (athleteId: string, newSize: string) => {
+    setSavingSize(true)
+    try {
+      const res = await fetch('/api/athletes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'update', athleteId, tshirt_size: newSize || null }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setAthletes(prev => prev.map(a => a.id === athleteId ? { ...a, tshirt_size: data.data?.tshirt_size ?? (newSize || null) } : a))
+      }
+    } catch (err) {
+      console.error('Failed to update shirt size:', err)
+    }
+    setSavingSize(false)
+    setEditingSizeAthleteId(null)
+  }
+
   const getUserName = () => {
     if (profile?.first_name) {
       return `${profile.first_name} ${profile.last_name || ''}`.trim()
@@ -358,32 +413,65 @@ export default function ParentDashboard() {
                     {athletes.map((athlete) => {
                       const counts = getAthleteCampCounts(athlete.id)
                       return (
-                        <Link
+                        <div
                           key={athlete.id}
-                          href={`/dashboard/athletes/${athlete.id}`}
                           className="p-4 bg-black/50 border border-white/10 hover:border-neon/30 hover:bg-neon/5 transition-all group"
                         >
-                          <div className="flex items-start gap-4">
-                            <div className="h-14 w-14 bg-neon/10 border border-neon/30 flex items-center justify-center group-hover:bg-neon/20 transition-colors">
-                              <span className="text-neon font-black text-xl">{athlete.first_name[0]}</span>
-                            </div>
-                            <div className="flex-1">
-                              <h3 className="font-bold text-white">{athlete.first_name} {athlete.last_name}</h3>
-                              <p className="text-xs text-white/40 mt-1">
-                                Age {calculateAge(athlete.date_of_birth)}
-                                {athlete.tshirt_size && ` • Size ${athlete.tshirt_size}`}
-                              </p>
-                              <div className="flex gap-4 mt-3">
-                                <span className="text-xs text-neon font-bold">
-                                  {counts.upcoming} upcoming
-                                </span>
-                                <span className="text-xs text-white/40">
-                                  {counts.completed} completed
-                                </span>
+                          <Link href={`/dashboard/athletes/${athlete.id}`}>
+                            <div className="flex items-start gap-4">
+                              <div className="h-14 w-14 bg-neon/10 border border-neon/30 flex items-center justify-center group-hover:bg-neon/20 transition-colors">
+                                <span className="text-neon font-black text-xl">{athlete.first_name[0]}</span>
+                              </div>
+                              <div className="flex-1">
+                                <h3 className="font-bold text-white">{athlete.first_name} {athlete.last_name}</h3>
+                                <p className="text-xs text-white/40 mt-1">
+                                  Age {calculateAge(athlete.date_of_birth)}
+                                </p>
+                                <div className="flex gap-4 mt-3">
+                                  <span className="text-xs text-neon font-bold">
+                                    {counts.upcoming} upcoming
+                                  </span>
+                                  <span className="text-xs text-white/40">
+                                    {counts.completed} completed
+                                  </span>
+                                </div>
+                                {creditBalances[athlete.id] > 0 && (
+                                  <div className="flex items-center gap-1 mt-1">
+                                    <Coins className="h-3 w-3 text-amber-400" />
+                                    <span className="text-xs text-amber-400 font-bold">
+                                      ${(creditBalances[athlete.id] / 100).toFixed(2)} credits
+                                    </span>
+                                  </div>
+                                )}
                               </div>
                             </div>
+                          </Link>
+                          <div className="mt-3 pt-3 border-t border-white/5 flex items-center gap-2">
+                            <Shirt className="h-3.5 w-3.5 text-white/40" />
+                            {editingSizeAthleteId === athlete.id ? (
+                              <select
+                                autoFocus
+                                value={athlete.tshirt_size || ''}
+                                onChange={(e) => handleSizeChange(athlete.id, e.target.value)}
+                                onBlur={() => setEditingSizeAthleteId(null)}
+                                disabled={savingSize}
+                                className="bg-black border border-neon/30 text-white text-xs px-2 py-1 focus:outline-none focus:border-neon"
+                              >
+                                <option value="">No size</option>
+                                {TSHIRT_SIZES.map((s) => (
+                                  <option key={s.value} value={s.value}>{s.label}</option>
+                                ))}
+                              </select>
+                            ) : (
+                              <button
+                                onClick={() => setEditingSizeAthleteId(athlete.id)}
+                                className="text-xs text-white/50 hover:text-neon transition-colors"
+                              >
+                                {athlete.tshirt_size ? `Size ${athlete.tshirt_size}` : 'Set size'}
+                              </button>
+                            )}
                           </div>
-                        </Link>
+                        </div>
                       )
                     })}
                   </div>

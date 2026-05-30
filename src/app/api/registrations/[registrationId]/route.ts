@@ -208,6 +208,14 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       },
     })
 
+    // Build athlete update data
+    const athleteData: Record<string, unknown> = {}
+
+    // Sync shirt size to athlete table (single source of truth)
+    if (shirtSize !== undefined) {
+      athleteData.tShirtSize = shirtSize
+    }
+
     // Update athlete if athleteUpdates provided
     if (athleteUpdates) {
       const {
@@ -218,15 +226,18 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         emergencyContactRelationship,
       } = athleteUpdates
 
+      if (medicalNotes !== undefined) athleteData.medicalNotes = medicalNotes
+      if (allergies !== undefined) athleteData.allergies = allergies
+      if (emergencyContactName !== undefined) athleteData.emergencyContactName = emergencyContactName
+      if (emergencyContactPhone !== undefined) athleteData.emergencyContactPhone = emergencyContactPhone
+      if (emergencyContactRelationship !== undefined) athleteData.emergencyContactRelationship = emergencyContactRelationship
+    }
+
+    // Apply athlete updates if any
+    if (Object.keys(athleteData).length > 0) {
       await prisma.athlete.update({
         where: { id: registration.athleteId },
-        data: {
-          ...(medicalNotes !== undefined && { medicalNotes }),
-          ...(allergies !== undefined && { allergies }),
-          ...(emergencyContactName !== undefined && { emergencyContactName }),
-          ...(emergencyContactPhone !== undefined && { emergencyContactPhone }),
-          ...(emergencyContactRelationship !== undefined && { emergencyContactRelationship }),
-        },
+        data: athleteData,
       })
     }
 

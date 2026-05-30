@@ -586,13 +586,12 @@ export default function CampStorePage() {
                     <div className="flex items-start gap-3">
                       <Sparkles className="h-5 w-5 text-neon flex-shrink-0 mt-0.5" />
                       <div className="text-sm text-white/60">
-                        <p className="font-medium text-white mb-1">How it works</p>
-                        <ul className="space-y-1">
-                          <li>• Credits are loaded to your camper&apos;s account</li>
-                          <li>• Campers use their wristband to pay at the concession stand</li>
-                          <li>• Unused credits carry over to future camps</li>
-                          <li>• Check balance anytime in your dashboard</li>
-                        </ul>
+                        <p className="font-medium text-white mb-1">Important</p>
+                        <p>
+                          We are a cash free camp. Please purchase concession credits for your camper.
+                          Camper simply states first and last name at concession to use credits.
+                          No rollover or refunds &mdash; please use credits before end of camp.
+                        </p>
                       </div>
                     </div>
                   </div>

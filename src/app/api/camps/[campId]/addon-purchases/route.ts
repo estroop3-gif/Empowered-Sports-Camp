@@ -39,11 +39,13 @@ export async function GET(
         registration: {
           select: {
             id: true,
+            shirtSize: true,
             athlete: {
               select: {
                 id: true,
                 firstName: true,
                 lastName: true,
+                tShirtSize: true,
               },
             },
           },
@@ -61,6 +63,7 @@ export async function GET(
       firstName: string
       lastName: string
       registrationId: string
+      shirtSize: string | null
       addons: { name: string; variant: string | null; quantity: number; priceCents: number }[]
       addonsTotal: number
     }>()
@@ -79,6 +82,7 @@ export async function GET(
           firstName: athlete.firstName,
           lastName: athlete.lastName,
           registrationId: ra.registration.id,
+          shirtSize: athlete.tShirtSize || ra.registration.shirtSize || null,
           addons: [],
           addonsTotal: 0,
         })

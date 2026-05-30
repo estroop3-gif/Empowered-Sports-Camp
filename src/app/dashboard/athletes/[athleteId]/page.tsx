@@ -41,6 +41,7 @@ import {
   Trophy,
   Users,
   Shield,
+  Coins,
 } from 'lucide-react'
 import { AuthorizedPickupManager } from '@/components/athletes/AuthorizedPickupManager'
 
@@ -162,6 +163,21 @@ export default function ParentAthleteDetailPage({ params }: PageProps) {
   // Form state
   const [formData, setFormData] = useState<Partial<Athlete>>({})
   const [activeTab, setActiveTab] = useState<'profile' | 'safety' | 'history'>(initialTab)
+  const [concessionCredits, setConcessionCredits] = useState<Array<{
+    id: string
+    camp_id: string
+    balance_cents: number
+    camp_name: string
+    transactions: Array<{
+      id: string
+      type: string
+      amount_cents: number
+      balance_after_cents: number
+      description: string | null
+      performer_name: string | null
+      created_at: string
+    }>
+  }>>([])
 
   useEffect(() => {
     if (!authLoading) {
@@ -206,6 +222,40 @@ export default function ParentAthleteDetailPage({ params }: PageProps) {
           (r: Registration) => r.athlete_id === athleteId
         )
         setRegistrations(athleteRegistrations)
+      }
+
+      // Load concession credits (non-blocking)
+      try {
+        const creditsRes = await fetch(`/api/concession-credits?athleteId=${athleteId}`)
+        const creditsData = await creditsRes.json()
+        if (creditsData.data) {
+          // For each credit, fetch details with transactions
+          const detailed = await Promise.all(
+            creditsData.data.map(async (c: { athlete_id: string; camp_id: string; balance_cents: number; camp?: { name: string } }) => {
+              const detailRes = await fetch(`/api/concession-credits?athleteId=${athleteId}&campId=${c.camp_id}`)
+              const detailData = await detailRes.json()
+              const txns = detailData.data?.transactions || []
+              return {
+                id: c.camp_id,
+                camp_id: c.camp_id,
+                balance_cents: c.balance_cents,
+                camp_name: c.camp?.name || 'Camp',
+                transactions: txns.map((t: any) => ({
+                  id: t.id,
+                  type: t.type,
+                  amount_cents: t.amount_cents,
+                  balance_after_cents: t.balance_after_cents,
+                  description: t.description,
+                  performer_name: t.performer_name || null,
+                  created_at: t.created_at,
+                })),
+              }
+            })
+          )
+          setConcessionCredits(detailed)
+        }
+      } catch {
+        // Non-critical
       }
     } catch (err) {
       console.error('Failed to load athlete:', err)
@@ -876,6 +926,104 @@ export default function ParentAthleteDetailPage({ params }: PageProps) {
         )}
 
         {activeTab === 'history' && (
+          <div className="space-y-6">
+            {/* Concession Credits */}
+            {concessionCredits.length > 0 && (
+              <div className="bg-dark-100 border border-amber-400/30">
+                <div className="px-6 py-4 border-b border-amber-400/30">
+                  <h2 className="text-sm font-bold uppercase tracking-widest text-white flex items-center gap-2">
+                    <Coins className="h-4 w-4 text-amber-400" />
+                    Concession Credits
+                  </h2>
+                </div>
+                <div className="p-6 space-y-4">
+                  {concessionCredits.map((credit) => (
+                    <div key={credit.id} className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-white/60">{credit.camp_name}</span>
+                        <span className="text-lg font-black text-amber-400">
+                          ${(credit.balance_cents / 100).toFixed(2)}
+                        </span>
+                      </div>
+                      {credit.transactions.length > 0 && (
+                        <div className="max-h-48 overflow-y-auto space-y-1">
+                          {credit.transactions.map((txn) => (
+                            <div key={txn.id} className="flex items-center justify-between text-xs py-1.5 border-b border-white/5 last:border-0">
+                              <div className="flex items-center gap-2">
+                                <span className={cn(
+                                  'px-1.5 py-0.5 font-bold uppercase tracking-wider border',
+                                  txn.type === 'purchase' ? 'bg-neon/10 text-neon border-neon/30' :
+                                  txn.type === 'deduction' ? 'bg-red-500/10 text-red-400 border-red-500/30' :
+                                  txn.type === 'refund' ? 'bg-purple-500/10 text-purple-400 border-purple-500/30' :
+                                  'bg-blue-500/10 text-blue-400 border-blue-500/30'
+                                )}>
+                                  {txn.type}
+                                </span>
+                                <span className="text-white/40">
+                                  {new Date(txn.created_at).toLocaleDateString()}
+                                </span>
+                              </div>
+                              <div className="text-right">
+                                <span className={cn(
+                                  'font-bold',
+                                  txn.amount_cents >= 0 ? 'text-neon' : 'text-red-400'
+                                )}>
+                                  {txn.amount_cents >= 0 ? '+' : ''}${(txn.amount_cents / 100).toFixed(2)}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  <Link
+                    href="/dashboard/camp-store?section=credits"
+                    className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-amber-400 hover:text-amber-300 transition-colors mt-2"
+                  >
+                    Buy More Credits
+                  </Link>
+                </div>
+              </div>
+            )}
+
+            {/* Current Shirt Size */}
+            <div className="bg-dark-100 border border-white/10">
+              <div className="px-6 py-4 border-b border-neon/30">
+                <h2 className="text-sm font-bold uppercase tracking-widest text-white flex items-center gap-2">
+                  <Shirt className="h-4 w-4 text-neon" />
+                  Current Shirt Size
+                </h2>
+              </div>
+              <div className="p-6">
+                <div className="flex items-center gap-4">
+                  {isEditMode ? (
+                    <select
+                      value={formData.tshirt_size || ''}
+                      onChange={(e) => setFormData({ ...formData, tshirt_size: e.target.value || null })}
+                      className="bg-black border border-white/20 text-white px-4 py-3 focus:border-neon focus:outline-none"
+                    >
+                      <option value="">Select size...</option>
+                      {TSHIRT_SIZES.map((size) => (
+                        <option key={size.value} value={size.value}>{size.label}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div className="flex items-center gap-3">
+                      <span className="inline-flex items-center px-3 py-1.5 bg-neon/10 text-neon text-sm font-bold border border-neon/30">
+                        {athlete.tshirt_size
+                          ? TSHIRT_SIZES.find(s => s.value === athlete.tshirt_size)?.label || athlete.tshirt_size
+                          : 'Not set'}
+                      </span>
+                      <span className="text-xs text-white/40">
+                        Used for apparel add-ons and camp merchandise
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
           <div className="bg-dark-100 border border-white/10">
             <div className="px-6 py-4 border-b border-white/10">
               <h2 className="text-sm font-bold uppercase tracking-widest text-white flex items-center gap-2">
@@ -978,6 +1126,7 @@ export default function ParentAthleteDetailPage({ params }: PageProps) {
                 </div>
               )}
             </div>
+          </div>
           </div>
         )}
 

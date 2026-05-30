@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, Fragment } from 'react'
 import Link from 'next/link'
-import { Package, Search, ChevronDown, ChevronRight, Loader2, DollarSign, Users, ShoppingBag, Download, Printer } from 'lucide-react'
+import { Package, Search, ChevronDown, ChevronRight, Loader2, DollarSign, Users, ShoppingBag, Download, Printer, Shirt } from 'lucide-react'
 import { PortalCard } from '@/components/portal'
 import { generateReportPDF } from '@/lib/utils/pdf-export'
 import { generateCSV, downloadCSV } from '@/lib/utils/csv-export'
@@ -19,6 +19,7 @@ interface CamperAddon {
   firstName: string
   lastName: string
   registrationId: string
+  shirtSize: string | null
   addons: AddonItem[]
   addonsTotal: number
 }
@@ -123,6 +124,18 @@ export function CampAddonPurchasesTab({ campId, routePrefix, campName }: CampAdd
     return groups
   }, [data])
 
+  // Build a lookup from athlete name to shirt size for exports
+  const athleteShirtSizeMap = useMemo(() => {
+    if (!data) return new Map<string, string>()
+    const map = new Map<string, string>()
+    for (const camper of data.campers) {
+      if (camper.shirtSize) {
+        map.set(`${camper.lastName}||${camper.firstName}`, camper.shirtSize)
+      }
+    }
+    return map
+  }, [data])
+
   const handleExportCSV = () => {
     const rows = groupedByAddon.flatMap((g) =>
       g.athletes.map((a) => ({
@@ -130,6 +143,7 @@ export function CampAddonPurchasesTab({ campId, routePrefix, campName }: CampAdd
         Variant: g.variant || '',
         'Athlete Last Name': a.lastName,
         'Athlete First Name': a.firstName,
+        'Shirt Size': athleteShirtSizeMap.get(`${a.lastName}||${a.firstName}`) || '',
         Quantity: a.quantity,
         'Unit Price': formatPrice(a.priceCents),
         'Line Total': formatPrice(a.priceCents * a.quantity),
@@ -140,6 +154,7 @@ export function CampAddonPurchasesTab({ campId, routePrefix, campName }: CampAdd
       { key: 'Variant', label: 'Variant' },
       { key: 'Athlete Last Name', label: 'Athlete Last Name' },
       { key: 'Athlete First Name', label: 'Athlete First Name' },
+      { key: 'Shirt Size', label: 'Shirt Size' },
       { key: 'Quantity', label: 'Quantity' },
       { key: 'Unit Price', label: 'Unit Price' },
       { key: 'Line Total', label: 'Line Total' },
@@ -164,9 +179,10 @@ export function CampAddonPurchasesTab({ campId, routePrefix, campName }: CampAdd
       return {
         title,
         data: {
-          headers: ['Athlete', 'Quantity', 'Unit Price', 'Total'],
+          headers: ['Athlete', 'Shirt Size', 'Quantity', 'Unit Price', 'Total'],
           rows: g.athletes.map((a) => [
             `${a.lastName}, ${a.firstName}`,
+            athleteShirtSizeMap.get(`${a.lastName}||${a.firstName}`) || '—',
             a.quantity,
             formatPrice(a.priceCents),
             formatPrice(a.priceCents * a.quantity),
@@ -294,6 +310,7 @@ export function CampAddonPurchasesTab({ campId, routePrefix, campName }: CampAdd
                 <tr className="border-b border-white/10">
                   <th className="text-left py-3 px-4 text-xs font-bold uppercase tracking-wider text-white/50 w-8" />
                   <th className="text-left py-3 px-4 text-xs font-bold uppercase tracking-wider text-white/50">Camper</th>
+                  <th className="text-left py-3 px-4 text-xs font-bold uppercase tracking-wider text-white/50">Shirt Size</th>
                   <th className="text-left py-3 px-4 text-xs font-bold uppercase tracking-wider text-white/50">Add-ons</th>
                   <th className="text-right py-3 px-4 text-xs font-bold uppercase tracking-wider text-white/50">Total</th>
                 </tr>
@@ -324,6 +341,16 @@ export function CampAddonPurchasesTab({ campId, routePrefix, campName }: CampAdd
                           </Link>
                         </td>
                         <td className="py-3 px-4">
+                          {camper.shirtSize ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-500/10 text-blue-300 border border-blue-500/20">
+                              <Shirt className="h-3 w-3" />
+                              {camper.shirtSize}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-white/30">—</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4">
                           <div className="flex flex-wrap gap-1.5">
                             {camper.addons.map((addon, i) => (
                               <span
@@ -343,7 +370,7 @@ export function CampAddonPurchasesTab({ campId, routePrefix, campName }: CampAdd
                       </tr>
                       {isExpanded && (
                         <tr className="bg-white/[0.02]">
-                          <td colSpan={4} className="px-4 py-3">
+                          <td colSpan={5} className="px-4 py-3">
                             <table className="w-full ml-8">
                               <thead>
                                 <tr>

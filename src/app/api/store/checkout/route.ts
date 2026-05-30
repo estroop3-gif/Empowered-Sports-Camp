@@ -24,6 +24,42 @@ interface CartItem {
   size?: string
 }
 
+export async function GET(request: NextRequest) {
+  try {
+    const user = await getAuthenticatedUserFromRequest(request)
+    if (!user) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+    }
+
+    const { searchParams } = new URL(request.url)
+    const sessionId = searchParams.get('sessionId')
+
+    if (!sessionId) {
+      return NextResponse.json({ error: 'sessionId is required' }, { status: 400 })
+    }
+
+    const stripe = getStripe()
+    const session = await stripe.checkout.sessions.retrieve(sessionId)
+
+    if (session.metadata?.userId !== user.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
+    }
+
+    return NextResponse.json({
+      data: {
+        concessionCredits: parseInt(session.metadata?.concessionCredits || '0'),
+        athleteId: session.metadata?.athleteId,
+        campId: session.metadata?.campId,
+        registrationId: session.metadata?.registrationId,
+        status: session.payment_status,
+      },
+    })
+  } catch (error) {
+    console.error('[GET /api/store/checkout] Error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const user = await getAuthenticatedUserFromRequest(request)

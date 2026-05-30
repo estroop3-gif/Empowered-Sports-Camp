@@ -79,6 +79,16 @@ export interface RosterCamperDetail extends RosterCamper {
   campName: string
   campStartDate: string
   campEndDate: string
+  concessionBalanceCents: number
+  concessionTransactions: Array<{
+    id: string
+    type: string
+    amountCents: number
+    balanceAfterCents: number
+    description: string | null
+    performedByName: string | null
+    createdAt: string
+  }>
 }
 
 export interface RosterUpsell {
@@ -578,6 +588,27 @@ export async function getCamperDetail(params: {
       // Role-based field masking for coaches
       const shouldMaskContact = role === 'coach'
 
+      // Get concession credit data
+      const concessionCredit = await prisma.concessionCredit.findUnique({
+        where: {
+          athleteId_campId: {
+            athleteId: registration.athleteId,
+            campId,
+          },
+        },
+        include: {
+          transactions: {
+            orderBy: { createdAt: 'desc' },
+            take: 20,
+            include: {
+              performer: {
+                select: { firstName: true, lastName: true },
+              },
+            },
+          },
+        },
+      })
+
       const detail: RosterCamperDetail = {
         id: camperSessionData.id,
         registrationId: registration.id,
@@ -639,6 +670,16 @@ export async function getCamperDetail(params: {
         campName: camp.name,
         campStartDate: camp.startDate.toISOString().split('T')[0],
         campEndDate: camp.endDate.toISOString().split('T')[0],
+        concessionBalanceCents: concessionCredit?.balanceCents ?? 0,
+        concessionTransactions: (concessionCredit?.transactions ?? []).map((t) => ({
+          id: t.id,
+          type: t.type,
+          amountCents: t.amountCents,
+          balanceAfterCents: t.balanceAfterCents,
+          description: t.description,
+          performedByName: t.performer ? `${t.performer.firstName} ${t.performer.lastName}` : null,
+          createdAt: t.createdAt.toISOString(),
+        })),
       }
 
       return { data: detail, error: null }
@@ -763,6 +804,27 @@ export async function getCamperDetail(params: {
     // Role-based field masking for coaches
     const shouldMaskContact = role === 'coach'
 
+    // Get concession credit data
+    const concessionCredit2 = await prisma.concessionCredit.findUnique({
+      where: {
+        athleteId_campId: {
+          athleteId: registration.athleteId,
+          campId,
+        },
+      },
+      include: {
+        transactions: {
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+          include: {
+            performer: {
+              select: { firstName: true, lastName: true },
+            },
+          },
+        },
+      },
+    })
+
     const detail: RosterCamperDetail = {
       id: camperSessionData?.id || registration.id,
       registrationId: registration.id,
@@ -833,6 +895,16 @@ export async function getCamperDetail(params: {
       campName: camp.name,
       campStartDate: camp.startDate.toISOString().split('T')[0],
       campEndDate: camp.endDate.toISOString().split('T')[0],
+      concessionBalanceCents: concessionCredit2?.balanceCents ?? 0,
+      concessionTransactions: (concessionCredit2?.transactions ?? []).map((t) => ({
+        id: t.id,
+        type: t.type,
+        amountCents: t.amountCents,
+        balanceAfterCents: t.balanceAfterCents,
+        description: t.description,
+        performedByName: t.performer ? `${t.performer.firstName} ${t.performer.lastName}` : null,
+        createdAt: t.createdAt.toISOString(),
+      })),
     }
 
     return { data: detail, error: null }

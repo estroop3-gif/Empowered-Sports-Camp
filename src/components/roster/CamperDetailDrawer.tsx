@@ -77,6 +77,13 @@ export default function CamperDetailDrawer({
   const [savingInternal, setSavingInternal] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saveSuccess, setSaveSuccess] = useState(false)
+  const [deductAmount, setDeductAmount] = useState('')
+  const [deductDescription, setDeductDescription] = useState('')
+  const [adjustAmount, setAdjustAmount] = useState('')
+  const [adjustDescription, setAdjustDescription] = useState('')
+  const [creditAction, setCreditAction] = useState<'deduct' | 'adjust' | null>(null)
+  const [creditProcessing, setCreditProcessing] = useState(false)
+  const [creditError, setCreditError] = useState<string | null>(null)
 
   const canEdit = role !== 'coach'
   const canUpdateStatus = true // All roles can update status
@@ -161,6 +168,44 @@ export default function CamperDetailDrawer({
       setSaveError('Network error. Please try again.')
     } finally {
       setSavingInternal(false)
+    }
+  }
+
+  const handleCreditAction = async (action: 'deduct' | 'adjust') => {
+    if (!camper) return
+    const amount = action === 'deduct' ? deductAmount : adjustAmount
+    const description = action === 'deduct' ? deductDescription : adjustDescription
+    const cents = Math.round(parseFloat(amount) * 100)
+    if (isNaN(cents) || cents <= 0) return
+
+    setCreditProcessing(true)
+    setCreditError(null)
+    try {
+      const res = await fetch(`/api/concession-credits/${action}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          athleteId: camper.athleteId,
+          campId,
+          amountCents: action === 'deduct' ? cents : cents,
+          description: description || undefined,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setCreditError(data.error || 'Failed to process')
+      } else {
+        setCreditAction(null)
+        setDeductAmount('')
+        setDeductDescription('')
+        setAdjustAmount('')
+        setAdjustDescription('')
+        onStatusChange?.()
+      }
+    } catch {
+      setCreditError('Network error')
+    } finally {
+      setCreditProcessing(false)
     }
   }
 
@@ -287,16 +332,129 @@ export default function CamperDetailDrawer({
               {/* Tab Content */}
               <div className="p-6">
                 {activeTab === 'overview' && (
-                  <OverviewTab
-                    camper={camper}
-                    isEditing={isEditing}
-                    editData={editData}
-                    setEditData={setEditData}
-                    saving={saving}
-                    canEdit={canEdit}
-                    onSave={handleSaveEdit}
-                    onCancelEdit={() => setIsEditing(false)}
-                  />
+                  <>
+                    <OverviewTab
+                      camper={camper}
+                      isEditing={isEditing}
+                      editData={editData}
+                      setEditData={setEditData}
+                      saving={saving}
+                      canEdit={canEdit}
+                      onSave={handleSaveEdit}
+                      onCancelEdit={() => setIsEditing(false)}
+                    />
+
+                    {/* Concession Credits */}
+                    <section className="mt-6">
+                      <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                        Concession Credits
+                      </h3>
+                      <div className="bg-amber-50 rounded-lg p-4 mb-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium text-gray-700">Balance</span>
+                          <span className="text-xl font-bold text-amber-600">
+                            ${((camper.concessionBalanceCents || 0) / 100).toFixed(2)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {canEdit && !creditAction && (
+                        <div className="flex gap-2 mb-3">
+                          <button
+                            onClick={() => setCreditAction('deduct')}
+                            className="flex-1 px-3 py-2 bg-red-50 text-red-700 text-sm font-medium rounded-lg hover:bg-red-100 transition-colors border border-red-200"
+                          >
+                            Deduct
+                          </button>
+                          <button
+                            onClick={() => setCreditAction('adjust')}
+                            className="flex-1 px-3 py-2 bg-blue-50 text-blue-700 text-sm font-medium rounded-lg hover:bg-blue-100 transition-colors border border-blue-200"
+                          >
+                            Adjust
+                          </button>
+                        </div>
+                      )}
+
+                      {creditAction && (
+                        <div className="bg-gray-50 rounded-lg p-4 mb-3 space-y-3">
+                          <h4 className="text-sm font-semibold text-gray-700">
+                            {creditAction === 'deduct' ? 'Deduct Credits' : 'Adjust Credits'}
+                          </h4>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">Amount ($)</label>
+                            <input
+                              type="number"
+                              min="0.01"
+                              step="0.01"
+                              value={creditAction === 'deduct' ? deductAmount : adjustAmount}
+                              onChange={(e) => creditAction === 'deduct' ? setDeductAmount(e.target.value) : setAdjustAmount(e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-black text-sm"
+                              placeholder="0.00"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">Description (optional)</label>
+                            <input
+                              type="text"
+                              value={creditAction === 'deduct' ? deductDescription : adjustDescription}
+                              onChange={(e) => creditAction === 'deduct' ? setDeductDescription(e.target.value) : setAdjustDescription(e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-black text-sm"
+                              placeholder={creditAction === 'deduct' ? 'e.g. Snack bar purchase' : 'e.g. Manager correction'}
+                            />
+                          </div>
+                          {creditError && (
+                            <p className="text-xs text-red-600">{creditError}</p>
+                          )}
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleCreditAction(creditAction)}
+                              disabled={creditProcessing}
+                              className={`flex-1 px-3 py-2 text-white text-sm font-medium rounded-lg disabled:opacity-50 ${
+                                creditAction === 'deduct' ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'
+                              }`}
+                            >
+                              {creditProcessing ? 'Processing...' : creditAction === 'deduct' ? 'Deduct' : 'Apply Adjustment'}
+                            </button>
+                            <button
+                              onClick={() => { setCreditAction(null); setCreditError(null) }}
+                              className="px-3 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-100"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {camper.concessionTransactions && camper.concessionTransactions.length > 0 && (
+                        <div className="max-h-48 overflow-y-auto space-y-1">
+                          {camper.concessionTransactions.map((txn) => (
+                            <div key={txn.id} className="flex items-center justify-between text-xs py-2 border-b border-gray-100 last:border-0">
+                              <div>
+                                <span className={`inline-flex px-1.5 py-0.5 font-semibold rounded-full mr-2 ${
+                                  txn.type === 'purchase' ? 'bg-green-100 text-green-800' :
+                                  txn.type === 'deduction' ? 'bg-red-100 text-red-800' :
+                                  txn.type === 'refund' ? 'bg-purple-100 text-purple-800' :
+                                  'bg-blue-100 text-blue-800'
+                                }`}>
+                                  {txn.type}
+                                </span>
+                                {txn.description && <span className="text-gray-500">{txn.description}</span>}
+                                {txn.performedByName && <span className="text-gray-400 ml-1">by {txn.performedByName}</span>}
+                              </div>
+                              <div className="text-right whitespace-nowrap ml-2">
+                                <span className={`font-medium ${txn.amountCents >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                                  {txn.amountCents >= 0 ? '+' : ''}${(txn.amountCents / 100).toFixed(2)}
+                                </span>
+                                <span className="text-gray-400 ml-1 text-[10px]">
+                                  {new Date(txn.createdAt).toLocaleDateString()}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </section>
+                  </>
                 )}
 
                 {activeTab === 'contact' && (
