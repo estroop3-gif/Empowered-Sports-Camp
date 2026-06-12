@@ -63,6 +63,8 @@ interface AddOn {
   }>
   requires_size?: boolean
   featured?: boolean
+  is_required?: boolean
+  max_quantity?: number
 }
 
 interface CartItem {
@@ -82,58 +84,6 @@ const CREDIT_AMOUNTS = [
   { amount: 5000, label: '$50' },
 ]
 
-// Mock add-ons - in production these would come from API based on camp
-const MOCK_ADDONS: AddOn[] = [
-  {
-    id: 'fuel-pack',
-    name: 'Daily Fuel Pack',
-    description: 'Healthy snacks and drinks for all camp days',
-    type: 'fuel_pack',
-    price_cents: 4500,
-    featured: true,
-  },
-  {
-    id: 'camp-tee',
-    name: 'Empowered Camp Tee',
-    description: 'Official camp t-shirt with custom design',
-    type: 'apparel',
-    price_cents: 2500,
-    requires_size: true,
-    variants: [
-      { id: 'yxs', name: 'Youth XS', stock: 20 },
-      { id: 'ys', name: 'Youth S', stock: 25 },
-      { id: 'ym', name: 'Youth M', stock: 30 },
-      { id: 'yl', name: 'Youth L', stock: 20 },
-      { id: 'as', name: 'Adult S', stock: 15 },
-      { id: 'am', name: 'Adult M', stock: 15 },
-      { id: 'al', name: 'Adult L', stock: 10 },
-    ],
-    featured: true,
-  },
-  {
-    id: 'water-bottle',
-    name: 'Champion Water Bottle',
-    description: '32oz insulated bottle with camp logo',
-    type: 'merchandise',
-    price_cents: 2000,
-    compare_at_price_cents: 2500,
-  },
-  {
-    id: 'snapback',
-    name: 'Empowered Snapback',
-    description: 'Adjustable hat with embroidered logo',
-    type: 'merchandise',
-    price_cents: 1800,
-  },
-  {
-    id: 'wristband',
-    name: 'Fierce Wristband Pack',
-    description: 'Set of 3 silicone wristbands',
-    type: 'merchandise',
-    price_cents: 800,
-  },
-]
-
 export default function CampStorePage() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -142,6 +92,8 @@ export default function CampStorePage() {
   const [registrations, setRegistrations] = useState<Registration[]>([])
   const [selectedRegistration, setSelectedRegistration] = useState<Registration | null>(null)
   const [loading, setLoading] = useState(true)
+  const [addOns, setAddOns] = useState<AddOn[]>([])
+  const [addOnsLoading, setAddOnsLoading] = useState(false)
   const [cart, setCart] = useState<CartItem[]>([])
   const [concessionAmount, setConcessionAmount] = useState<number>(0)
   const [customCreditAmount, setCustomCreditAmount] = useState('')
@@ -160,6 +112,56 @@ export default function CampStorePage() {
       }
     }
   }, [user, authLoading])
+
+  // Fetch add-ons when a registration is selected, with 30s polling
+  useEffect(() => {
+    if (!selectedRegistration?.camp_id) {
+      setAddOns([])
+      return
+    }
+
+    const campId = selectedRegistration.camp_id
+
+    let isFirst = true
+    const loadAddOns = async () => {
+      if (isFirst) setAddOnsLoading(true)
+      try {
+        const res = await fetch(`/api/camps/${campId}/addons`)
+        const data = await res.json()
+        if (data.addons) {
+          const mapped: AddOn[] = data.addons.map((addon: Record<string, unknown>) => ({
+            id: addon.id,
+            name: addon.name,
+            description: addon.description || '',
+            type: (addon.addonType as string) || 'merchandise',
+            price_cents: addon.price as number,
+            compare_at_price_cents: (addon.compareAtPrice as number) || undefined,
+            image_url: (addon.imageUrl as string) || undefined,
+            requires_size: addon.collectSize as boolean,
+            featured: addon.featured as boolean,
+            is_required: addon.isRequired as boolean,
+            max_quantity: addon.maxQuantity as number,
+            variants: Array.isArray(addon.variants)
+              ? (addon.variants as Array<Record<string, unknown>>).map((v) => ({
+                  id: v.id as string,
+                  name: v.name as string,
+                  stock: v.inventoryQuantity as number,
+                }))
+              : undefined,
+          }))
+          setAddOns(mapped)
+        }
+      } catch (err) {
+        console.error('Failed to load add-ons:', err)
+      }
+      setAddOnsLoading(false)
+      isFirst = false
+    }
+
+    loadAddOns()
+    const interval = setInterval(loadAddOns, 30_000)
+    return () => clearInterval(interval)
+  }, [selectedRegistration?.camp_id])
 
   const loadRegistrations = async () => {
     if (!user?.id) return
@@ -432,7 +434,22 @@ export default function CampStorePage() {
               {/* Add-Ons Section */}
               {activeSection === 'addons' && selectedRegistration && (
                 <div className="space-y-4">
-                  {MOCK_ADDONS.map((addOn) => (
+                  {addOnsLoading && addOns.length === 0 && (
+                    <div className="bg-dark-100 border border-white/10 p-12 text-center">
+                      <Loader2 className="h-8 w-8 animate-spin text-neon mx-auto mb-3" />
+                      <p className="text-white/50">Loading add-ons...</p>
+                    </div>
+                  )}
+                  {!addOnsLoading && addOns.length === 0 && (
+                    <div className="bg-dark-100 border border-white/10 p-12 text-center">
+                      <Package className="h-12 w-12 text-white/20 mx-auto mb-4" />
+                      <h3 className="text-lg font-bold text-white mb-2">No Add-Ons Available</h3>
+                      <p className="text-white/50 max-w-md mx-auto">
+                        There are no add-ons configured for this camp yet. Check back later or switch to Concession Credits.
+                      </p>
+                    </div>
+                  )}
+                  {addOns.map((addOn) => (
                     <div
                       key={addOn.id}
                       className="bg-dark-100 border border-white/10 p-4 hover:border-white/20 transition-all"
