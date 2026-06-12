@@ -773,6 +773,45 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session): Promise
       console.log('[Payments] Concession credits added:', concessionCredits, 'for athlete:', metadata.athleteId)
     }
 
+    // Fulfill add-on items
+    if (metadata.items && metadata.registrationId) {
+      try {
+        const items = JSON.parse(metadata.items) as Array<{
+          addOnId: string
+          variantId?: string
+          quantity: number
+          priceCents: number
+        }>
+
+        for (const item of items) {
+          await prisma.registrationAddon.create({
+            data: {
+              registrationId: metadata.registrationId,
+              addonId: item.addOnId,
+              variantId: item.variantId || null,
+              quantity: item.quantity,
+              priceCents: item.priceCents,
+            },
+          })
+        }
+
+        if (items.length > 0) {
+          console.log('[Payments] Add-ons created:', items.length, 'for registration:', metadata.registrationId)
+
+          createNotification({
+            userId: metadata.userId,
+            type: 'payment_confirmed',
+            title: 'Add-On Purchase Confirmed!',
+            body: `${items.length} add-on item${items.length > 1 ? 's' : ''} purchased successfully.`,
+            category: 'camp',
+            severity: 'success',
+          }).catch((err) => console.error('[Payments] Failed to send add-on notification:', err))
+        }
+      } catch (err) {
+        console.error('[Payments] Failed to process add-on items:', err)
+      }
+    }
+
     return metadata.registrationId || session.id
   }
 

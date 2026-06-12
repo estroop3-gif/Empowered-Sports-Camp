@@ -319,7 +319,7 @@ export default function AdminShopSettingsPage() {
                       <li>STRIPE_SECRET_KEY</li>
                       <li>STRIPE_PUBLISHABLE_KEY</li>
                       <li>STRIPE_WEBHOOK_SECRET</li>
-                      <li>NEXT_PUBLIC_BASE_URL</li>
+                      <li>NEXT_PUBLIC_APP_URL</li>
                     </ul>
                   </div>
                 </div>
