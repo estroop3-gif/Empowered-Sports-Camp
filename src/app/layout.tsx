@@ -6,6 +6,7 @@ import { Navbar } from "@/components/layout/navbar"
 import { Footer } from "@/components/layout/footer"
 import { MainContentWrapper } from "@/components/layout/MainContentWrapper"
 import { AuthProvider } from "@/lib/auth/context"
+import { ConcessionCreditProvider } from "@/hooks/useConcessionCredits"
 import { ViewingAsBanner } from "@/components/admin/view-as-control"
 import { GlobalDeveloperModeBanner } from "@/components/admin/DeveloperModeBanner"
 import { RoleDashboardRouter } from "@/components/role-dashboard-router"
@@ -91,17 +92,19 @@ export default function RootLayout({
       </head>
       <body className="min-h-screen bg-black text-white font-sans antialiased">
         <AuthProvider>
-          <GlobalDeveloperModeBanner />
-          <ViewingAsBanner />
-          <RoleDashboardRouter>
-            <Navbar />
-            <MainContentWrapper>
-              <main className="flex flex-col min-h-screen">
-                {children}
-              </main>
-            </MainContentWrapper>
-            <Footer />
-          </RoleDashboardRouter>
+          <ConcessionCreditProvider>
+            <GlobalDeveloperModeBanner />
+            <ViewingAsBanner />
+            <RoleDashboardRouter>
+              <Navbar />
+              <MainContentWrapper>
+                <main className="flex flex-col min-h-screen">
+                  {children}
+                </main>
+              </MainContentWrapper>
+              <Footer />
+            </RoleDashboardRouter>
+          </ConcessionCreditProvider>
         </AuthProvider>
         {/* Portal container for modals - must be outside all other content */}
         <div id="modal-root" />

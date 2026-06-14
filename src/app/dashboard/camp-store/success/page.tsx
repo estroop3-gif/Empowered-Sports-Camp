@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/lib/auth/context'
+import { useConcessionCredits } from '@/hooks/useConcessionCredits'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { CheckCircle, Loader2, AlertCircle } from 'lucide-react'
@@ -20,6 +21,7 @@ export default function CampStoreSuccessPage() {
   const searchParams = useSearchParams()
   const sessionId = searchParams.get('session_id')
   const { user, loading: authLoading } = useAuth()
+  const { invalidateAthlete } = useConcessionCredits()
 
   const [sessionData, setSessionData] = useState<SessionData | null>(null)
   const [athleteName, setAthleteName] = useState<string | null>(null)
@@ -42,6 +44,9 @@ export default function CampStoreSuccessPage() {
         const sessionJson = await sessionRes.json()
         const data: SessionData = sessionJson.data
         setSessionData(data)
+
+        // Invalidate cached credit balances so dashboard shows updated values
+        invalidateAthlete(data.athleteId).catch(() => {})
 
         const [athleteRes, campRes] = await Promise.all([
           fetch(`/api/athletes?action=byId&athleteId=${data.athleteId}`),

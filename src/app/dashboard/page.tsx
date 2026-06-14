@@ -27,6 +27,7 @@ import { cn, parseDateSafe } from '@/lib/utils'
 import { LogoutButton } from '@/components/layout/user-menu'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth/context'
+import { useConcessionCredits } from '@/hooks/useConcessionCredits'
 import FriendRequestsCard from '@/components/dashboard/FriendRequestsCard'
 // Types (no longer imported from services)
 interface Profile {
@@ -121,7 +122,7 @@ export default function ParentDashboard() {
   const [deletingDraft, setDeletingDraft] = useState<string | null>(null)
   const [editingSizeAthleteId, setEditingSizeAthleteId] = useState<string | null>(null)
   const [savingSize, setSavingSize] = useState(false)
-  const [creditBalances, setCreditBalances] = useState<Record<string, number>>({})
+  const { getAthleteBalance, fetchBalances } = useConcessionCredits()
 
   useEffect(() => {
     if (!authLoading) {
@@ -180,24 +181,9 @@ export default function ParentDashboard() {
         setRegistrations(registrationsResult.data)
       }
 
-      // Load concession credit balances (non-blocking)
+      // Load concession credit balances via shared context (non-blocking)
       if (athletesResult.data?.length) {
-        try {
-          const balances: Record<string, number> = {}
-          await Promise.all(
-            athletesResult.data.map(async (a: Athlete) => {
-              const res = await fetch(`/api/concession-credits?athleteId=${a.id}`)
-              const result = await res.json()
-              if (result.data) {
-                const total = result.data.reduce((sum: number, c: { balance_cents: number }) => sum + c.balance_cents, 0)
-                if (total > 0) balances[a.id] = total
-              }
-            })
-          )
-          setCreditBalances(balances)
-        } catch {
-          // Non-critical
-        }
+        fetchBalances(athletesResult.data.map((a: Athlete) => a.id)).catch(() => {})
       }
 
       // Load saved registration drafts (non-blocking)
@@ -435,11 +421,11 @@ export default function ParentDashboard() {
                                     {counts.completed} completed
                                   </span>
                                 </div>
-                                {creditBalances[athlete.id] > 0 && (
+                                {getAthleteBalance(athlete.id) > 0 && (
                                   <div className="flex items-center gap-1 mt-1">
                                     <Coins className="h-3 w-3 text-amber-400" />
                                     <span className="text-xs text-amber-400 font-bold">
-                                      ${(creditBalances[athlete.id] / 100).toFixed(2)} credits
+                                      ${(getAthleteBalance(athlete.id) / 100).toFixed(2)} credits
                                     </span>
                                   </div>
                                 )}

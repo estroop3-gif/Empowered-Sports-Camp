@@ -16,6 +16,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { parseDateSafe } from '@/lib/utils'
 import type { RosterCamperDetail } from '@/lib/services/roster'
+import { useConcessionCredits } from '@/hooks/useConcessionCredits'
 
 type TabKey = 'overview' | 'contact' | 'sports' | 'internal'
 
@@ -85,6 +86,7 @@ export default function CamperDetailDrawer({
   const [creditProcessing, setCreditProcessing] = useState(false)
   const [creditError, setCreditError] = useState<string | null>(null)
 
+  const { deductCredits, adjustCredits } = useConcessionCredits()
   const canEdit = role !== 'coach'
   const canUpdateStatus = true // All roles can update status
   const isCoach = role === 'coach'
@@ -180,33 +182,24 @@ export default function CamperDetailDrawer({
 
     setCreditProcessing(true)
     setCreditError(null)
-    try {
-      const res = await fetch(`/api/concession-credits/${action}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          athleteId: camper.athleteId,
-          campId,
-          amountCents: action === 'deduct' ? cents : cents,
-          description: description || undefined,
-        }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        setCreditError(data.error || 'Failed to process')
-      } else {
-        setCreditAction(null)
-        setDeductAmount('')
-        setDeductDescription('')
-        setAdjustAmount('')
-        setAdjustDescription('')
-        onStatusChange?.()
-      }
-    } catch {
-      setCreditError('Network error')
-    } finally {
-      setCreditProcessing(false)
+    const fn = action === 'deduct' ? deductCredits : adjustCredits
+    const result = await fn({
+      athleteId: camper.athleteId,
+      campId,
+      amountCents: cents,
+      description: description || undefined,
+    })
+    if (!result.ok) {
+      setCreditError(result.error || 'Failed to process')
+    } else {
+      setCreditAction(null)
+      setDeductAmount('')
+      setDeductDescription('')
+      setAdjustAmount('')
+      setAdjustDescription('')
+      onStatusChange?.()
     }
+    setCreditProcessing(false)
   }
 
   const startEdit = () => {

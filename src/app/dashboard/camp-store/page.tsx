@@ -11,6 +11,7 @@ import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/lib/auth/context'
+import { useConcessionCredits } from '@/hooks/useConcessionCredits'
 import { Button } from '@/components/ui/button'
 import { cn, parseDateSafe } from '@/lib/utils'
 import {
@@ -88,6 +89,7 @@ export default function CampStorePage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { user, loading: authLoading } = useAuth()
+  const { getCreditDetail, fetchDetail } = useConcessionCredits()
 
   const [registrations, setRegistrations] = useState<Registration[]>([])
   const [selectedRegistration, setSelectedRegistration] = useState<Registration | null>(null)
@@ -112,6 +114,13 @@ export default function CampStorePage() {
       }
     }
   }, [user, authLoading])
+
+  // Fetch credit detail when a registration is selected
+  useEffect(() => {
+    if (selectedRegistration) {
+      fetchDetail(selectedRegistration.athlete_id, selectedRegistration.camp_id)
+    }
+  }, [selectedRegistration?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch add-ons when a registration is selected, with 30s polling
   useEffect(() => {
@@ -549,6 +558,18 @@ export default function CampStorePage() {
                       </p>
                     </div>
                   </div>
+
+                  {(() => {
+                    const detail = selectedRegistration ? getCreditDetail(selectedRegistration.athlete_id, selectedRegistration.camp_id) : null
+                    return detail ? (
+                      <div className="mb-4 p-3 bg-amber-400/10 border border-amber-400/30 flex items-center justify-between">
+                        <span className="text-sm text-amber-400 font-medium">Current Balance</span>
+                        <span className="text-lg font-black text-amber-400">
+                          ${(detail.balanceCents / 100).toFixed(2)}
+                        </span>
+                      </div>
+                    ) : null
+                  })()}
 
                   <div className="space-y-4">
                     <label className="text-xs text-white/50 uppercase tracking-wider block">
