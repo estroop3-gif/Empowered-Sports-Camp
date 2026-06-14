@@ -717,60 +717,82 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session): Promise
     const concessionCredits = parseInt(metadata.concessionCredits || '0', 10)
 
     if (concessionCredits > 0 && metadata.athleteId && metadata.campId && metadata.registrationId) {
-      // Upsert concession credit balance
-      const existing = await prisma.concessionCredit.findUnique({
-        where: {
-          athleteId_campId: {
-            athleteId: metadata.athleteId,
-            campId: metadata.campId,
-          },
-        },
-      })
-
-      let creditRecord
-      if (existing) {
-        creditRecord = await prisma.concessionCredit.update({
-          where: { id: existing.id },
-          data: {
-            balanceCents: { increment: concessionCredits },
-          },
+      try {
+        // Idempotency: skip if this session was already processed
+        const existingTxn = await prisma.concessionCreditTransaction.findFirst({
+          where: { stripeCheckoutSessionId: session.id },
         })
-      } else {
-        creditRecord = await prisma.concessionCredit.create({
-          data: {
-            athleteId: metadata.athleteId,
-            parentId: metadata.userId,
-            campId: metadata.campId,
-            registrationId: metadata.registrationId,
-            balanceCents: concessionCredits,
-          },
-        })
-      }
 
-      // Create transaction record
-      await prisma.concessionCreditTransaction.create({
-        data: {
-          creditId: creditRecord.id,
-          type: 'purchase',
+        if (existingTxn) {
+          console.log('[Payments] Concession credits already processed for session:', session.id)
+        } else {
+          // Atomic: upsert credit balance + create transaction record
+          await prisma.$transaction(async (tx) => {
+            const existing = await tx.concessionCredit.findUnique({
+              where: {
+                athleteId_campId: {
+                  athleteId: metadata.athleteId!,
+                  campId: metadata.campId!,
+                },
+              },
+            })
+
+            let creditRecord
+            if (existing) {
+              creditRecord = await tx.concessionCredit.update({
+                where: { id: existing.id },
+                data: {
+                  balanceCents: { increment: concessionCredits },
+                },
+              })
+            } else {
+              creditRecord = await tx.concessionCredit.create({
+                data: {
+                  athleteId: metadata.athleteId!,
+                  parentId: metadata.userId!,
+                  campId: metadata.campId!,
+                  registrationId: metadata.registrationId!,
+                  balanceCents: concessionCredits,
+                },
+              })
+            }
+
+            await tx.concessionCreditTransaction.create({
+              data: {
+                creditId: creditRecord.id,
+                type: 'purchase',
+                amountCents: concessionCredits,
+                balanceAfterCents: creditRecord.balanceCents,
+                description: `Concession credits purchase`,
+                performedBy: metadata.userId,
+                stripeCheckoutSessionId: session.id,
+              },
+            })
+          })
+
+          // Notification outside transaction (non-blocking)
+          createNotification({
+            userId: metadata.userId,
+            type: 'payment_confirmed',
+            title: 'Concession Credits Added!',
+            body: `$${(concessionCredits / 100).toFixed(2)} in concession credits have been added.`,
+            category: 'camp',
+            severity: 'success',
+          }).catch((err) => console.error('[Payments] Failed to send concession notification:', err))
+
+          console.log('[Payments] Concession credits added:', concessionCredits, 'for athlete:', metadata.athleteId)
+        }
+      } catch (err) {
+        console.error('[Payments] Failed to fulfill concession credits:', {
+          error: err,
+          sessionId: session.id,
+          athleteId: metadata.athleteId,
+          campId: metadata.campId,
+          registrationId: metadata.registrationId,
           amountCents: concessionCredits,
-          balanceAfterCents: creditRecord.balanceCents,
-          description: `Concession credits purchase`,
-          performedBy: metadata.userId,
-          stripeCheckoutSessionId: session.id,
-        },
-      })
-
-      // Send notification
-      createNotification({
-        userId: metadata.userId,
-        type: 'payment_confirmed',
-        title: 'Concession Credits Added!',
-        body: `$${(concessionCredits / 100).toFixed(2)} in concession credits have been added.`,
-        category: 'camp',
-        severity: 'success',
-      }).catch((err) => console.error('[Payments] Failed to send concession notification:', err))
-
-      console.log('[Payments] Concession credits added:', concessionCredits, 'for athlete:', metadata.athleteId)
+        })
+        // Continue — don't kill webhook, allow add-on processing below
+      }
     }
 
     // Fulfill add-on items

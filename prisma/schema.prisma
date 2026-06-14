@@ -3345,6 +3345,7 @@ model ConcessionCreditTransaction {
 
   @@index([creditId])
   @@index([createdAt])
+  @@index([stripeCheckoutSessionId])
   @@map("concession_credit_transactions")
 }
 
