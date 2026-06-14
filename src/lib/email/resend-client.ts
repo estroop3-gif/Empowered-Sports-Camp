@@ -61,11 +61,17 @@ export async function sendEmail(options: SendEmailOptions): Promise<EmailResult>
       console.log('Reply-To:', replyTo || 'N/A')
       console.log('================================================')
       console.log('')
+      return {
+        success: true,
+        messageId: `dev-${Date.now()}`,
+      }
     }
 
+    // Production without API key — fail explicitly so it shows in email logs
+    console.error('[Resend] RESEND_API_KEY not configured — emails cannot be sent in production')
     return {
-      success: true,
-      messageId: `dev-${Date.now()}`,
+      success: false,
+      error: 'RESEND_API_KEY not configured — emails cannot be sent in production',
     }
   }
 
