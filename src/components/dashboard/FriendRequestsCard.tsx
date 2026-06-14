@@ -48,6 +48,7 @@ interface AthleteCamp {
   campDates: string
   tenantId: string
   registrationId: string
+  friendRequestsText: string[]
   squad: CampSquad | null
   sentInvites: SentInvite[]
 }
@@ -409,6 +410,30 @@ export default function FriendRequestsCard() {
                         <h4 className="font-bold text-white text-sm">{camp.campName}</h4>
                         <p className="text-xs text-white/40">{camp.campDates}</p>
                       </div>
+
+                      {/* Friend Requests from Registration */}
+                      {camp.friendRequestsText && camp.friendRequestsText.length > 0 && (
+                        <div className="space-y-1">
+                          <p className="text-xs font-bold uppercase tracking-wider text-white/50">
+                            Friend Requests (from registration)
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            {camp.friendRequestsText.map((name, i) => (
+                              <span
+                                key={i}
+                                className="px-2 py-0.5 text-xs bg-purple/10 border border-purple/20 text-white/70"
+                              >
+                                {name}
+                              </span>
+                            ))}
+                          </div>
+                          {!camp.squad && (
+                            <p className="text-xs text-white/40 italic">
+                              Use &quot;Pair with Camper&quot; below to create a confirmed pairing
+                            </p>
+                          )}
+                        </div>
+                      )}
 
                       {/* Squad Members */}
                       {camp.squad && camp.squad.members.length > 0 && (

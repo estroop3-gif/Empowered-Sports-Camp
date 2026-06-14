@@ -8,7 +8,7 @@
  */
 
 import { prisma } from '@/lib/db/client'
-import { createNotification } from './notifications'
+import { createNotification, notifySquadInviteReceived } from './notifications'
 import { sendSquadInviteEmail, sendSquadConfirmationEmail } from '@/lib/email'
 import type { SquadMemberStatus } from '@/generated/prisma'
 
@@ -324,13 +324,18 @@ export async function sendSquadInvite(params: {
     }
 
     if (invitedParent) {
-      // Parent exists - get their athletes for this camp (if registered)
-      const invitedAthletes = await prisma.athlete.findMany({
-        where: { parentId: invitedParent.id },
-        select: { id: true, firstName: true, lastName: true },
+      // Parent exists - get ONLY athletes registered for THIS camp
+      const registeredAthletes = await prisma.registration.findMany({
+        where: {
+          campId: squad.campId,
+          athlete: { parentId: invitedParent.id },
+          status: { in: ['pending', 'confirmed', 'waitlisted'] },
+        },
+        include: { athlete: { select: { id: true, firstName: true, lastName: true } } },
       })
+      const invitedAthletes = registeredAthletes.map(r => r.athlete)
 
-      // Create membership records as auto-accepted
+      // Create membership records as REQUESTED (requires consent)
       for (const athlete of invitedAthletes) {
         const existing = await prisma.campFriendSquadMember.findUnique({
           where: {
@@ -347,60 +352,21 @@ export async function sendSquadInvite(params: {
               squadId,
               parentId: invitedParent.id,
               athleteId: athlete.id,
-              status: 'accepted',
-              respondedAt: new Date(),
+              status: 'requested',
               invitedByEmail: invitedEmail.toLowerCase(),
             },
           })
         }
       }
 
-      // Sync friend group IDs immediately
-      await syncFriendGroupIdsForSquad({ squadId })
-
-      // Send confirmation emails to both parents
-      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://empoweredsportscamp.com'
-      const dashboardUrl = `${baseUrl}/portal`
-      const invitedName = [invitedParent.firstName, invitedParent.lastName].filter(Boolean).join(' ') || 'A parent'
-      const allAthleteNames = invitedAthletes.map(a => `${a.firstName} ${a.lastName}`)
-
-      // Notify invited parent
-      await sendSquadConfirmationEmail({
-        to: invitedParent.email,
-        recipientName: invitedName,
-        otherParentName: invitingName,
-        campName: squad.camp.name,
-        athleteNames: allAthleteNames,
-        dashboardUrl,
-      })
-
-      // Notify inviting parent
-      if (invitingParent?.email) {
-        await sendSquadConfirmationEmail({
-          to: invitingParent.email,
-          recipientName: invitingName,
-          otherParentName: invitedName,
-          campName: squad.camp.name,
-          athleteNames: allAthleteNames,
-          dashboardUrl,
-        })
-      }
-
-      // Send in-app notification
-      await createNotification({
+      // Send invite notification (NOT confirmation — parent must accept first)
+      await notifySquadInviteReceived({
         userId: invitedParent.id,
         tenantId,
-        type: 'squad_invite_accepted',
-        title: `You've been paired with ${invitingName}!`,
-        body: `Your athletes have been paired with ${invitingName}'s athletes for ${squad.camp.name}. They'll be grouped together during camp!`,
-        category: 'camp',
-        severity: 'success',
-        actionUrl: `/portal/squads`,
-        data: {
-          squadId,
-          campId: squad.campId,
-          campName: squad.camp.name,
-        },
+        squadId,
+        inviterName: invitingName,
+        campName: squad.camp.name,
+        campId: squad.campId,
       })
 
       return { data: { sent: true, isNewUser: false }, error: null }
@@ -620,9 +586,45 @@ export async function respondToSquadInvite(params: {
           actionUrl: `/portal/squads`,
         })
 
-        // If accepted, sync friend group IDs for the camp
+        // If accepted, sync friend group IDs and send confirmation emails
         if (acceptDecision) {
           await syncFriendGroupIdsForSquad({ squadId: resolvedSquadId })
+
+          // Send confirmation emails to BOTH parents (only after explicit consent)
+          const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://empoweredsportscamp.com'
+          const dashboardUrl = `${baseUrl}/portal`
+          const creatorName = [squad.createdByParent.firstName, squad.createdByParent.lastName].filter(Boolean).join(' ') || 'A parent'
+
+          // Get responding parent's athletes in this squad
+          const respondingMembers = await prisma.campFriendSquadMember.findMany({
+            where: { squadId: resolvedSquadId, parentId },
+            include: { athlete: { select: { firstName: true, lastName: true } } },
+          })
+          const athleteNames = respondingMembers.map(m => `${m.athlete.firstName} ${m.athlete.lastName}`)
+
+          // Email to responding parent
+          if (respondingParent?.email) {
+            await sendSquadConfirmationEmail({
+              to: respondingParent.email,
+              recipientName: respondingName,
+              otherParentName: creatorName,
+              campName: squad.camp.name,
+              athleteNames,
+              dashboardUrl,
+            })
+          }
+
+          // Email to squad creator
+          if (squad.createdByParent.email) {
+            await sendSquadConfirmationEmail({
+              to: squad.createdByParent.email,
+              recipientName: creatorName,
+              otherParentName: respondingName,
+              campName: squad.camp.name,
+              athleteNames,
+              dashboardUrl,
+            })
+          }
         }
       }
     }
@@ -1053,7 +1055,7 @@ export async function requestSquadWithCamper(params: {
       }
     }
 
-    // Add target athlete as auto-accepted member
+    // Add target athlete as REQUESTED member (requires consent from target parent)
     const existingMember = await prisma.campFriendSquadMember.findUnique({
       where: {
         squadId_athleteId: {
@@ -1069,17 +1071,13 @@ export async function requestSquadWithCamper(params: {
           squadId: squad.id,
           parentId: targetParentId,
           athleteId: targetAthleteId,
-          status: 'accepted',
-          respondedAt: new Date(),
+          status: 'requested',
           ...(notes ? { notes } : {}),
         },
       })
     }
 
-    // Sync friend group IDs immediately
-    await syncFriendGroupIdsForSquad({ squadId: squad.id })
-
-    // Send confirmation emails to both parents
+    // Get camp info for notification
     const requestingParent = await prisma.profile.findUnique({
       where: { id: requestingParentId },
     })
@@ -1088,49 +1086,15 @@ export async function requestSquadWithCamper(params: {
     })
 
     const requestingName = [requestingParent?.firstName, requestingParent?.lastName].filter(Boolean).join(' ') || 'A parent'
-    const targetParentName = [targetAthlete.parent.firstName, targetAthlete.parent.lastName].filter(Boolean).join(' ') || 'A parent'
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://empoweredsportscamp.com'
-    const dashboardUrl = `${baseUrl}/portal`
 
-    // Notify target parent with confirmation email
-    if (targetAthlete.parent.email) {
-      await sendSquadConfirmationEmail({
-        to: targetAthlete.parent.email,
-        recipientName: targetParentName,
-        otherParentName: requestingName,
-        campName: camp?.name || 'Camp',
-        athleteNames: [targetAthlete.firstName],
-        dashboardUrl,
-      })
-    }
-
-    // Notify requesting parent with confirmation email
-    if (requestingParent?.email) {
-      await sendSquadConfirmationEmail({
-        to: requestingParent.email,
-        recipientName: requestingName,
-        otherParentName: targetParentName,
-        campName: camp?.name || 'Camp',
-        athleteNames: [targetAthlete.firstName],
-        dashboardUrl,
-      })
-    }
-
-    // In-app notification to target parent
-    await createNotification({
+    // Send invite notification to target parent (NOT confirmation — they must accept first)
+    await notifySquadInviteReceived({
       userId: targetParentId,
       tenantId,
-      type: 'squad_invite_accepted',
-      title: `You've been paired with ${requestingName}!`,
-      body: `${targetAthlete.firstName} has been paired with ${requestingName}'s athlete(s) for ${camp?.name || 'camp'}. They'll be grouped together during camp!`,
-      category: 'camp',
-      severity: 'success',
-      actionUrl: `/portal/squads`,
-      data: {
-        squadId: squad.id,
-        campId,
-        campName: camp?.name || 'Camp',
-      },
+      squadId: squad.id,
+      inviterName: requestingName,
+      campName: camp?.name || 'Camp',
+      campId,
     })
 
     return { data: { requestSent: true, squadId: squad.id }, error: null }

@@ -35,7 +35,10 @@ export async function GET(request: NextRequest) {
           where: {
             status: { in: ['pending', 'confirmed', 'waitlisted'] },
           },
-          include: {
+          select: {
+            id: true,
+            campId: true,
+            friendRequests: true,
             camp: {
               select: {
                 id: true,
@@ -159,6 +162,7 @@ export async function GET(request: NextRequest) {
           campDates: `${new Date(reg.camp.startDate).toLocaleDateString('en-US', dateOpts)} – ${new Date(reg.camp.endDate).toLocaleDateString('en-US', dateOpts)}`,
           tenantId: reg.camp.tenantId,
           registrationId: reg.id,
+          friendRequestsText: reg.friendRequests || [],
           squad: activeSquad
             ? {
                 id: activeSquad.id,

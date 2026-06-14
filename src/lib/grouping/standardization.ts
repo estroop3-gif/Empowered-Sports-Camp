@@ -421,13 +421,8 @@ function findBestCamperMatch(
     }
   }
 
-  // Try partial match (friend name contained in full name)
-  for (const camper of campers) {
-    const fullName = normalizeFriendName(`${camper.firstName} ${camper.lastName}`)
-    if (fullName.includes(normalizedFriend) || normalizedFriend.includes(fullName)) {
-      return camper
-    }
-  }
+  // Partial/substring matching removed — too prone to false positives
+  // (e.g. "Sarah" matching "Sarah Jones" AND "Sarah Smith")
 
   return null
 }
