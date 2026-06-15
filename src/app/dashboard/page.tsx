@@ -232,7 +232,7 @@ export default function ParentDashboard() {
   const today = new Date()
   const upcomingRegistrations = registrations.filter(
     (r): r is Registration & { camps: NonNullable<Registration['camps']>; athletes: NonNullable<Registration['athletes']> } =>
-      !!r.camps && !!r.athletes && new Date(r.camps.start_date) >= today && !['cancelled', 'refunded'].includes(r.status)
+      !!r.camps && !!r.athletes && new Date(r.camps.end_date) >= today && !['cancelled', 'refunded'].includes(r.status)
   )
   const pastRegistrations = registrations.filter(
     (r): r is Registration & { camps: NonNullable<Registration['camps']>; athletes: NonNullable<Registration['athletes']> } =>

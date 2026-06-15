@@ -45,8 +45,18 @@ export default function CampStoreSuccessPage() {
         const data: SessionData = sessionJson.data
         setSessionData(data)
 
+        // Safety net: ensure credits are fulfilled even if webhook was missed.
+        // This is idempotent — safe to call even if the webhook already processed it.
+        if (data.concessionCredits > 0 && data.status === 'paid') {
+          await fetch('/api/concession-credits/fulfill', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId }),
+          }).catch((err) => console.error('Fulfill safety-net failed:', err))
+        }
+
         // Invalidate cached credit balances so dashboard shows updated values
-        invalidateAthlete(data.athleteId).catch(() => {})
+        await invalidateAthlete(data.athleteId).catch(() => {})
 
         const [athleteRes, campRes] = await Promise.all([
           fetch(`/api/athletes?action=byId&athleteId=${data.athleteId}`),

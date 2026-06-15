@@ -184,7 +184,7 @@ export default function CampStorePage() {
         const today = new Date()
         const upcoming = data.data.filter((r: Registration) =>
           r.camps &&
-          new Date(r.camps.start_date) >= today &&
+          new Date(r.camps.end_date) >= today &&
           (r.status === 'confirmed' || r.status === 'registered')
         )
         setRegistrations(upcoming)
