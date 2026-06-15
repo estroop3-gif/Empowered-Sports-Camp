@@ -256,7 +256,13 @@ export async function POST(request: NextRequest) {
       // - addons specifically for this camper (camperId matches)
       // - unassigned addons (no camperId) go to the first camper only
       const camperAddOns = addOns.filter(a => a.camperId === camperData.id || (!a.camperId && i === 0))
-      const addonsTotalCents = camperAddOns.reduce((sum, a) => sum + a.unitPrice * a.quantity, 0)
+      // Only count addons with valid UUIDs (matches record creation below)
+      const validCamperAddOns = camperAddOns.filter(a => isValidUUID(a.addonId))
+      if (camperAddOns.length !== validCamperAddOns.length) {
+        console.warn('[Checkout] Dropped non-UUID addon IDs:',
+          camperAddOns.filter(a => !isValidUUID(a.addonId)).map(a => a.addonId))
+      }
+      const addonsTotalCents = validCamperAddOns.reduce((sum, a) => sum + a.unitPrice * a.quantity, 0)
 
       // Promo discount (apply only to first camper, scoped by appliesTo)
       let promoDiscountCents = 0
@@ -409,13 +415,8 @@ export async function POST(request: NextRequest) {
 
       registrationIds.push(regData.registrationId)
 
-      // Add addons for this registration (camperAddOns already scoped to this camper)
-      for (const addon of camperAddOns) {
-        // Skip addons with non-UUID IDs (these are default/fallback addons)
-        if (!isValidUUID(addon.addonId)) {
-          console.log(`[Checkout] Skipping addon with non-UUID ID: ${addon.addonId}`)
-          continue
-        }
+      // Add addons for this registration (validCamperAddOns already filtered to valid UUIDs)
+      for (const addon of validCamperAddOns) {
         await addRegistrationAddon({
           registrationId: regData.registrationId,
           addonId: addon.addonId,
