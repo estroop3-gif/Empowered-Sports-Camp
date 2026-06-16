@@ -41,14 +41,30 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await prisma.$transaction(async (tx) => {
-      const credit = await tx.concessionCredit.findUnique({
+      let credit = await tx.concessionCredit.findUnique({
         where: {
           athleteId_campId: { athleteId, campId },
         },
       })
 
       if (!credit) {
-        throw new Error('Credit record not found')
+        const registration = await tx.registration.findFirst({
+          where: { athleteId, campId },
+          select: { id: true, parentId: true },
+        })
+        if (!registration) {
+          throw new Error('No registration found for this athlete and camp')
+        }
+
+        credit = await tx.concessionCredit.create({
+          data: {
+            athleteId,
+            parentId: registration.parentId,
+            campId,
+            registrationId: registration.id,
+            balanceCents: 0,
+          },
+        })
       }
 
       if (amountCents < 0 && credit.balanceCents < Math.abs(amountCents)) {
