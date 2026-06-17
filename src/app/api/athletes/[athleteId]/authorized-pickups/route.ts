@@ -107,8 +107,11 @@ export async function POST(
       )
     }
 
-    // Only parent can add pickups
-    if (athlete.parentId !== user.id) {
+    // Parent or staff can add pickups
+    const isParent = athlete.parentId === user.id
+    const isStaff = ['director', 'coach', 'hq_admin', 'licensee_owner'].includes(user.role || '')
+
+    if (!isParent && !isStaff) {
       return NextResponse.json(
         { error: 'Not authorized to add pickup for this athlete' },
         { status: 403 }
@@ -125,10 +128,13 @@ export async function POST(
       )
     }
 
+    // For staff-created pickups, use the athlete's parent as the parentProfileId
+    const parentProfileId = isParent ? user.id : athlete.parentId
+
     const pickup = await prisma.authorizedPickup.create({
       data: {
         athleteId,
-        parentProfileId: user.id,
+        parentProfileId,
         name,
         relationship,
         phone: phone || null,
@@ -184,8 +190,11 @@ export async function PUT(
       )
     }
 
-    // Only parent can update pickups
-    if (athlete.parentId !== user.id) {
+    // Parent or staff can update pickups
+    const isParent = athlete.parentId === user.id
+    const isStaff = ['director', 'coach', 'hq_admin', 'licensee_owner'].includes(user.role || '')
+
+    if (!isParent && !isStaff) {
       return NextResponse.json(
         { error: 'Not authorized to update pickup for this athlete' },
         { status: 403 }
@@ -272,8 +281,11 @@ export async function DELETE(
       )
     }
 
-    // Only parent can delete pickups
-    if (athlete.parentId !== user.id) {
+    // Parent or staff can delete pickups
+    const isParent = athlete.parentId === user.id
+    const isStaff = ['director', 'coach', 'hq_admin', 'licensee_owner'].includes(user.role || '')
+
+    if (!isParent && !isStaff) {
       return NextResponse.json(
         { error: 'Not authorized to delete pickup for this athlete' },
         { status: 403 }

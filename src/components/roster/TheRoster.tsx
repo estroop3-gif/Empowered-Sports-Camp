@@ -86,10 +86,15 @@ export default function TheRoster({ campId, role, backUrl }: TheRosterProps) {
     phone: string | null
     photoIdOnFile?: boolean
   } | null>(null)
-  const [verificationStep, setVerificationStep] = useState<1 | 2 | 3>(1)
+  const [verificationStep, setVerificationStep] = useState<1 | 2>(1)
   const [idConfirmed, setIdConfirmed] = useState(false)
-  const [typedName, setTypedName] = useState('')
-  const [nameMatchError, setNameMatchError] = useState<string | null>(null)
+
+  // Add pickup person inline form state
+  const [showAddPickupForm, setShowAddPickupForm] = useState(false)
+  const [addPickupName, setAddPickupName] = useState('')
+  const [addPickupRelationship, setAddPickupRelationship] = useState('')
+  const [addPickupPhone, setAddPickupPhone] = useState('')
+  const [addingPickup, setAddingPickup] = useState(false)
 
   // PDF export state
   const [exportingPdf, setExportingPdf] = useState(false)
@@ -339,8 +344,10 @@ export default function TheRoster({ campId, role, backUrl }: TheRosterProps) {
     setSelectedPickupForVerification(null)
     setVerificationStep(1)
     setIdConfirmed(false)
-    setTypedName('')
-    setNameMatchError(null)
+    setShowAddPickupForm(false)
+    setAddPickupName('')
+    setAddPickupRelationship('')
+    setAddPickupPhone('')
 
     try {
       // Fetch authorized pickups for this athlete
@@ -366,8 +373,10 @@ export default function TheRoster({ campId, role, backUrl }: TheRosterProps) {
     setSelectedPickupForVerification(null)
     setVerificationStep(1)
     setIdConfirmed(false)
-    setTypedName('')
-    setNameMatchError(null)
+    setShowAddPickupForm(false)
+    setAddPickupName('')
+    setAddPickupRelationship('')
+    setAddPickupPhone('')
   }
 
   // Handle parent checkout (no verification needed)
@@ -407,8 +416,6 @@ export default function TheRoster({ campId, role, backUrl }: TheRosterProps) {
     setSelectedPickupForVerification(pickup)
     setVerificationStep(1)
     setIdConfirmed(false)
-    setTypedName('')
-    setNameMatchError(null)
     setShowVerificationModal(true)
   }
 
@@ -418,29 +425,11 @@ export default function TheRoster({ campId, role, backUrl }: TheRosterProps) {
     setSelectedPickupForVerification(null)
     setVerificationStep(1)
     setIdConfirmed(false)
-    setTypedName('')
-    setNameMatchError(null)
-  }
-
-  // Name normalization for comparison
-  const normalizeNameForComparison = (name: string): string => {
-    return name.toLowerCase().trim().replace(/\s+/g, ' ').replace(/[.,'-]/g, '')
-  }
-
-  // Validate name match
-  const validateNameMatch = (typed: string, authorized: string): boolean => {
-    return normalizeNameForComparison(typed) === normalizeNameForComparison(authorized)
   }
 
   // Complete verified checkout for authorized pickup
   const handleVerifiedCheckout = async () => {
     if (!checkoutCamper || !selectedPickupForVerification) return
-
-    // Validate name matches
-    if (!validateNameMatch(typedName, selectedPickupForVerification.name)) {
-      setNameMatchError('Name does not match. Please type the name exactly as shown on the ID.')
-      return
-    }
 
     setCheckoutSubmitting(true)
     try {
@@ -453,7 +442,7 @@ export default function TheRoster({ campId, role, backUrl }: TheRosterProps) {
           pickupPersonName: selectedPickupForVerification.name,
           pickupPersonRelationship: selectedPickupForVerification.relationship,
           verificationMethod: 'id_verified',
-          verificationTypedName: typedName.trim(),
+          verificationTypedName: null,
         }),
       })
 
@@ -469,6 +458,45 @@ export default function TheRoster({ campId, role, backUrl }: TheRosterProps) {
       showToast('Failed to check out', 'error')
     } finally {
       setCheckoutSubmitting(false)
+    }
+  }
+
+  // Add pickup person on-the-fly during checkout
+  const handleAddPickupPerson = async () => {
+    if (!checkoutCamper || !addPickupName || !addPickupRelationship) return
+
+    setAddingPickup(true)
+    try {
+      const res = await fetch(`/api/athletes/${checkoutCamper.athleteId}/authorized-pickups`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: addPickupName,
+          relationship: addPickupRelationship,
+          phone: addPickupPhone || null,
+        }),
+      })
+
+      if (res.ok) {
+        // Refresh the pickup list
+        const pickupsRes = await fetch(`/api/athletes/${checkoutCamper.athleteId}/authorized-pickups`)
+        if (pickupsRes.ok) {
+          const data = await pickupsRes.json()
+          setAuthorizedPickups(data.data || [])
+        }
+        // Reset form
+        setShowAddPickupForm(false)
+        setAddPickupName('')
+        setAddPickupRelationship('')
+        setAddPickupPhone('')
+      } else {
+        const data = await res.json()
+        showToast(data.error || 'Failed to add pickup person', 'error')
+      }
+    } catch {
+      showToast('Failed to add pickup person', 'error')
+    } finally {
+      setAddingPickup(false)
     }
   }
 
@@ -949,11 +977,91 @@ export default function TheRoster({ campId, role, backUrl }: TheRosterProps) {
                     </div>
                   )}
 
-                  {authorizedPickups.length === 0 && (
+                  {authorizedPickups.length === 0 && !showAddPickupForm && (
                     <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mt-2">
                       <p className="text-sm text-yellow-800">
                         No authorized pickup persons on file. Only Parent/Guardian can check out this camper.
                       </p>
+                    </div>
+                  )}
+
+                  {/* Add Pickup Person */}
+                  {!showAddPickupForm ? (
+                    <button
+                      onClick={() => setShowAddPickupForm(true)}
+                      className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800 font-medium mt-2"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      </svg>
+                      Add Pickup Person
+                    </button>
+                  ) : (
+                    <div className="border border-blue-200 rounded-lg p-4 mt-2 bg-blue-50">
+                      <h4 className="text-sm font-semibold text-gray-900 mb-3">Add New Pickup Person</h4>
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Full Name *</label>
+                          <input
+                            type="text"
+                            value={addPickupName}
+                            onChange={(e) => setAddPickupName(e.target.value)}
+                            placeholder="John Smith"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Relationship *</label>
+                          <select
+                            value={addPickupRelationship}
+                            onChange={(e) => setAddPickupRelationship(e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          >
+                            <option value="">Select...</option>
+                            <option value="Parent">Parent</option>
+                            <option value="Guardian">Guardian</option>
+                            <option value="Grandparent">Grandparent</option>
+                            <option value="Aunt/Uncle">Aunt/Uncle</option>
+                            <option value="Sibling (18+)">Sibling (18+)</option>
+                            <option value="Family Friend">Family Friend</option>
+                            <option value="Nanny/Caregiver">Nanny/Caregiver</option>
+                            <option value="Other">Other</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Phone</label>
+                          <input
+                            type="tel"
+                            value={addPickupPhone}
+                            onChange={(e) => setAddPickupPhone(e.target.value)}
+                            placeholder="(555) 555-5555"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          />
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              setShowAddPickupForm(false)
+                              setAddPickupName('')
+                              setAddPickupRelationship('')
+                              setAddPickupPhone('')
+                            }}
+                            className="flex-1 px-3 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={handleAddPickupPerson}
+                            disabled={addingPickup || !addPickupName.trim() || !addPickupRelationship}
+                            className="flex-1 px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                          >
+                            {addingPickup && (
+                              <div className="animate-spin w-4 h-4 border-2 border-white/30 border-t-white rounded-full" />
+                            )}
+                            Save
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -974,7 +1082,7 @@ export default function TheRoster({ campId, role, backUrl }: TheRosterProps) {
         </div>
       )}
 
-      {/* ID Verification Modal (3-step wizard) */}
+      {/* ID Verification Modal (2-step wizard) */}
       {showVerificationModal && selectedPickupForVerification && checkoutCamper && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex min-h-full items-center justify-center p-4 text-center">
@@ -982,7 +1090,7 @@ export default function TheRoster({ campId, role, backUrl }: TheRosterProps) {
             <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full p-6 text-left">
               {/* Progress indicator */}
               <div className="flex items-center justify-center gap-2 mb-6">
-                {[1, 2, 3].map((step) => (
+                {[1, 2].map((step) => (
                   <div key={step} className="flex items-center">
                     <div
                       className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
@@ -999,7 +1107,7 @@ export default function TheRoster({ campId, role, backUrl }: TheRosterProps) {
                         step
                       )}
                     </div>
-                    {step < 3 && (
+                    {step < 2 && (
                       <div className={`w-12 h-1 ${verificationStep > step ? 'bg-blue-600' : 'bg-gray-200'}`} />
                     )}
                   </div>
@@ -1059,7 +1167,7 @@ export default function TheRoster({ campId, role, backUrl }: TheRosterProps) {
                 </div>
               )}
 
-              {/* Step 2: Confirm ID Verified */}
+              {/* Step 2: Verify Photo ID + Complete Checkout */}
               {verificationStep === 2 && (
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900 mb-4">
@@ -1095,59 +1203,8 @@ export default function TheRoster({ campId, role, backUrl }: TheRosterProps) {
                       Back
                     </button>
                     <button
-                      onClick={() => setVerificationStep(3)}
-                      disabled={!idConfirmed}
-                      className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Continue
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Step 3: Type Name */}
-              {verificationStep === 3 && (
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                    Confirm Identity
-                  </h3>
-                  <p className="text-sm text-gray-600 mb-4">
-                    Type the name <strong>exactly as it appears on the ID</strong> to complete checkout.
-                  </p>
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Name from ID
-                    </label>
-                    <input
-                      type="text"
-                      value={typedName}
-                      onChange={(e) => {
-                        setTypedName(e.target.value)
-                        setNameMatchError(null)
-                      }}
-                      placeholder={`Type "${selectedPickupForVerification.name}"`}
-                      className={`w-full px-4 py-3 border rounded-lg text-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                        nameMatchError ? 'border-red-500' : 'border-gray-300'
-                      }`}
-                      autoFocus
-                    />
-                    {nameMatchError && (
-                      <p className="mt-2 text-sm text-red-600">{nameMatchError}</p>
-                    )}
-                  </div>
-                  <div className="flex justify-between">
-                    <button
-                      onClick={() => {
-                        setVerificationStep(2)
-                        setNameMatchError(null)
-                      }}
-                      className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
-                    >
-                      Back
-                    </button>
-                    <button
                       onClick={handleVerifiedCheckout}
-                      disabled={checkoutSubmitting || !typedName.trim()}
+                      disabled={checkoutSubmitting || !idConfirmed}
                       className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                     >
                       {checkoutSubmitting && (

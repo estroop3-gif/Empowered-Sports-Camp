@@ -870,7 +870,7 @@ export default function AdminAthleteDetailPage({ params }: PageProps) {
               <AuthorizedPickupManager
                 athleteId={athleteId}
                 athleteName={`${athlete.first_name} ${athlete.last_name}`}
-                readOnly={true}
+                readOnly={false}
               />
             </ContentCard>
           </div>

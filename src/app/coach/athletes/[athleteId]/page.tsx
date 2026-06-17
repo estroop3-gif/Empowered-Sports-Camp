@@ -12,6 +12,7 @@ import { useState, useEffect, use } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { PortalPageHeader, PortalCard, LmsGate } from '@/components/portal'
+import { AuthorizedPickupManager } from '@/components/athletes/AuthorizedPickupManager'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import {
@@ -434,6 +435,16 @@ export default function CoachAthleteDetailPage({ params }: PageProps) {
                 </div>
               </div>
             </PortalCard>
+
+            <div className="lg:col-span-2">
+              <PortalCard title="Authorized Pickups">
+                <AuthorizedPickupManager
+                  athleteId={athleteId}
+                  athleteName={`${athlete.first_name} ${athlete.last_name}`}
+                  readOnly={false}
+                />
+              </PortalCard>
+            </div>
           </div>
         )}
 

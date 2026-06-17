@@ -14,6 +14,7 @@ import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { QRCodeSVG } from 'qrcode.react'
 import { PortalPageHeader, PortalCard, LmsGate } from '@/components/portal'
+import { AuthorizedPickupManager } from '@/components/athletes/AuthorizedPickupManager'
 import { cn, parseDateSafe } from '@/lib/utils'
 import {
   Loader2,
@@ -961,48 +962,62 @@ function DismissalTab({
       </PortalCard>
 
       {/* Manual Checkout Modal */}
-      {showManualCheckout && (
-        <div
-          className="fixed inset-0 bg-black/90 flex items-center justify-center p-4 z-50"
-          onClick={() => setShowManualCheckout(null)}
-        >
+      {showManualCheckout && (() => {
+        const att = filteredAttendance.find((a) => a.athlete_id === showManualCheckout)
+        const athleteName = att ? `${att.athlete.first_name} ${att.athlete.last_name}` : 'Athlete'
+        return (
           <div
-            className="bg-dark-100 border border-white/10 p-6 max-w-md w-full"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 bg-black/90 flex items-center justify-center p-4 z-50"
+            onClick={() => setShowManualCheckout(null)}
           >
-            <h3 className="text-lg font-bold text-white mb-4 uppercase tracking-wider">
-              Manual Checkout
-            </h3>
-            <p className="text-white/60 mb-4">
-              Please provide a reason for manual checkout (e.g., parent verified by ID).
-            </p>
-            <textarea
-              className="w-full h-24 px-4 py-3 bg-black border border-white/20 text-white placeholder:text-white/30 focus:border-neon focus:outline-none mb-4"
-              placeholder="Reason for manual checkout..."
-              value={manualCheckoutReason}
-              onChange={(e) => setManualCheckoutReason(e.target.value)}
-            />
-            <div className="flex gap-3">
-              <button
-                onClick={() => {
-                  setShowManualCheckout(null)
-                  setManualCheckoutReason('')
-                }}
-                className="flex-1 px-4 py-2 bg-white/10 text-white font-bold uppercase tracking-wider hover:bg-white/20 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => handleManualCheckout(showManualCheckout)}
-                disabled={!manualCheckoutReason.trim() || actionLoading === showManualCheckout}
-                className="flex-1 px-4 py-2 bg-orange-500 text-white font-bold uppercase tracking-wider hover:bg-orange-600 disabled:opacity-50 transition-colors"
-              >
-                {actionLoading === showManualCheckout ? 'Processing...' : 'Confirm'}
-              </button>
+            <div
+              className="bg-dark-100 border border-white/10 p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-lg font-bold text-white mb-4 uppercase tracking-wider">
+                Manual Checkout — {athleteName}
+              </h3>
+
+              {/* Authorized Pickups */}
+              <div className="mb-4 border border-white/10 p-4">
+                <AuthorizedPickupManager
+                  athleteId={showManualCheckout}
+                  athleteName={athleteName}
+                  readOnly={false}
+                />
+              </div>
+
+              <p className="text-white/60 mb-4">
+                Please provide a reason for manual checkout (e.g., parent verified by ID).
+              </p>
+              <textarea
+                className="w-full h-24 px-4 py-3 bg-black border border-white/20 text-white placeholder:text-white/30 focus:border-neon focus:outline-none mb-4"
+                placeholder="Reason for manual checkout..."
+                value={manualCheckoutReason}
+                onChange={(e) => setManualCheckoutReason(e.target.value)}
+              />
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowManualCheckout(null)
+                    setManualCheckoutReason('')
+                  }}
+                  className="flex-1 px-4 py-2 bg-white/10 text-white font-bold uppercase tracking-wider hover:bg-white/20 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => handleManualCheckout(showManualCheckout)}
+                  disabled={!manualCheckoutReason.trim() || actionLoading === showManualCheckout}
+                  className="flex-1 px-4 py-2 bg-orange-500 text-white font-bold uppercase tracking-wider hover:bg-orange-600 disabled:opacity-50 transition-colors"
+                >
+                  {actionLoading === showManualCheckout ? 'Processing...' : 'Confirm'}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
     </div>
   )
 }
